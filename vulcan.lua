@@ -272,8 +272,49 @@ function solve_equs(lines)
     return symbols
 end
 
+-- ## Third pass
+-- We need to figure out the instruction lengths. We'll do this naively; if we can't
+-- immediately tell that an instruction needs only a 0/1/2 byte argument (because it's
+-- a constant, or a .equ that we've solved, or something) then we'll assume it's a
+-- full 24-bit argument.
+function measure_instructions(lines, symbols)
+    for _, line in ipairs(lines) do
+        -- Does this even represent any real output bytes?
+        if not(line.opcode or line.directive == '.db') then
+            line.length = 0
+        elseif line.directive == '.db' then
+            -- .dbs with string arguments, we know the length.
+            -- Else, set aside 3 bytes for a number. (Even if it fits in fewer,
+            -- it may be a variable that we're setting aside space for)
+            if line.argument[1] == 'string' then
+                line.length = #(line.argument[2])
+            else
+                line.length = 3
+            end
+        elseif line.opcode then
+            -- If it has no argument, then it's only one byte obviously
+            if not line.argument then
+                line.length = 1
+            else
+                -- Evaluate the argument, if we can with just .equs:
+                local success, val = pcall(evaluate, line.argument, symbols)
+                -- If we failed to do that, then let's just set aside the
+                -- full 24 bits:
+                if not success then line.length = 4
+                else
+                    -- Otherwise let's see what we got. If it's less than 256,
+                    -- it fits in a byte, and so on:
+                    if val < 256 then line.length = 2
+                    elseif val < 65536 then line.length = 3
+                    else line.length = 4 end
+                end
+            end
+        end
+    end
+end
+
 -- -- We want to calculate where the labels are, as the first step in calculating the values of
--- -- all the symbols. We'll do this naively; if we can't immediately tell that an instruction
+-- -- all the symbols. 
 -- -- is less than four bytes, then we'll assume it's four bytes.
 -- function calculate_labels(lines)
 --     local address = 0
@@ -290,5 +331,6 @@ return {
     statement=statement,
     parse_assembly=parse_assembly,
     evaluate=evaluate,
-    solve_equs=solve_equs
+    solve_equs=solve_equs,
+    measure_instructions=measure_instructions
 }

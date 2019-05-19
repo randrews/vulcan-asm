@@ -898,8 +898,132 @@ only preceding .equ directives. Anything else is an error.</p>
     <a class="pilcrow" href="#section-53">&#182;</a>
   </div>
   
+<h2>Third pass</h2>
+<p>We need to figure out the instruction lengths. We'll do this naively; if we can't
+immediately tell that an instruction needs only a 0/1/2 byte argument (because it's
+a constant, or a .equ that we've solved, or something) then we'll assume it's a
+full 24-bit argument.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">measure_instructions</span>(lines, symbols)
+    <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(lines) <span class="k">do</span>
+</pre></div>
+</td>
+</tr><tr id="section-54">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-54">&#182;</a>
+  </div>
+  
+<p>Does this even represent any real output bytes?</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">if</span> <span class="o">not</span>(line.opcode <span class="o">or</span> line.directive == <span class="s">'.db'</span>) <span class="k">then</span>
+            line.length = 0
+        <span class="k">elseif</span> line.directive == <span class="s">'.db'</span> <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-55">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-55">&#182;</a>
+  </div>
+  
+<p>.dbs with string arguments, we know the length.
+Else, set aside 3 bytes for a number. (Even if it fits in fewer,
+it may be a variable that we're setting aside space for)</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">if</span> line.argument[1] == <span class="s">'string'</span> <span class="k">then</span>
+                line.length = #(line.argument[2])
+            <span class="k">else</span>
+                line.length = 3
+            <span class="k">end</span>
+        <span class="k">elseif</span> line.opcode <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-56">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-56">&#182;</a>
+  </div>
+  
+<p>If it has no argument, then it's only one byte obviously</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">if</span> <span class="o">not</span> line.argument <span class="k">then</span>
+                line.length = 1
+            <span class="k">else</span>
+</pre></div>
+</td>
+</tr><tr id="section-57">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-57">&#182;</a>
+  </div>
+  
+<p>Evaluate the argument, if we can with just .equs:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                <span class="k">local</span> success, val = <span class="nt">pcall</span>(evaluate, line.argument, symbols)
+</pre></div>
+</td>
+</tr><tr id="section-58">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-58">&#182;</a>
+  </div>
+  
+<p>If we failed to do that, then let's just set aside the
+full 24 bits:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                <span class="k">if</span> <span class="o">not</span> success <span class="k">then</span> line.length = 4
+                <span class="k">else</span>
+</pre></div>
+</td>
+</tr><tr id="section-59">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-59">&#182;</a>
+  </div>
+  
+<p>Otherwise let's see what we got. If it's less than 256,
+it fits in a byte, and so on:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                    <span class="k">if</span> val &lt; 256 <span class="k">then</span> line.length = 2
+                    <span class="k">elseif</span> val &lt; 65536 <span class="k">then</span> line.length = 3
+                    <span class="k">else</span> line.length = 4 <span class="k">end</span>
+                <span class="k">end</span>
+            <span class="k">end</span>
+        <span class="k">end</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-60">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-60">&#182;</a>
+  </div>
+  
 <p>-- We want to calculate where the labels are, as the first step in calculating the values of
--- all the symbols. We'll do this naively; if we can't immediately tell that an instruction
+-- all the symbols. 
 -- is less than four bytes, then we'll assume it's four bytes.
 function calculate_labels(lines)</p>
 <pre><code>local address = 0
@@ -916,10 +1040,10 @@ end
   <div class="highlight"><pre>
 </pre></div>
 </td>
-</tr><tr id="section-54">
+</tr><tr id="section-61">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-54">&#182;</a>
+    <a class="pilcrow" href="#section-61">&#182;</a>
   </div>
   
 <pre><code>return dependencies
@@ -934,7 +1058,8 @@ end
     statement=statement,
     parse_assembly=parse_assembly,
     evaluate=evaluate,
-    solve_equs=solve_equs
+    solve_equs=solve_equs,
+    measure_instructions=measure_instructions
 }
 </pre></div>
 </td>

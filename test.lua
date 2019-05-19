@@ -247,3 +247,55 @@ success, err = pcall(test_equs, [[foo: .equ bar]], '')
 assert(success == false and
            err:match('Cannot resolve .equ on line 1:') and
            err:match('Symbol not defined: bar'))
+
+-- # Third pass tests
+
+measure_instructions = vulcan.measure_instructions
+
+-- ## Utility functions
+
+function test_measure(asm, lengths)
+    local lines = parse_assembly(iterator(asm))
+    local symbols = solve_equs(lines)
+    measure_instructions(lines, symbols)
+    local actual_lengths = prettify(table.map(lines, function(l) return l.length end))
+
+    if actual_lengths == lengths then return true
+    else
+        print('FAIL:\nExpected: ' .. lengths .. '\n  Actual: ' .. actual_lengths)
+        return false
+    end
+end
+
+-- ## Test cases
+
+-- Some single-byte stuff
+test_measure([[
+add
+jmp
+nop
+]], [[(1 1 1)]])
+
+-- .db with a number
+test_measure([[.db 123]], [[(3)]])
+
+-- .db with a string
+test_measure([[.db "potato!"]], [[(7)]])
+
+-- Things that don't output
+test_measure([[
+.org 123
+foo: .equ 234
+]], [[(0 0)]])
+
+-- Single-byte args
+test_measure([[push 0x23]], [[(2)]])
+
+-- Two-byte args
+test_measure([[push 0x1023]], [[(3)]])
+
+-- Three-byte args
+test_measure([[push 0xaa1023]], [[(4)]])
+
+-- Args with unknown length
+test_measure([[push banana+12]], [[(4)]])
