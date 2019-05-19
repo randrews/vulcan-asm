@@ -95,7 +95,7 @@ function statement_pattern()
     local expr = lpeg.P{
         'EXPR';
         EXPR = lpeg.Ct( lpeg.Cc('expr') * lpeg.V('TERM') * (lpeg.C( lpeg.S('+-') ) * lpeg.V('TERM'))^0 ),
-        TERM = lpeg.Ct( lpeg.Cc('term') * lpeg.V('FACT') * (lpeg.C( lpeg.S('/*') ) * lpeg.V('FACT'))^0 ),
+        TERM = lpeg.Ct( lpeg.Cc('term') * lpeg.V('FACT') * (lpeg.C( lpeg.S('/*%') ) * lpeg.V('FACT'))^0 ),
         FACT = (space * '(' * lpeg.V('EXPR') * ')') + (space * (number + label) * space)
     }
 
@@ -126,4 +126,169 @@ end
 
 statement = statement_pattern()
 
-return statement
+-- # Assembler
+
+-- ## First pass
+-- Assembly parser. This will take in an iterator from which we can load lines of assembly, and return a
+-- list of parsed lines, but with expressions un-evaluated:
+function parse_assembly(iterator)
+    -- This will store the eventual output
+    local lines = {}
+
+    -- A count of the line number
+    local line_num = 1
+
+    -- Parse each line, throw out all the semantically blank ones:
+    for line in iterator do
+        local ast = statement:match(line)
+
+        -- If we weren't able to parse it, blow up:
+        if ast == nil then
+            error('Parse error on line ' .. line_num .. ': ' .. string.format('%q', line))
+        end
+
+        -- If it parsed to a null statement (nothing but a comment / whitespace)
+        -- then just skip it:
+        if #ast > 0 then
+            -- Otherwise, start by converting it to a more useful key/value format,
+            -- and embed the line number in it while we're at it:
+            local obj = { line=line_num }
+            for n = 1, #ast, 2 do
+                obj[ast[n]] = ast[n+1]
+            end
+
+            -- We'll identify two possible errors here, just because we can: if a line
+            -- has a string argument and it _isn't_ a `.db` directive, then that's a
+            -- syntax error and we'll say so:
+            if obj.argument and obj.argument[1] == 'string' and obj.directive ~= '.db' then
+                error('String argument outside .db directive on line ' .. line_num)
+            end
+
+            -- Also, a .equ without a label or argument makes no sense, so we'll error
+            -- on that as well:
+            if obj.directive == '.equ' and (obj.argument == nil or obj.label == nil) then
+                error('.equ directive missing label or argument on line' .. line_num)
+            end
+
+            -- Tack it on to the list of actual lines:
+            table.insert(lines, obj)
+        end
+
+        -- Next line number:
+        line_num = line_num + 1
+    end
+
+    return lines
+end
+
+-- ## Evaluating expressions
+-- Now that we have a parsed file, that file has a bunch of numeric symbols in it: labels,
+-- .equ directives, that sort of thing. We need to resolve all of those to constant values
+-- before we can generate code. So, first part of that is being able to evaluate expressions.
+
+-- Evaluate an expression in the context of a symbol table:
+function evaluate(expr, symbols)
+    -- The bottom of a parse tree, just return a number
+    if type(expr) == 'number' then
+        return expr
+
+        -- A symbol that had better be defined
+    elseif type(expr) == 'string' then
+        if symbols[expr] then return symbols[expr]
+        else error('Symbol not defined: ' .. expr) end
+
+        -- This is a list of terms separated by arithmetic operators. So,
+        -- evaluate the first one...
+    elseif expr[1] == 'expr' or expr[1] == 'term' then
+        local val = evaluate(expr[2], symbols)
+
+        -- Then go through the list two at a time...
+        for i = 3, #expr, 2 do
+            local operator = expr[i]
+            -- Evaluating the rest...
+            local rhs = evaluate(expr[i+1], symbols)
+            -- And adding or subtracting them or whatever
+            if operator == '+' then
+                val = val + rhs
+            elseif operator == '-' then
+                val = val - rhs
+            elseif operator == '*' then
+                val = val * rhs
+            elseif operator == '/' then
+                -- Lua has floating point division, but Vulcan will only support integer
+                -- truncating division
+                val = math.floor(val / rhs)
+            elseif operator == '%' then
+                val = val % rhs
+            end
+        end
+        return val
+    end
+end
+
+-- Return a list of all symbols referenced by this expression:
+function references(expr)
+    -- A set (map from name to 'true') of all references
+    refs = {}
+
+    -- A helper function to do the recursion
+    local function search(e)
+        -- If it's a reference, then add it to the 
+        if type(e) == 'string' then refs[e] = true
+            -- Otherwise we need to recurse on a sub-tree:
+        elseif type(e) == 'table' then
+            search(e[2])
+            for i = 4, #e, 2 do search(e[i]) end
+        end
+    end
+
+    -- Convert refs to a list:
+    local ref_list = {}
+    for k, _ in pairs(refs) do table.insert(ref_list, k) end
+    return ref_list
+end
+
+-- ## Second pass
+-- This will solve all the .equ directives and return a symbol table of them.
+-- .equ directives must be able to be solved in order, that is, in terms of
+-- only preceding .equ directives. Anything else is an error.
+function solve_equs(lines)
+    local symbols = {}
+
+    for _, line in ipairs(lines) do
+        -- Is this a .equ?
+        if line.directive == '.equ' then
+            -- Try to solve it with what we know so far:
+            local success, ret = pcall(evaluate, line.argument, symbols)
+            -- Put it in the symbols, or blow up:
+            if success then
+                symbols[line.label] = ret
+            else
+                error('Cannot resolve .equ on line ' .. line.line .. ': ' .. ret)
+            end
+        end
+    end
+
+    return symbols
+end
+
+-- -- We want to calculate where the labels are, as the first step in calculating the values of
+-- -- all the symbols. We'll do this naively; if we can't immediately tell that an instruction
+-- -- is less than four bytes, then we'll assume it's four bytes.
+-- function calculate_labels(lines)
+--     local address = 0
+--     -- Go through each line...
+--     for _, line in ipairs(lines) do
+--         -- If the line is a .org directive, then we evaluate the argument as a constant,
+--         -- 
+--     end
+
+--     return dependencies
+-- end
+
+return {
+    statement=statement,
+    parse_assembly=parse_assembly,
+    evaluate=evaluate,
+    solve_equs=solve_equs
+}

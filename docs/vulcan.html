@@ -292,7 +292,7 @@ symbols, so, a quick arithmetic expression parser:</p>
   <div class="highlight"><pre>    <span class="k">local</span> expr = lpeg.P{
         <span class="s">'EXPR'</span>;
         EXPR = lpeg.Ct( lpeg.Cc(<span class="s">'expr'</span>) * lpeg.V(<span class="s">'TERM'</span>) * (lpeg.C( lpeg.S(<span class="s">'+-'</span>) ) * lpeg.V(<span class="s">'TERM'</span>))^0 ),
-        TERM = lpeg.Ct( lpeg.Cc(<span class="s">'term'</span>) * lpeg.V(<span class="s">'FACT'</span>) * (lpeg.C( lpeg.S(<span class="s">'/*'</span>) ) * lpeg.V(<span class="s">'FACT'</span>))^0 ),
+        TERM = lpeg.Ct( lpeg.Cc(<span class="s">'term'</span>) * lpeg.V(<span class="s">'FACT'</span>) * (lpeg.C( lpeg.S(<span class="s">'/*&#37;'</span>) ) * lpeg.V(<span class="s">'FACT'</span>))^0 ),
         FACT = (space * <span class="s">'('</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">')'</span>) + (space * (number + label) * space)
     }
 </pre></div>
@@ -389,8 +389,553 @@ argument exists. Comments are parsed but don't capture anything.</p>
 <span class="k">end</span>
 
 statement = statement_pattern()
+</pre></div>
+</td>
+</tr><tr id="section-22">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-22">&#182;</a>
+  </div>
+  
+<h1>Assembler</h1>
 
-<span class="k">return</span> statement
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-23">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-23">&#182;</a>
+  </div>
+  
+<h2>First pass</h2>
+<p>Assembly parser. This will take in an iterator from which we can load lines of assembly, and return a
+list of parsed lines, but with expressions un-evaluated:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">parse_assembly</span>(iterator)
+</pre></div>
+</td>
+</tr><tr id="section-24">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-24">&#182;</a>
+  </div>
+  
+<p>This will store the eventual output</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> lines = {}
+</pre></div>
+</td>
+</tr><tr id="section-25">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-25">&#182;</a>
+  </div>
+  
+<p>A count of the line number</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> line_num = 1
+</pre></div>
+</td>
+</tr><tr id="section-26">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-26">&#182;</a>
+  </div>
+  
+<p>Parse each line, throw out all the semantically blank ones:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">for</span> line <span class="k">in</span> iterator <span class="k">do</span>
+        <span class="k">local</span> ast = statement:match(line)
+</pre></div>
+</td>
+</tr><tr id="section-27">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-27">&#182;</a>
+  </div>
+  
+<p>If we weren't able to parse it, blow up:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">if</span> ast == <span class="k">nil</span> <span class="k">then</span>
+            <span class="nt">error</span>(<span class="s">'Parse error on line '</span> .. line_num .. <span class="s">': '</span> .. string.format(<span class="s">'&#37;q'</span>, line))
+        <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-28">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-28">&#182;</a>
+  </div>
+  
+<p>If it parsed to a null statement (nothing but a comment / whitespace)
+then just skip it:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">if</span> #ast &gt; 0 <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-29">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-29">&#182;</a>
+  </div>
+  
+<p>Otherwise, start by converting it to a more useful key/value format,
+and embed the line number in it while we're at it:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">local</span> obj = { line=line_num }
+            <span class="k">for</span> n = 1, #ast, 2 <span class="k">do</span>
+                obj[ast[n]] = ast[n+1]
+            <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-30">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-30">&#182;</a>
+  </div>
+  
+<p>We'll identify two possible errors here, just because we can: if a line
+has a string argument and it <em>isn't</em> a <code>.db</code> directive, then that's a
+syntax error and we'll say so:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">if</span> obj.argument <span class="o">and</span> obj.argument[1] == <span class="s">'string'</span> <span class="o">and</span> obj.directive ~= <span class="s">'.db'</span> <span class="k">then</span>
+                <span class="nt">error</span>(<span class="s">'String argument outside .db directive on line '</span> .. line_num)
+            <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-31">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-31">&#182;</a>
+  </div>
+  
+<p>Also, a .equ without a label or argument makes no sense, so we'll error
+on that as well:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">if</span> obj.directive == <span class="s">'.equ'</span> <span class="o">and</span> (obj.argument == <span class="k">nil</span> <span class="o">or</span> obj.label == <span class="k">nil</span>) <span class="k">then</span>
+                <span class="nt">error</span>(<span class="s">'.equ directive missing label or argument on line'</span> .. line_num)
+            <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-32">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-32">&#182;</a>
+  </div>
+  
+<p>Tack it on to the list of actual lines:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            table.insert(lines, obj)
+        <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-33">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-33">&#182;</a>
+  </div>
+  
+<p>Next line number:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        line_num = line_num + 1
+    <span class="k">end</span>
+
+    <span class="k">return</span> lines
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-34">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-34">&#182;</a>
+  </div>
+  
+<h2>Evaluating expressions</h2>
+<p>Now that we have a parsed file, that file has a bunch of numeric symbols in it: labels,
+.equ directives, that sort of thing. We need to resolve all of those to constant values
+before we can generate code. So, first part of that is being able to evaluate expressions.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-35">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-35">&#182;</a>
+  </div>
+  
+<p>Evaluate an expression in the context of a symbol table:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">evaluate</span>(expr, symbols)
+</pre></div>
+</td>
+</tr><tr id="section-36">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-36">&#182;</a>
+  </div>
+  
+<p>The bottom of a parse tree, just return a number</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> <span class="nt">type</span>(expr) == <span class="s">'number'</span> <span class="k">then</span>
+        <span class="k">return</span> expr
+</pre></div>
+</td>
+</tr><tr id="section-37">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-37">&#182;</a>
+  </div>
+  
+<p>A symbol that had better be defined</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">elseif</span> <span class="nt">type</span>(expr) == <span class="s">'string'</span> <span class="k">then</span>
+        <span class="k">if</span> symbols[expr] <span class="k">then</span> <span class="k">return</span> symbols[expr]
+        <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Symbol not defined: '</span> .. expr) <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-38">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-38">&#182;</a>
+  </div>
+  
+<p>This is a list of terms separated by arithmetic operators. So,
+evaluate the first one...</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">elseif</span> expr[1] == <span class="s">'expr'</span> <span class="o">or</span> expr[1] == <span class="s">'term'</span> <span class="k">then</span>
+        <span class="k">local</span> val = evaluate(expr[2], symbols)
+</pre></div>
+</td>
+</tr><tr id="section-39">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-39">&#182;</a>
+  </div>
+  
+<p>Then go through the list two at a time...</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">for</span> i = 3, #expr, 2 <span class="k">do</span>
+            <span class="k">local</span> operator = expr[i]
+</pre></div>
+</td>
+</tr><tr id="section-40">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-40">&#182;</a>
+  </div>
+  
+<p>Evaluating the rest...</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">local</span> rhs = evaluate(expr[i+1], symbols)
+</pre></div>
+</td>
+</tr><tr id="section-41">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-41">&#182;</a>
+  </div>
+  
+<p>And adding or subtracting them or whatever</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">if</span> operator == <span class="s">'+'</span> <span class="k">then</span>
+                val = val + rhs
+            <span class="k">elseif</span> operator == <span class="s">'-'</span> <span class="k">then</span>
+                val = val - rhs
+            <span class="k">elseif</span> operator == <span class="s">'*'</span> <span class="k">then</span>
+                val = val * rhs
+            <span class="k">elseif</span> operator == <span class="s">'/'</span> <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-42">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-42">&#182;</a>
+  </div>
+  
+<p>Lua has floating point division, but Vulcan will only support integer
+truncating division</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                val = math.floor(val / rhs)
+            <span class="k">elseif</span> operator == <span class="s">'&#37;'</span> <span class="k">then</span>
+                val = val &#37; rhs
+            <span class="k">end</span>
+        <span class="k">end</span>
+        <span class="k">return</span> val
+    <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-43">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-43">&#182;</a>
+  </div>
+  
+<p>Return a list of all symbols referenced by this expression:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">references</span>(expr)
+</pre></div>
+</td>
+</tr><tr id="section-44">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-44">&#182;</a>
+  </div>
+  
+<p>A set (map from name to 'true') of all references</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    refs = {}
+</pre></div>
+</td>
+</tr><tr id="section-45">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-45">&#182;</a>
+  </div>
+  
+<p>A helper function to do the recursion</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> <span class="k">function</span> <span class="nf">search</span>(e)
+</pre></div>
+</td>
+</tr><tr id="section-46">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-46">&#182;</a>
+  </div>
+  
+<p>If it's a reference, then add it to the </p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">if</span> <span class="nt">type</span>(e) == <span class="s">'string'</span> <span class="k">then</span> refs[e] = <span class="k">true</span>
+</pre></div>
+</td>
+</tr><tr id="section-47">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-47">&#182;</a>
+  </div>
+  
+<p>Otherwise we need to recurse on a sub-tree:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">elseif</span> <span class="nt">type</span>(e) == <span class="s">'table'</span> <span class="k">then</span>
+            search(e[2])
+            <span class="k">for</span> i = 4, #e, 2 <span class="k">do</span> search(e[i]) <span class="k">end</span>
+        <span class="k">end</span>
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-48">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-48">&#182;</a>
+  </div>
+  
+<p>Convert refs to a list:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> ref_list = {}
+    <span class="k">for</span> k, _ <span class="k">in</span> <span class="nt">pairs</span>(refs) <span class="k">do</span> table.insert(ref_list, k) <span class="k">end</span>
+    <span class="k">return</span> ref_list
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-49">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-49">&#182;</a>
+  </div>
+  
+<h2>Second pass</h2>
+<p>This will solve all the .equ directives and return a symbol table of them.
+.equ directives must be able to be solved in order, that is, in terms of
+only preceding .equ directives. Anything else is an error.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">solve_equs</span>(lines)
+    <span class="k">local</span> symbols = {}
+
+    <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(lines) <span class="k">do</span>
+</pre></div>
+</td>
+</tr><tr id="section-50">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-50">&#182;</a>
+  </div>
+  
+<p>Is this a .equ?</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">if</span> line.directive == <span class="s">'.equ'</span> <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-51">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-51">&#182;</a>
+  </div>
+  
+<p>Try to solve it with what we know so far:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">local</span> success, ret = <span class="nt">pcall</span>(evaluate, line.argument, symbols)
+</pre></div>
+</td>
+</tr><tr id="section-52">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-52">&#182;</a>
+  </div>
+  
+<p>Put it in the symbols, or blow up:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">if</span> success <span class="k">then</span>
+                symbols[line.label] = ret
+            <span class="k">else</span>
+                <span class="nt">error</span>(<span class="s">'Cannot resolve .equ on line '</span> .. line.line .. <span class="s">': '</span> .. ret)
+            <span class="k">end</span>
+        <span class="k">end</span>
+    <span class="k">end</span>
+
+    <span class="k">return</span> symbols
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-53">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-53">&#182;</a>
+  </div>
+  
+<p>-- We want to calculate where the labels are, as the first step in calculating the values of
+-- all the symbols. We'll do this naively; if we can't immediately tell that an instruction
+-- is less than four bytes, then we'll assume it's four bytes.
+function calculate_labels(lines)</p>
+<pre><code>local address = 0
+-- Go through each line...
+for _, line in ipairs(lines) do
+    -- If the line is a .org directive, then we evaluate the argument as a constant,
+    -- 
+end
+</code></pre>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-54">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-54">&#182;</a>
+  </div>
+  
+<pre><code>return dependencies
+</code></pre>
+<p>end</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+<span class="k">return</span> {
+    statement=statement,
+    parse_assembly=parse_assembly,
+    evaluate=evaluate,
+    solve_equs=solve_equs
+}
 </pre></div>
 </td>
 </tr></tbody>
