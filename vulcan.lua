@@ -348,6 +348,8 @@ end
 -- This will take the array of lines and map of symbols, and iterate through each line.
 -- If the line has an argument, evaluate it based on the symbol table, and change it to
 -- a number.
+--
+-- This can, of course, throw an error if 
 function calculate_args(lines, symbols)
     for _, line in ipairs(lines) do
         if line.argument then
@@ -361,6 +363,110 @@ function calculate_args(lines, symbols)
     end
 end
 
+-- ## Code generation
+-- At this point all lines have addresses and lengths, and all arguments are reduced to
+-- numeric constants. It's time to generate code. This function takes the fully-resolved
+-- `lines` array, start and end addresses, and returns an array of bytes, as numbers,
+-- between 0 and 255.
+--
+-- The array of bytes will start at index 0, regardless of what the start address is. So,
+-- if you pass in a list of instructions 5 bytes long, and a start af 100, you get back
+-- an array of five elements that should correspond to memory addresses 100-104.
+--
+-- The reason we need the end address is that we're going to fill gaps with zeroes, which
+-- correspond to nops. So, the whole code generation process:
+--
+-- - Make an array of zeroes, indexed from 0 to (end-start-1)
+-- - Go through the list of instructions, gonorating codo for them:
+-- - .db instructions turn into byte values starting at `line.address - start`
+-- - Opcodes turn into instruction bytes at `line.address - start` followed (maybe) by
+--   arguments.
+-- - Any other directive is skipped (even .orgs, we already have the addresses calculated)
+--
+-- The instruction bytes are formed of six bits defining the instruction followed by two
+-- bits denoting how many bytes of argument follow it. We know how long the argument is
+-- because of `line.length` and we know which instruction it is because of `line.opcode`.
+--
+-- Vulcan is a little-endian architecture: multi-byte arguments / .dbs will store the
+-- least-significant byte at the lowest address, then the more significant bytes following.
+function generate_code(lines, start_addr, end_addr)
+    local mem = {}
+
+    for a = 0, (end_addr - start_addr - 1) do
+        mem[a] = 0
+    end
+
+    for _, line in ipairs(lines) do
+        if line.directive == '.db' then
+            if type(line.argument) == 'string' then
+                local a = line.address - start_addr
+                for i = 1, #line.argument do
+                    mem[a] = string.byte(i)
+                    a = a + 1
+                end
+            else
+                mem[line.address - start_addr] = line.argument & 0xff
+                mem[line.address - start_addr + 1] = (line.argument >> 8) & 0xff
+                mem[line.address - start_addr + 2] = (line.argument >> 16) & 0xff
+            end
+        elseif line.opcode then
+            local instruction = 0
+            if line.opcode == 'push' or line.opcode == 'nop' then instruction = 0
+            elseif line.opcode == 'add' then instruction = 1
+            elseif line.opcode == 'sub' then instruction = 2
+            elseif line.opcode == 'mul' then instruction = 3
+            elseif line.opcode == 'div' then instruction = 4
+            elseif line.opcode == 'mod' then instruction = 5
+            elseif line.opcode == 'and' then instruction = 6
+            elseif line.opcode == 'or' then instruction = 7
+            elseif line.opcode == 'xor' then instruction = 8
+            elseif line.opcode == 'not' then instruction = 9
+            elseif line.opcode == 'lshift' then instruction = 10
+            elseif line.opcode == 'rshift' then instruction = 11
+            elseif line.opcode == 'arshift' then instruction = 12
+            elseif line.opcode == 'pop' then instruction = 13
+            elseif line.opcode == 'dup' then instruction = 14
+            elseif line.opcode == '2dup' then instruction = 15
+            elseif line.opcode == 'swap' then instruction = 16
+            elseif line.opcode == 'pick' then instruction = 17
+            elseif line.opcode == 'height' then instruction = 18
+            elseif line.opcode == 'jmp' then instruction = 19
+            elseif line.opcode == 'jmpr' then instruction = 20
+            elseif line.opcode == 'call' then instruction = 21
+            elseif line.opcode == 'ret' then instruction = 22
+            elseif line.opcode == 'brz' then instruction = 23
+            elseif line.opcode == 'brnz' then instruction = 24
+            elseif line.opcode == 'brgt' then instruction = 25
+            elseif line.opcode == 'brlt' then instruction = 26
+            elseif line.opcode == 'hlt' then instruction = 27
+            elseif line.opcode == 'load' then instruction = 28
+            elseif line.opcode == 'load16' then instruction = 29
+            elseif line.opcode == 'load24' then instruction = 30
+            elseif line.opcode == 'vload' then instruction = 31
+            elseif line.opcode == 'vload16' then instruction = 32
+            elseif line.opcode == 'vload24' then instruction = 33
+            elseif line.opcode == 'store' then instruction = 34
+            elseif line.opcode == 'store16' then instruction = 35
+            elseif line.opcode == 'store24' then instruction = 36
+            elseif line.opcode == 'vstore' then instruction = 37
+            elseif line.opcode == 'vstore16' then instruction = 38
+            elseif line.opcode == 'vstore24' then instruction = 39
+            else error('Unrecognized opcode on line ' .. line.line .. ': ' .. line.opcode) end
+
+            instruction = instruction << 2 + (line.length - 1)
+            mem[line.address] = instruction
+            if line.length > 1 then mem[line.address + 1] = line.argument & 0xff end
+            if line.length > 2 then mem[line.address + 2] = (line.argument >> 8) & 0xff end
+            if line.length > 3 then mem[line.address + 3] = (line.argument >> 16) & 0xff end
+        end
+    end
+
+    return mem
+end
+
+function assemble(iterator)
+end
+
 return {
     statement=statement,
     parse_assembly=parse_assembly,
@@ -368,5 +474,6 @@ return {
     solve_equs=solve_equs,
     measure_instructions=measure_instructions,
     place_labels=place_labels,
-    calculate_args=calculate_args
+    calculate_args=calculate_args,
+    assemble=assemble
 }

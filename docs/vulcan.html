@@ -695,6 +695,8 @@ This will take the array of lines and map of symbols, and iterate through each l
 If the line has an argument, evaluate it based on the symbol table, and change it to
 a number.</p>
 
+<p>This can, of course, throw an error if </p>
+
 
 </td>
 <td class="code">
@@ -710,6 +712,123 @@ a number.</p>
         <span class="k">end</span>
     <span class="k">end</span>
 <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-29">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-29">&#182;</a>
+  </div>
+  
+<h2>Code generation</h2>
+<p>At this point all lines have addresses and lengths, and all arguments are reduced to
+numeric constants. It's time to generate code. This function takes the fully-resolved
+<code>lines</code> array, start and end addresses, and returns an array of bytes, as numbers,
+between 0 and 255.</p>
+
+<p>The array of bytes will start at index 0, regardless of what the start address is. So,
+if you pass in a list of instructions 5 bytes long, and a start af 100, you get back
+an array of five elements that should correspond to memory addresses 100-104.</p>
+
+<p>The reason we need the end address is that we're going to fill gaps with zeroes, which
+correspond to nops. So, the whole code generation process:</p>
+
+<ul>
+    <li>Make an array of zeroes, indexed from 0 to (end-start-1)</li>
+    <li>Go through the list of instructions, gonorating codo for them:</li>
+    <li>.db instructions turn into byte values starting at <code>line.address - start</code></li>
+    <li>Opcodes turn into instruction bytes at <code>line.address - start</code> followed (maybe) by
+    arguments.</li>
+    <li>Any other directive is skipped (even .orgs, we already have the addresses calculated)</li>
+</ul>
+
+<p>The instruction bytes are formed of six bits defining the instruction followed by two
+bits denoting how many bytes of argument follow it. We know how long the argument is
+because of <code>line.length</code> and we know which instruction it is because of <code>line.opcode</code>.</p>
+
+<p>Vulcan is a little-endian architecture: multi-byte arguments / .dbs will store the
+least-significant byte at the lowest address, then the more significant bytes following.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">generate_code</span>(lines, start_addr, end_addr)
+    <span class="k">local</span> mem = {}
+
+    <span class="k">for</span> a = 0, (end_addr - start_addr - 1) <span class="k">do</span>
+        mem[a] = 0
+    <span class="k">end</span>
+
+    <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(lines) <span class="k">do</span>
+        <span class="k">if</span> line.directive == <span class="s">'.db'</span> <span class="k">then</span>
+            <span class="k">if</span> <span class="nt">type</span>(line.argument) == <span class="s">'string'</span> <span class="k">then</span>
+                <span class="k">local</span> a = line.address - start_addr
+                <span class="k">for</span> i = 1, #line.argument <span class="k">do</span>
+                    mem[a] = string.byte(i)
+                    a = a + 1
+                <span class="k">end</span>
+            <span class="k">else</span>
+                mem[line.address - start_addr] = line.argument &amp; 0xff
+                mem[line.address - start_addr + 1] = (line.argument &gt;&gt; 8) &amp; 0xff
+                mem[line.address - start_addr + 2] = (line.argument &gt;&gt; 16) &amp; 0xff
+            <span class="k">end</span>
+        <span class="k">elseif</span> line.opcode <span class="k">then</span>
+            <span class="k">local</span> instruction = 0
+            <span class="k">if</span> line.opcode == <span class="s">'push'</span> <span class="o">or</span> line.opcode == <span class="s">'nop'</span> <span class="k">then</span> instruction = 0
+            <span class="k">elseif</span> line.opcode == <span class="s">'add'</span> <span class="k">then</span> instruction = 1
+            <span class="k">elseif</span> line.opcode == <span class="s">'sub'</span> <span class="k">then</span> instruction = 2
+            <span class="k">elseif</span> line.opcode == <span class="s">'mul'</span> <span class="k">then</span> instruction = 3
+            <span class="k">elseif</span> line.opcode == <span class="s">'div'</span> <span class="k">then</span> instruction = 4
+            <span class="k">elseif</span> line.opcode == <span class="s">'mod'</span> <span class="k">then</span> instruction = 5
+            <span class="k">elseif</span> line.opcode == <span class="s">'and'</span> <span class="k">then</span> instruction = 6
+            <span class="k">elseif</span> line.opcode == <span class="s">'or'</span> <span class="k">then</span> instruction = 7
+            <span class="k">elseif</span> line.opcode == <span class="s">'xor'</span> <span class="k">then</span> instruction = 8
+            <span class="k">elseif</span> line.opcode == <span class="s">'not'</span> <span class="k">then</span> instruction = 9
+            <span class="k">elseif</span> line.opcode == <span class="s">'lshift'</span> <span class="k">then</span> instruction = 10
+            <span class="k">elseif</span> line.opcode == <span class="s">'rshift'</span> <span class="k">then</span> instruction = 11
+            <span class="k">elseif</span> line.opcode == <span class="s">'arshift'</span> <span class="k">then</span> instruction = 12
+            <span class="k">elseif</span> line.opcode == <span class="s">'pop'</span> <span class="k">then</span> instruction = 13
+            <span class="k">elseif</span> line.opcode == <span class="s">'dup'</span> <span class="k">then</span> instruction = 14
+            <span class="k">elseif</span> line.opcode == <span class="s">'2dup'</span> <span class="k">then</span> instruction = 15
+            <span class="k">elseif</span> line.opcode == <span class="s">'swap'</span> <span class="k">then</span> instruction = 16
+            <span class="k">elseif</span> line.opcode == <span class="s">'pick'</span> <span class="k">then</span> instruction = 17
+            <span class="k">elseif</span> line.opcode == <span class="s">'height'</span> <span class="k">then</span> instruction = 18
+            <span class="k">elseif</span> line.opcode == <span class="s">'jmp'</span> <span class="k">then</span> instruction = 19
+            <span class="k">elseif</span> line.opcode == <span class="s">'jmpr'</span> <span class="k">then</span> instruction = 20
+            <span class="k">elseif</span> line.opcode == <span class="s">'call'</span> <span class="k">then</span> instruction = 21
+            <span class="k">elseif</span> line.opcode == <span class="s">'ret'</span> <span class="k">then</span> instruction = 22
+            <span class="k">elseif</span> line.opcode == <span class="s">'brz'</span> <span class="k">then</span> instruction = 23
+            <span class="k">elseif</span> line.opcode == <span class="s">'brnz'</span> <span class="k">then</span> instruction = 24
+            <span class="k">elseif</span> line.opcode == <span class="s">'brgt'</span> <span class="k">then</span> instruction = 25
+            <span class="k">elseif</span> line.opcode == <span class="s">'brlt'</span> <span class="k">then</span> instruction = 26
+            <span class="k">elseif</span> line.opcode == <span class="s">'hlt'</span> <span class="k">then</span> instruction = 27
+            <span class="k">elseif</span> line.opcode == <span class="s">'load'</span> <span class="k">then</span> instruction = 28
+            <span class="k">elseif</span> line.opcode == <span class="s">'load16'</span> <span class="k">then</span> instruction = 29
+            <span class="k">elseif</span> line.opcode == <span class="s">'load24'</span> <span class="k">then</span> instruction = 30
+            <span class="k">elseif</span> line.opcode == <span class="s">'vload'</span> <span class="k">then</span> instruction = 31
+            <span class="k">elseif</span> line.opcode == <span class="s">'vload16'</span> <span class="k">then</span> instruction = 32
+            <span class="k">elseif</span> line.opcode == <span class="s">'vload24'</span> <span class="k">then</span> instruction = 33
+            <span class="k">elseif</span> line.opcode == <span class="s">'store'</span> <span class="k">then</span> instruction = 34
+            <span class="k">elseif</span> line.opcode == <span class="s">'store16'</span> <span class="k">then</span> instruction = 35
+            <span class="k">elseif</span> line.opcode == <span class="s">'store24'</span> <span class="k">then</span> instruction = 36
+            <span class="k">elseif</span> line.opcode == <span class="s">'vstore'</span> <span class="k">then</span> instruction = 37
+            <span class="k">elseif</span> line.opcode == <span class="s">'vstore16'</span> <span class="k">then</span> instruction = 38
+            <span class="k">elseif</span> line.opcode == <span class="s">'vstore24'</span> <span class="k">then</span> instruction = 39
+            <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Unrecognized opcode on line '</span> .. line.line .. <span class="s">': '</span> .. line.opcode) <span class="k">end</span>
+
+            instruction = instruction &lt;&lt; 2 + (line.length - 1)
+            mem[line.address] = instruction
+            <span class="k">if</span> line.length &gt; 1 <span class="k">then</span> mem[line.address + 1] = line.argument &amp; 0xff <span class="k">end</span>
+            <span class="k">if</span> line.length &gt; 2 <span class="k">then</span> mem[line.address + 2] = (line.argument &gt;&gt; 8) &amp; 0xff <span class="k">end</span>
+            <span class="k">if</span> line.length &gt; 3 <span class="k">then</span> mem[line.address + 3] = (line.argument &gt;&gt; 16) &amp; 0xff <span class="k">end</span>
+        <span class="k">end</span>
+    <span class="k">end</span>
+
+    <span class="k">return</span> mem
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">assemble</span>(iterator)
+<span class="k">end</span>
 
 <span class="k">return</span> {
     statement=statement,
@@ -718,7 +837,8 @@ a number.</p>
     solve_equs=solve_equs,
     measure_instructions=measure_instructions,
     place_labels=place_labels,
-    calculate_args=calculate_args
+    calculate_args=calculate_args,
+    assemble=assemble
 }
 </pre></div>
 </td>
