@@ -667,11 +667,11 @@ it encounters a .org that refers to something it shouldn't.</p>
             <span class="k">end</span>
         <span class="k">end</span>
 
+        start_addr = math.min(start_addr, address)
+        end_addr = math.max(end_addr, address + line.length - 1)
+
         line.address = address
         address = address + line.length
-
-        start_addr = math.min(start_addr, address)
-        end_addr = math.max(end_addr, address + line.length)
 
         <span class="k">if</span> line.label <span class="o">and</span> line.directive ~= <span class="s">'.equ'</span> <span class="k">then</span>
             symbols[line.label] = line.address

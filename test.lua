@@ -332,7 +332,7 @@ end
 test_place([[
 add 12
 sub
-]], [[(0 2)]])
+]], [[(0 2)]], [[{$end=2 $start=0}]])
 
 -- With a constant .org
 test_place([[
@@ -342,14 +342,14 @@ add 12]], [[(1000 1000)]])
 -- With a label
 test_place([[
 start: add
-sub]], [[(0 1)]], [[{start=0}]])
+sub]], [[(0 1)]], [[{$end=1 $start=0 start=0}]])
 
 -- With a .org referring to a label
 test_place([[
 .org 100
 jt_start: jmpr
 .org jt_start+7
-add 7]], [[(100 100 107 107)]], [[{jt_start=100}]])
+add 7]], [[(100 100 107 107)]], [[{$end=108 $start=0 jt_start=100}]])
 
 -- A .org we can't calculate
 success, err = pcall(test_place,[[
@@ -361,7 +361,7 @@ assert(success == false and err:match('Unable to resolve .org on line 1'))
 -- It shouldn't reassign .equs
 test_place([[
 blah: .equ 17
-mul blah*2]], nil, [[{blah=17}]])
+mul blah*2]], nil, [[{$end=1 $start=0 blah=17}]])
 
 -- # Fifth pass tests
 

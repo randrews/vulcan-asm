@@ -328,11 +328,11 @@ function place_labels(lines, symbols)
             end
         end
 
+        start_addr = math.min(start_addr, address)
+        end_addr = math.max(end_addr, address + line.length - 1)
+
         line.address = address
         address = address + line.length
-
-        start_addr = math.min(start_addr, address)
-        end_addr = math.max(end_addr, address + line.length)
 
         if line.label and line.directive ~= '.equ' then
             symbols[line.label] = line.address
