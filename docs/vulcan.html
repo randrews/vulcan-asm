@@ -413,12 +413,69 @@ statement = statement_pattern()
   
 <h2>First pass</h2>
 <p>Assembly parser. This will take in an iterator from which we can load lines of assembly, and return a
-list of parsed lines, but with expressions un-evaluated:</p>
+list of parsed lines, but with expressions un-evaluated.</p>
+
+<p>The main goal here is to strip out semantically blank lines (comments, whitespace, blanks) and return
+a list of parsed instructions we can then work with.</p>
+
+<ul>
+    <li>If we can't parse a line, throw an error</li>
+    <li>If it parsed to an empty list (because it's just whitespace), skip it</li>
+</ul>
+
+<p>Otherwise, we have a line like: <code>{'label', 'foo', 'opcode', 'add'}</code>. We want to convert that to a more
+convenient format of <code>{label='foo', opcode='add'}</code>. We're also going to store in each object the line
+number from the original iterator that it represents, to make giving error messages later on possible.</p>
+
+<p>Then, there are three errors that are easy to figure out here, so we'll catch them:</p>
+
+<ul>
+    <li>A string argument can't go on anything except a .db directive, so we'll error on that.</li>
+    <li>A .equ directive doesn't make sense without a label to define the value of and a value to assign to
+    it, so we'll error on that too.</li>
+    <li>A .org doesn't make sense without an argument, so that will also be an error.</li>
+</ul>
 
 
 </td>
 <td class="code">
   <div class="highlight"><pre><span class="k">function</span> <span class="nf">parse_assembly</span>(iterator)
+    <span class="k">local</span> lines = {} <span class="c">-- This will store the eventual output
+</span>    <span class="k">local</span> line_num = 1 <span class="c">-- A count of the line number
+</span>
+    <span class="k">for</span> line <span class="k">in</span> iterator <span class="k">do</span>
+        <span class="k">local</span> ast = statement:match(line)
+
+        <span class="k">if</span> ast == <span class="k">nil</span> <span class="k">then</span>
+            <span class="nt">error</span>(<span class="s">'Parse error on line '</span> .. line_num .. <span class="s">': '</span> .. string.format(<span class="s">'&#37;q'</span>, line))
+        <span class="k">end</span>
+
+        <span class="k">if</span> #ast &gt; 0 <span class="k">then</span>
+            <span class="k">local</span> obj = { line=line_num }
+            <span class="k">for</span> n = 1, #ast, 2 <span class="k">do</span>
+                obj[ast[n]] = ast[n+1]
+            <span class="k">end</span>
+
+            <span class="k">if</span> obj.argument <span class="o">and</span> obj.argument[1] == <span class="s">'string'</span> <span class="o">and</span> obj.directive ~= <span class="s">'.db'</span> <span class="k">then</span>
+                <span class="nt">error</span>(<span class="s">'String argument outside .db directive on line '</span> .. line_num)
+            <span class="k">end</span>
+
+            <span class="k">if</span> obj.directive == <span class="s">'.equ'</span> <span class="o">and</span> (obj.argument == <span class="k">nil</span> <span class="o">or</span> obj.label == <span class="k">nil</span>) <span class="k">then</span>
+                <span class="nt">error</span>(<span class="s">'.equ directive missing label or argument on line'</span> .. line_num)
+            <span class="k">end</span>
+
+            <span class="k">if</span> obj.directive == <span class="s">'.org'</span> <span class="o">and</span> obj.argument == <span class="k">nil</span> <span class="k">then</span>
+                <span class="nt">error</span>(<span class="s">'.org directive missing argument on line '</span> .. line_num)
+            <span class="k">end</span>
+
+            table.insert(lines, obj)
+        <span class="k">end</span>
+
+        line_num = line_num + 1
+    <span class="k">end</span>
+
+    <span class="k">return</span> lines
+<span class="k">end</span>
 </pre></div>
 </td>
 </tr><tr id="section-24">
@@ -427,300 +484,54 @@ list of parsed lines, but with expressions un-evaluated:</p>
     <a class="pilcrow" href="#section-24">&#182;</a>
   </div>
   
-<p>This will store the eventual output</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>    <span class="k">local</span> lines = {}
-</pre></div>
-</td>
-</tr><tr id="section-25">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-25">&#182;</a>
-  </div>
-  
-<p>A count of the line number</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>    <span class="k">local</span> line_num = 1
-</pre></div>
-</td>
-</tr><tr id="section-26">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-26">&#182;</a>
-  </div>
-  
-<p>Parse each line, throw out all the semantically blank ones:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>    <span class="k">for</span> line <span class="k">in</span> iterator <span class="k">do</span>
-        <span class="k">local</span> ast = statement:match(line)
-</pre></div>
-</td>
-</tr><tr id="section-27">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-27">&#182;</a>
-  </div>
-  
-<p>If we weren't able to parse it, blow up:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>        <span class="k">if</span> ast == <span class="k">nil</span> <span class="k">then</span>
-            <span class="nt">error</span>(<span class="s">'Parse error on line '</span> .. line_num .. <span class="s">': '</span> .. string.format(<span class="s">'&#37;q'</span>, line))
-        <span class="k">end</span>
-</pre></div>
-</td>
-</tr><tr id="section-28">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-28">&#182;</a>
-  </div>
-  
-<p>If it parsed to a null statement (nothing but a comment / whitespace)
-then just skip it:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>        <span class="k">if</span> #ast &gt; 0 <span class="k">then</span>
-</pre></div>
-</td>
-</tr><tr id="section-29">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-29">&#182;</a>
-  </div>
-  
-<p>Otherwise, start by converting it to a more useful key/value format,
-and embed the line number in it while we're at it:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>            <span class="k">local</span> obj = { line=line_num }
-            <span class="k">for</span> n = 1, #ast, 2 <span class="k">do</span>
-                obj[ast[n]] = ast[n+1]
-            <span class="k">end</span>
-</pre></div>
-</td>
-</tr><tr id="section-30">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-30">&#182;</a>
-  </div>
-  
-<p>We'll identify two possible errors here, just because we can: if a line
-has a string argument and it <em>isn't</em> a <code>.db</code> directive, then that's a
-syntax error and we'll say so:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>            <span class="k">if</span> obj.argument <span class="o">and</span> obj.argument[1] == <span class="s">'string'</span> <span class="o">and</span> obj.directive ~= <span class="s">'.db'</span> <span class="k">then</span>
-                <span class="nt">error</span>(<span class="s">'String argument outside .db directive on line '</span> .. line_num)
-            <span class="k">end</span>
-</pre></div>
-</td>
-</tr><tr id="section-31">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-31">&#182;</a>
-  </div>
-  
-<p>Also, a .equ without a label or argument makes no sense, so we'll error
-on that as well:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>            <span class="k">if</span> obj.directive == <span class="s">'.equ'</span> <span class="o">and</span> (obj.argument == <span class="k">nil</span> <span class="o">or</span> obj.label == <span class="k">nil</span>) <span class="k">then</span>
-                <span class="nt">error</span>(<span class="s">'.equ directive missing label or argument on line'</span> .. line_num)
-            <span class="k">end</span>
-</pre></div>
-</td>
-</tr><tr id="section-32">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-32">&#182;</a>
-  </div>
-  
-<p>Tack it on to the list of actual lines:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>            table.insert(lines, obj)
-        <span class="k">end</span>
-</pre></div>
-</td>
-</tr><tr id="section-33">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-33">&#182;</a>
-  </div>
-  
-<p>Next line number:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>        line_num = line_num + 1
-    <span class="k">end</span>
-
-    <span class="k">return</span> lines
-<span class="k">end</span>
-</pre></div>
-</td>
-</tr><tr id="section-34">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-34">&#182;</a>
-  </div>
-  
 <h2>Evaluating expressions</h2>
 <p>Now that we have a parsed file, that file has a bunch of numeric symbols in it: labels,
 .equ directives, that sort of thing. We need to resolve all of those to constant values
 before we can generate code. So, first part of that is being able to evaluate expressions.</p>
 
+<p>This evaluates an expression in the context of a symbol table, and returns either what the
+expression evaluates to (a number) or throws an error (if it references a symbol not in
+the given symbol table).</p>
 
-</td>
-<td class="code">
-  <div class="highlight"><pre>
-</pre></div>
-</td>
-</tr><tr id="section-35">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-35">&#182;</a>
-  </div>
-  
-<p>Evaluate an expression in the context of a symbol table:</p>
+<p>It's a depth-first recursive traversal of the expression AST:</p>
+
+<ul>
+    <li>If the node is a number, then it returns that number.</li>
+    <li>If the node is a string, it tries to look it up in the symbol table or explodes.</li>
+    <li>If the node is an expr or term, then it evaluates the children: the children are a
+    sequence of evaluate-able nodes separated by operators. So first evaluate the left-most
+    child, then use the operator to combine it with the following one, and so on.</li>
+</ul>
+
+<p>This works because the parser handles all the order-of-operations stuff in parsing, so
+we don't need to care what actual type of node it is, expr or term.</p>
+
+<p>One tricky point is that we call <code>math.floor</code> when dividing, because Lua has all floating-
+point math but Vulcan only has fixed-point, truncating division.</p>
 
 
 </td>
 <td class="code">
   <div class="highlight"><pre><span class="k">function</span> <span class="nf">evaluate</span>(expr, symbols)
-</pre></div>
-</td>
-</tr><tr id="section-36">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-36">&#182;</a>
-  </div>
-  
-<p>The bottom of a parse tree, just return a number</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>    <span class="k">if</span> <span class="nt">type</span>(expr) == <span class="s">'number'</span> <span class="k">then</span>
+    <span class="k">if</span> <span class="nt">type</span>(expr) == <span class="s">'number'</span> <span class="k">then</span>
         <span class="k">return</span> expr
-</pre></div>
-</td>
-</tr><tr id="section-37">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-37">&#182;</a>
-  </div>
-  
-<p>A symbol that had better be defined</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>    <span class="k">elseif</span> <span class="nt">type</span>(expr) == <span class="s">'string'</span> <span class="k">then</span>
+    <span class="k">elseif</span> <span class="nt">type</span>(expr) == <span class="s">'string'</span> <span class="k">then</span>
         <span class="k">if</span> symbols[expr] <span class="k">then</span> <span class="k">return</span> symbols[expr]
         <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Symbol not defined: '</span> .. expr) <span class="k">end</span>
-</pre></div>
-</td>
-</tr><tr id="section-38">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-38">&#182;</a>
-  </div>
-  
-<p>This is a list of terms separated by arithmetic operators. So,
-evaluate the first one...</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>    <span class="k">elseif</span> expr[1] == <span class="s">'expr'</span> <span class="o">or</span> expr[1] == <span class="s">'term'</span> <span class="k">then</span>
+    <span class="k">elseif</span> expr[1] == <span class="s">'expr'</span> <span class="o">or</span> expr[1] == <span class="s">'term'</span> <span class="k">then</span>
         <span class="k">local</span> val = evaluate(expr[2], symbols)
-</pre></div>
-</td>
-</tr><tr id="section-39">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-39">&#182;</a>
-  </div>
-  
-<p>Then go through the list two at a time...</p>
 
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>        <span class="k">for</span> i = 3, #expr, 2 <span class="k">do</span>
+        <span class="k">for</span> i = 3, #expr, 2 <span class="k">do</span>
             <span class="k">local</span> operator = expr[i]
-</pre></div>
-</td>
-</tr><tr id="section-40">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-40">&#182;</a>
-  </div>
-  
-<p>Evaluating the rest...</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>            <span class="k">local</span> rhs = evaluate(expr[i+1], symbols)
-</pre></div>
-</td>
-</tr><tr id="section-41">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-41">&#182;</a>
-  </div>
-  
-<p>And adding or subtracting them or whatever</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>            <span class="k">if</span> operator == <span class="s">'+'</span> <span class="k">then</span>
+            <span class="k">local</span> rhs = evaluate(expr[i+1], symbols)
+            <span class="k">if</span> operator == <span class="s">'+'</span> <span class="k">then</span>
                 val = val + rhs
             <span class="k">elseif</span> operator == <span class="s">'-'</span> <span class="k">then</span>
                 val = val - rhs
             <span class="k">elseif</span> operator == <span class="s">'*'</span> <span class="k">then</span>
                 val = val * rhs
             <span class="k">elseif</span> operator == <span class="s">'/'</span> <span class="k">then</span>
-</pre></div>
-</td>
-</tr><tr id="section-42">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-42">&#182;</a>
-  </div>
-  
-<p>Lua has floating point division, but Vulcan will only support integer
-truncating division</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>                val = math.floor(val / rhs)
+                val = math.floor(val / rhs)
             <span class="k">elseif</span> operator == <span class="s">'&#37;'</span> <span class="k">then</span>
                 val = val &#37; rhs
             <span class="k">end</span>
@@ -730,101 +541,10 @@ truncating division</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-43">
+</tr><tr id="section-25">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-43">&#182;</a>
-  </div>
-  
-<p>Return a list of all symbols referenced by this expression:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre><span class="k">function</span> <span class="nf">references</span>(expr)
-</pre></div>
-</td>
-</tr><tr id="section-44">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-44">&#182;</a>
-  </div>
-  
-<p>A set (map from name to 'true') of all references</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>    refs = {}
-</pre></div>
-</td>
-</tr><tr id="section-45">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-45">&#182;</a>
-  </div>
-  
-<p>A helper function to do the recursion</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>    <span class="k">local</span> <span class="k">function</span> <span class="nf">search</span>(e)
-</pre></div>
-</td>
-</tr><tr id="section-46">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-46">&#182;</a>
-  </div>
-  
-<p>If it's a reference, then add it to the </p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>        <span class="k">if</span> <span class="nt">type</span>(e) == <span class="s">'string'</span> <span class="k">then</span> refs[e] = <span class="k">true</span>
-</pre></div>
-</td>
-</tr><tr id="section-47">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-47">&#182;</a>
-  </div>
-  
-<p>Otherwise we need to recurse on a sub-tree:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>        <span class="k">elseif</span> <span class="nt">type</span>(e) == <span class="s">'table'</span> <span class="k">then</span>
-            search(e[2])
-            <span class="k">for</span> i = 4, #e, 2 <span class="k">do</span> search(e[i]) <span class="k">end</span>
-        <span class="k">end</span>
-    <span class="k">end</span>
-</pre></div>
-</td>
-</tr><tr id="section-48">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-48">&#182;</a>
-  </div>
-  
-<p>Convert refs to a list:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>    <span class="k">local</span> ref_list = {}
-    <span class="k">for</span> k, _ <span class="k">in</span> <span class="nt">pairs</span>(refs) <span class="k">do</span> table.insert(ref_list, k) <span class="k">end</span>
-    <span class="k">return</span> ref_list
-<span class="k">end</span>
-</pre></div>
-</td>
-</tr><tr id="section-49">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-49">&#182;</a>
+    <a class="pilcrow" href="#section-25">&#182;</a>
   </div>
   
 <h2>Second pass</h2>
@@ -839,52 +559,10 @@ only preceding .equ directives. Anything else is an error.</p>
     <span class="k">local</span> symbols = {}
 
     <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(lines) <span class="k">do</span>
-</pre></div>
-</td>
-</tr><tr id="section-50">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-50">&#182;</a>
-  </div>
-  
-<p>Is this a .equ?</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>        <span class="k">if</span> line.directive == <span class="s">'.equ'</span> <span class="k">then</span>
-</pre></div>
-</td>
-</tr><tr id="section-51">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-51">&#182;</a>
-  </div>
-  
-<p>Try to solve it with what we know so far:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>            <span class="k">local</span> success, ret = <span class="nt">pcall</span>(evaluate, line.argument, symbols)
-</pre></div>
-</td>
-</tr><tr id="section-52">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-52">&#182;</a>
-  </div>
-  
-<p>Put it in the symbols, or blow up:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>            <span class="k">if</span> success <span class="k">then</span>
-                symbols[line.label] = ret
-            <span class="k">else</span>
-                <span class="nt">error</span>(<span class="s">'Cannot resolve .equ on line '</span> .. line.line .. <span class="s">': '</span> .. ret)
-            <span class="k">end</span>
+        <span class="k">if</span> line.directive == <span class="s">'.equ'</span> <span class="k">then</span>
+            <span class="k">local</span> success, ret = <span class="nt">pcall</span>(evaluate, line.argument, symbols)
+            <span class="k">if</span> success <span class="k">then</span> symbols[line.label] = ret
+            <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Cannot resolve .equ on line '</span> .. line.line .. <span class="s">': '</span> .. ret) <span class="k">end</span>
         <span class="k">end</span>
     <span class="k">end</span>
 
@@ -892,10 +570,10 @@ only preceding .equ directives. Anything else is an error.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-53">
+</tr><tr id="section-26">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-53">&#182;</a>
+    <a class="pilcrow" href="#section-26">&#182;</a>
   </div>
   
 <h2>Third pass</h2>
@@ -904,109 +582,39 @@ immediately tell that an instruction needs only a 0/1/2 byte argument (because i
 a constant, or a .equ that we've solved, or something) then we'll assume it's a
 full 24-bit argument.</p>
 
+<ul>
+    <li>Lines that don't represent output (.equ, .org, etc) have length 0</li>
+    <li>.db directives are either strings (set aside the length of the string), or
+    numbers (set aside three bytes. If it's shorter than that it still may be a variable,
+    which might grow to be larger).</li>
+    <li>Opcodes with no argument are 1 byte long.</li>
+    <li>Opcodes with an argument, if that argument is a constant or decidable solely with
+    what we know right now (.equs), are however long that argument is. If we don't
+    know right now (based on a label, say) then we'll set aside the full 3 bytes (so it's
+    4 bytes long, with the instruction byte).</li>
+</ul>
+
 
 </td>
 <td class="code">
   <div class="highlight"><pre><span class="k">function</span> <span class="nf">measure_instructions</span>(lines, symbols)
     <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(lines) <span class="k">do</span>
-</pre></div>
-</td>
-</tr><tr id="section-54">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-54">&#182;</a>
-  </div>
-  
-<p>Does this even represent any real output bytes?</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>        <span class="k">if</span> <span class="o">not</span>(line.opcode <span class="o">or</span> line.directive == <span class="s">'.db'</span>) <span class="k">then</span>
+        <span class="k">if</span> <span class="o">not</span>(line.opcode <span class="o">or</span> line.directive == <span class="s">'.db'</span>) <span class="k">then</span>
             line.length = 0
         <span class="k">elseif</span> line.directive == <span class="s">'.db'</span> <span class="k">then</span>
-</pre></div>
-</td>
-</tr><tr id="section-55">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-55">&#182;</a>
-  </div>
-  
-<p>.dbs with string arguments, we know the length.
-Else, set aside 3 bytes for a number. (Even if it fits in fewer,
-it may be a variable that we're setting aside space for)</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>            <span class="k">if</span> line.argument[1] == <span class="s">'string'</span> <span class="k">then</span>
+            <span class="k">if</span> line.argument[1] == <span class="s">'string'</span> <span class="k">then</span>
                 line.length = #(line.argument[2])
             <span class="k">else</span>
                 line.length = 3
             <span class="k">end</span>
         <span class="k">elseif</span> line.opcode <span class="k">then</span>
-</pre></div>
-</td>
-</tr><tr id="section-56">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-56">&#182;</a>
-  </div>
-  
-<p>If it has no argument, then it's only one byte obviously</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>            <span class="k">if</span> <span class="o">not</span> line.argument <span class="k">then</span>
+            <span class="k">if</span> <span class="o">not</span> line.argument <span class="k">then</span>
                 line.length = 1
             <span class="k">else</span>
-</pre></div>
-</td>
-</tr><tr id="section-57">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-57">&#182;</a>
-  </div>
-  
-<p>Evaluate the argument, if we can with just .equs:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>                <span class="k">local</span> success, val = <span class="nt">pcall</span>(evaluate, line.argument, symbols)
-</pre></div>
-</td>
-</tr><tr id="section-58">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-58">&#182;</a>
-  </div>
-  
-<p>If we failed to do that, then let's just set aside the
-full 24 bits:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>                <span class="k">if</span> <span class="o">not</span> success <span class="k">then</span> line.length = 4
+                <span class="k">local</span> success, val = <span class="nt">pcall</span>(evaluate, line.argument, symbols)
+                <span class="k">if</span> <span class="o">not</span> success <span class="k">then</span> line.length = 4
                 <span class="k">else</span>
-</pre></div>
-</td>
-</tr><tr id="section-59">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-59">&#182;</a>
-  </div>
-  
-<p>Otherwise let's see what we got. If it's less than 256,
-it fits in a byte, and so on:</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>                    <span class="k">if</span> val &lt; 256 <span class="k">then</span> line.length = 2
+                    <span class="k">if</span> val &lt; 256 <span class="k">then</span> line.length = 2
                     <span class="k">elseif</span> val &lt; 65536 <span class="k">then</span> line.length = 3
                     <span class="k">else</span> line.length = 4 <span class="k">end</span>
                 <span class="k">end</span>
@@ -1016,50 +624,101 @@ it fits in a byte, and so on:</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-60">
+</tr><tr id="section-27">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-60">&#182;</a>
+    <a class="pilcrow" href="#section-27">&#182;</a>
   </div>
   
-<p>-- We want to calculate where the labels are, as the first step in calculating the values of
--- all the symbols. 
--- is less than four bytes, then we'll assume it's four bytes.
-function calculate_labels(lines)</p>
-<pre><code>local address = 0
--- Go through each line...
-for _, line in ipairs(lines) do
-    -- If the line is a .org directive, then we evaluate the argument as a constant,
-    -- 
-end
-</code></pre>
+<h2>Fourth pass</h2>
+<p>Time to start placing labels. The tricky part here is the .org directives, which can have
+expressions as their arguments. We'll compromise a little bit and say that a .org directive
+can only refer to labels that precede it, so, you can use .orgs to generate (say) a jump table
+but still make it easy for me to figure out what refers to what.</p>
+
+<p>We'll have an <code>address</code> variable and go through the lines, adding each one's length (calculated
+in the third pass) to it. If it has a label, we'll add that label's new value to <code>symbols</code>.</p>
+
+<p>But, we'll skip labels that come before .equs: that would make every .equ set to its address,
+rather than the argument.</p>
+
+<p>For code generation, we also need to have the start and end addresses, so we'll take this
+opportunity to calculate them and store them as <code>$start</code> and <code>$end</code> in the symbol table.</p>
+
+<p>This means that this function will alter <code>lines</code>, by adding an <code>address</code> key to each one,
+and <code>symbols</code>, by adding all the labels' addresses to it. It might also throw an error, if
+it encounters a .org that refers to something it shouldn't.</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">place_labels</span>(lines, symbols)
+    <span class="k">local</span> address = 0
+    <span class="k">local</span> start_addr = 0
+    <span class="k">local</span> end_addr = 0
+
+    <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(lines) <span class="k">do</span>
+        <span class="k">if</span> line.directive == <span class="s">'.org'</span> <span class="k">then</span>
+            <span class="k">local</span> success, ret = <span class="nt">pcall</span>(evaluate, line.argument, symbols)
+            <span class="k">if</span> success <span class="k">then</span>
+                address = ret
+            <span class="k">else</span>
+                <span class="nt">error</span>(<span class="s">'Unable to resolve .org on line '</span> .. line.line .. <span class="s">': '</span> .. ret)
+            <span class="k">end</span>
+        <span class="k">end</span>
+
+        line.address = address
+        address = address + line.length
+
+        start_addr = math.min(start_addr, address)
+        end_addr = math.max(end_addr, address + line.length)
+
+        <span class="k">if</span> line.label <span class="o">and</span> line.directive ~= <span class="s">'.equ'</span> <span class="k">then</span>
+            symbols[line.label] = line.address
+        <span class="k">end</span>
+    <span class="k">end</span>
+
+    symbols[<span class="s">'$start'</span>] = start_addr
+    symbols[<span class="s">'$end'</span>] = end_addr
+<span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-61">
+</tr><tr id="section-28">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-61">&#182;</a>
+    <a class="pilcrow" href="#section-28">&#182;</a>
   </div>
   
-<pre><code>return dependencies
-</code></pre>
-<p>end</p>
+<h2>Fifth pass</h2>
+<p>At this point we have everything we need to calculate the arguments, so we'll do that.
+This will take the array of lines and map of symbols, and iterate through each line.
+If the line has an argument, evaluate it based on the symbol table, and change it to
+a number.</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">calculate_args</span>(lines, symbols)
+    <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(lines) <span class="k">do</span>
+        <span class="k">if</span> line.argument <span class="k">then</span>
+            <span class="k">local</span> success, ret = <span class="nt">pcall</span>(evaluate, line.argument, symbols)
+            <span class="k">if</span> success <span class="k">then</span>
+                line.argument = ret
+            <span class="k">else</span>
+                <span class="nt">error</span>(<span class="s">'Unable to evaluate argument on line '</span> .. line.line .. <span class="s">': '</span> .. ret)
+            <span class="k">end</span>
+        <span class="k">end</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+
 <span class="k">return</span> {
     statement=statement,
     parse_assembly=parse_assembly,
     evaluate=evaluate,
     solve_equs=solve_equs,
-    measure_instructions=measure_instructions
+    measure_instructions=measure_instructions,
+    place_labels=place_labels,
+    calculate_args=calculate_args
 }
 </pre></div>
 </td>

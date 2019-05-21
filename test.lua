@@ -299,3 +299,107 @@ test_measure([[push 0xaa1023]], [[(4)]])
 
 -- Args with unknown length
 test_measure([[push banana+12]], [[(4)]])
+
+-- # Fourth pass tests
+
+place_labels = vulcan.place_labels
+
+-- ## Utility functions
+
+function test_place(asm, addresses, symbols)
+    local lines = parse_assembly(iterator(asm))
+    local actual_symbols = solve_equs(lines)
+    measure_instructions(lines, actual_symbols)
+    place_labels(lines, actual_symbols)
+    local actual_addresses = prettify(table.map(lines, function(l) return l.address end))
+
+    if addresses and actual_addresses ~= addresses then
+        print('FAIL:\nExpected: ' .. addresses .. '\n  Actual: ' .. actual_addresses)
+        return false
+    end
+
+    if symbols and symbols ~= prettify(actual_symbols) then
+        print('FAIL:\nExpected: ' .. symbols .. '\n  Actual: ' .. prettify(actual_symbols))
+        return false
+    end
+
+    return true
+end
+
+-- ## Test cases
+
+-- Simple
+test_place([[
+add 12
+sub
+]], [[(0 2)]])
+
+-- With a constant .org
+test_place([[
+.org 1000
+add 12]], [[(1000 1000)]])
+
+-- With a label
+test_place([[
+start: add
+sub]], [[(0 1)]], [[{start=0}]])
+
+-- With a .org referring to a label
+test_place([[
+.org 100
+jt_start: jmpr
+.org jt_start+7
+add 7]], [[(100 100 107 107)]], [[{jt_start=100}]])
+
+-- A .org we can't calculate
+success, err = pcall(test_place,[[
+.org start+10
+add
+start: sub]])
+assert(success == false and err:match('Unable to resolve .org on line 1'))
+
+-- It shouldn't reassign .equs
+test_place([[
+blah: .equ 17
+mul blah*2]], nil, [[{blah=17}]])
+
+-- # Fifth pass tests
+
+calculate_args = vulcan.calculate_args
+
+-- ## Utility functions
+
+function test_calculate(asm, args)
+    local lines = parse_assembly(iterator(asm))
+    local symbols = solve_equs(lines)
+    measure_instructions(lines, symbols)
+    place_labels(lines, symbols)
+    calculate_args(lines, symbols)
+    local actual_args = prettify(table.map(lines, function(l) return l.argument or 0 end))
+
+    if actual_args ~= args then
+        print('FAIL:\nExpected: ' .. args .. '\n  Actual: ' .. actual_args)
+        return false
+    end
+
+    return true
+end
+
+-- ## Test cases
+
+-- Simple
+test_calculate([[add 25]], [[(25)]])
+
+-- Arithmetic
+test_calculate([[add 2+3*6]], [[(20)]])
+
+-- Referring to labels
+test_calculate([[
+foo: .org 100
+add foo+5
+]], [[(100 105)]])
+
+-- Referring to .equs
+test_calculate([[
+blah: .equ 17
+mul blah*2]], [[(17 34)]])

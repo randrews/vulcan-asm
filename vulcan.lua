@@ -130,51 +130,56 @@ statement = statement_pattern()
 
 -- ## First pass
 -- Assembly parser. This will take in an iterator from which we can load lines of assembly, and return a
--- list of parsed lines, but with expressions un-evaluated:
+-- list of parsed lines, but with expressions un-evaluated.
+--
+-- The main goal here is to strip out semantically blank lines (comments, whitespace, blanks) and return
+-- a list of parsed instructions we can then work with.
+--
+-- - If we can't parse a line, throw an error
+-- - If it parsed to an empty list (because it's just whitespace), skip it
+--
+-- Otherwise, we have a line like: `{'label', 'foo', 'opcode', 'add'}`. We want to convert that to a more
+-- convenient format of `{label='foo', opcode='add'}`. We're also going to store in each object the line
+-- number from the original iterator that it represents, to make giving error messages later on possible.
+--
+-- Then, there are three errors that are easy to figure out here, so we'll catch them:
+--
+-- - A string argument can't go on anything except a .db directive, so we'll error on that.
+-- - A .equ directive doesn't make sense without a label to define the value of and a value to assign to
+--   it, so we'll error on that too.
+-- - A .org doesn't make sense without an argument, so that will also be an error.
 function parse_assembly(iterator)
-    -- This will store the eventual output
-    local lines = {}
+    local lines = {} -- This will store the eventual output
+    local line_num = 1 -- A count of the line number
 
-    -- A count of the line number
-    local line_num = 1
-
-    -- Parse each line, throw out all the semantically blank ones:
     for line in iterator do
         local ast = statement:match(line)
 
-        -- If we weren't able to parse it, blow up:
         if ast == nil then
             error('Parse error on line ' .. line_num .. ': ' .. string.format('%q', line))
         end
 
-        -- If it parsed to a null statement (nothing but a comment / whitespace)
-        -- then just skip it:
         if #ast > 0 then
-            -- Otherwise, start by converting it to a more useful key/value format,
-            -- and embed the line number in it while we're at it:
             local obj = { line=line_num }
             for n = 1, #ast, 2 do
                 obj[ast[n]] = ast[n+1]
             end
 
-            -- We'll identify two possible errors here, just because we can: if a line
-            -- has a string argument and it _isn't_ a `.db` directive, then that's a
-            -- syntax error and we'll say so:
             if obj.argument and obj.argument[1] == 'string' and obj.directive ~= '.db' then
                 error('String argument outside .db directive on line ' .. line_num)
             end
 
-            -- Also, a .equ without a label or argument makes no sense, so we'll error
-            -- on that as well:
             if obj.directive == '.equ' and (obj.argument == nil or obj.label == nil) then
                 error('.equ directive missing label or argument on line' .. line_num)
             end
 
-            -- Tack it on to the list of actual lines:
+            if obj.directive == '.org' and obj.argument == nil then
+                error('.org directive missing argument on line ' .. line_num)
+            end
+
             table.insert(lines, obj)
         end
 
-        -- Next line number:
         line_num = line_num + 1
     end
 
@@ -185,29 +190,36 @@ end
 -- Now that we have a parsed file, that file has a bunch of numeric symbols in it: labels,
 -- .equ directives, that sort of thing. We need to resolve all of those to constant values
 -- before we can generate code. So, first part of that is being able to evaluate expressions.
-
--- Evaluate an expression in the context of a symbol table:
+--
+-- This evaluates an expression in the context of a symbol table, and returns either what the
+-- expression evaluates to (a number) or throws an error (if it references a symbol not in
+-- the given symbol table).
+--
+-- It's a depth-first recursive traversal of the expression AST:
+--
+-- - If the node is a number, then it returns that number.
+-- - If the node is a string, it tries to look it up in the symbol table or explodes.
+-- - If the node is an expr or term, then it evaluates the children: the children are a
+--   sequence of evaluate-able nodes separated by operators. So first evaluate the left-most
+--   child, then use the operator to combine it with the following one, and so on.
+--
+-- This works because the parser handles all the order-of-operations stuff in parsing, so
+-- we don't need to care what actual type of node it is, expr or term.
+--
+-- One tricky point is that we call `math.floor` when dividing, because Lua has all floating-
+-- point math but Vulcan only has fixed-point, truncating division.
 function evaluate(expr, symbols)
-    -- The bottom of a parse tree, just return a number
     if type(expr) == 'number' then
         return expr
-
-        -- A symbol that had better be defined
     elseif type(expr) == 'string' then
         if symbols[expr] then return symbols[expr]
         else error('Symbol not defined: ' .. expr) end
-
-        -- This is a list of terms separated by arithmetic operators. So,
-        -- evaluate the first one...
     elseif expr[1] == 'expr' or expr[1] == 'term' then
         local val = evaluate(expr[2], symbols)
 
-        -- Then go through the list two at a time...
         for i = 3, #expr, 2 do
             local operator = expr[i]
-            -- Evaluating the rest...
             local rhs = evaluate(expr[i+1], symbols)
-            -- And adding or subtracting them or whatever
             if operator == '+' then
                 val = val + rhs
             elseif operator == '-' then
@@ -215,8 +227,6 @@ function evaluate(expr, symbols)
             elseif operator == '*' then
                 val = val * rhs
             elseif operator == '/' then
-                -- Lua has floating point division, but Vulcan will only support integer
-                -- truncating division
                 val = math.floor(val / rhs)
             elseif operator == '%' then
                 val = val % rhs
@@ -224,28 +234,6 @@ function evaluate(expr, symbols)
         end
         return val
     end
-end
-
--- Return a list of all symbols referenced by this expression:
-function references(expr)
-    -- A set (map from name to 'true') of all references
-    refs = {}
-
-    -- A helper function to do the recursion
-    local function search(e)
-        -- If it's a reference, then add it to the 
-        if type(e) == 'string' then refs[e] = true
-            -- Otherwise we need to recurse on a sub-tree:
-        elseif type(e) == 'table' then
-            search(e[2])
-            for i = 4, #e, 2 do search(e[i]) end
-        end
-    end
-
-    -- Convert refs to a list:
-    local ref_list = {}
-    for k, _ in pairs(refs) do table.insert(ref_list, k) end
-    return ref_list
 end
 
 -- ## Second pass
@@ -256,16 +244,10 @@ function solve_equs(lines)
     local symbols = {}
 
     for _, line in ipairs(lines) do
-        -- Is this a .equ?
         if line.directive == '.equ' then
-            -- Try to solve it with what we know so far:
             local success, ret = pcall(evaluate, line.argument, symbols)
-            -- Put it in the symbols, or blow up:
-            if success then
-                symbols[line.label] = ret
-            else
-                error('Cannot resolve .equ on line ' .. line.line .. ': ' .. ret)
-            end
+            if success then symbols[line.label] = ret
+            else error('Cannot resolve .equ on line ' .. line.line .. ': ' .. ret) end
         end
     end
 
@@ -277,33 +259,33 @@ end
 -- immediately tell that an instruction needs only a 0/1/2 byte argument (because it's
 -- a constant, or a .equ that we've solved, or something) then we'll assume it's a
 -- full 24-bit argument.
+--
+-- - Lines that don't represent output (.equ, .org, etc) have length 0
+-- - .db directives are either strings (set aside the length of the string), or
+--   numbers (set aside three bytes. If it's shorter than that it still may be a variable,
+--   which might grow to be larger).
+-- - Opcodes with no argument are 1 byte long.
+-- - Opcodes with an argument, if that argument is a constant or decidable solely with
+--   what we know right now (.equs), are however long that argument is. If we don't
+--   know right now (based on a label, say) then we'll set aside the full 3 bytes (so it's
+--   4 bytes long, with the instruction byte).
 function measure_instructions(lines, symbols)
     for _, line in ipairs(lines) do
-        -- Does this even represent any real output bytes?
         if not(line.opcode or line.directive == '.db') then
             line.length = 0
         elseif line.directive == '.db' then
-            -- .dbs with string arguments, we know the length.
-            -- Else, set aside 3 bytes for a number. (Even if it fits in fewer,
-            -- it may be a variable that we're setting aside space for)
             if line.argument[1] == 'string' then
                 line.length = #(line.argument[2])
             else
                 line.length = 3
             end
         elseif line.opcode then
-            -- If it has no argument, then it's only one byte obviously
             if not line.argument then
                 line.length = 1
             else
-                -- Evaluate the argument, if we can with just .equs:
                 local success, val = pcall(evaluate, line.argument, symbols)
-                -- If we failed to do that, then let's just set aside the
-                -- full 24 bits:
                 if not success then line.length = 4
                 else
-                    -- Otherwise let's see what we got. If it's less than 256,
-                    -- it fits in a byte, and so on:
                     if val < 256 then line.length = 2
                     elseif val < 65536 then line.length = 3
                     else line.length = 4 end
@@ -313,24 +295,78 @@ function measure_instructions(lines, symbols)
     end
 end
 
--- -- We want to calculate where the labels are, as the first step in calculating the values of
--- -- all the symbols. 
--- -- is less than four bytes, then we'll assume it's four bytes.
--- function calculate_labels(lines)
---     local address = 0
---     -- Go through each line...
---     for _, line in ipairs(lines) do
---         -- If the line is a .org directive, then we evaluate the argument as a constant,
---         -- 
---     end
+-- ## Fourth pass
+-- Time to start placing labels. The tricky part here is the .org directives, which can have
+-- expressions as their arguments. We'll compromise a little bit and say that a .org directive
+-- can only refer to labels that precede it, so, you can use .orgs to generate (say) a jump table
+-- but still make it easy for me to figure out what refers to what.
+--
+-- We'll have an `address` variable and go through the lines, adding each one's length (calculated
+-- in the third pass) to it. If it has a label, we'll add that label's new value to `symbols`.
+--
+-- But, we'll skip labels that come before .equs: that would make every .equ set to its address,
+-- rather than the argument.
+--
+-- For code generation, we also need to have the start and end addresses, so we'll take this
+-- opportunity to calculate them and store them as `$start` and `$end` in the symbol table.
+--
+-- This means that this function will alter `lines`, by adding an `address` key to each one,
+-- and `symbols`, by adding all the labels' addresses to it. It might also throw an error, if
+-- it encounters a .org that refers to something it shouldn't.
+function place_labels(lines, symbols)
+    local address = 0
+    local start_addr = 0
+    local end_addr = 0
 
---     return dependencies
--- end
+    for _, line in ipairs(lines) do
+        if line.directive == '.org' then
+            local success, ret = pcall(evaluate, line.argument, symbols)
+            if success then
+                address = ret
+            else
+                error('Unable to resolve .org on line ' .. line.line .. ': ' .. ret)
+            end
+        end
+
+        line.address = address
+        address = address + line.length
+
+        start_addr = math.min(start_addr, address)
+        end_addr = math.max(end_addr, address + line.length)
+
+        if line.label and line.directive ~= '.equ' then
+            symbols[line.label] = line.address
+        end
+    end
+
+    symbols['$start'] = start_addr
+    symbols['$end'] = end_addr
+end
+
+-- ## Fifth pass
+-- At this point we have everything we need to calculate the arguments, so we'll do that.
+-- This will take the array of lines and map of symbols, and iterate through each line.
+-- If the line has an argument, evaluate it based on the symbol table, and change it to
+-- a number.
+function calculate_args(lines, symbols)
+    for _, line in ipairs(lines) do
+        if line.argument then
+            local success, ret = pcall(evaluate, line.argument, symbols)
+            if success then
+                line.argument = ret
+            else
+                error('Unable to evaluate argument on line ' .. line.line .. ': ' .. ret)
+            end
+        end
+    end
+end
 
 return {
     statement=statement,
     parse_assembly=parse_assembly,
     evaluate=evaluate,
     solve_equs=solve_equs,
-    measure_instructions=measure_instructions
+    measure_instructions=measure_instructions,
+    place_labels=place_labels,
+    calculate_args=calculate_args
 }
