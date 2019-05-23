@@ -464,7 +464,16 @@ function generate_code(lines, start_addr, end_addr)
     return mem
 end
 
+-- ## Assemble function
+-- Bring everything else together to go from an iterator on lines of code, to a final array
+-- of bytes ready to be written to something (or interpreted by a CPU)
 function assemble(iterator)
+    local lines = parse_assembly(iterator(asm))
+    local symbols = solve_equs(lines)
+    measure_instructions(lines, symbols)
+    place_labels(lines, symbols)
+    calculate_args(lines, symbols)
+    return generate_code(lines, symbols['$start'], symbols['$end'])
 end
 
 return {

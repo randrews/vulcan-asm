@@ -826,8 +826,28 @@ least-significant byte at the lowest address, then the more significant bytes fo
 
     <span class="k">return</span> mem
 <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-30">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-30">&#182;</a>
+  </div>
+  
+<h2>Assemble function</h2>
+<p>Bring everything else together to go from an iterator on lines of code, to a final array
+of bytes ready to be written to something (or interpreted by a CPU)</p>
 
-<span class="k">function</span> <span class="nf">assemble</span>(iterator)
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">assemble</span>(iterator)
+    <span class="k">local</span> lines = parse_assembly(iterator(asm))
+    <span class="k">local</span> symbols = solve_equs(lines)
+    measure_instructions(lines, symbols)
+    place_labels(lines, symbols)
+    calculate_args(lines, symbols)
+    <span class="k">return</span> generate_code(lines, symbols[<span class="s">'$start'</span>], symbols[<span class="s">'$end'</span>])
 <span class="k">end</span>
 
 <span class="k">return</span> {
