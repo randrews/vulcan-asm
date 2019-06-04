@@ -78,8 +78,11 @@ test([[add 0x10]], [[("opcode" "add" "argument" ("expr" ("term" 16)))]])
 -- Binary argument
 test([[add 0b1010]], [[("opcode" "add" "argument" ("expr" ("term" 10)))]])
 
--- Binary argument
-test([[add 0b1010]], [[("opcode" "add" "argument" ("expr" ("term" 10)))]])
+-- Decimal argument
+test([[add 23]], [[("opcode" "add" "argument" ("expr" ("term" 23)))]])
+
+-- Decimal zero argument
+test([[add 0]], [[("opcode" "add" "argument" ("expr" ("term" 0)))]])
 
 -- Strings
 test([[  .db "hello"]], [[("directive" ".db" "argument" ("string" ("h" "e" "l" "l" "o")))]])
@@ -215,6 +218,9 @@ local success, err = pcall(function()
 end)
 assert(success == false and err:match('Symbol not defined: start'))
 
+-- A parsed string
+test_eval({'string', {'H', 'e', 'l', 'l', 'o'}}, 'Hello')
+
 -- # Second pass tests
 
 solve_equs = vulcan.solve_equs
@@ -349,7 +355,7 @@ test_place([[
 .org 100
 jt_start: jmpr
 .org jt_start+7
-add 7]], [[(100 100 107 107)]], [[{$end=108 $start=0 jt_start=100}]])
+add 7]], [[(100 100 107 107)]], [[{$end=108 $start=100 jt_start=100}]])
 
 -- A .org we can't calculate
 success, err = pcall(test_place,[[
@@ -362,6 +368,11 @@ assert(success == false and err:match('Unable to resolve .org on line 1'))
 test_place([[
 blah: .equ 17
 mul blah*2]], nil, [[{$end=1 $start=0 blah=17}]])
+
+-- Calculates a correct start address
+test_place([[
+.org 123
+nop]], nil, [[{$end=123 $start=123}]])
 
 -- # Fifth pass tests
 
@@ -402,4 +413,107 @@ add foo+5
 -- Referring to .equs
 test_calculate([[
 blah: .equ 17
-mul blah*2]], [[(17 34)]])
+mul blah*2]], [[(17 34)]] )
+
+-- # Full assembler tests
+
+assemble = vulcan.assemble
+
+-- ## Utility functions
+
+function test_assemble(asm, bytes)
+    local actual_bytes = assemble(iterator(asm))
+
+    if #actual_bytes + 1 ~= #bytes then
+        print('FAIL:\nExpected: ' .. (#bytes) .. ' bytes to be generated\n  Actual: ' .. (#actual_bytes+1))
+        return false
+    end
+
+    for idx, byte in ipairs(bytes) do
+        local actual_byte = actual_bytes[idx-1]
+        if byte ~= actual_byte then
+            print('FAIL:\nExpected: ' .. byte_tostring(byte) .. ' at index ' .. idx .. '\n  Actual: ' .. byte_tostring(actual_byte))
+        end
+    end
+    return true
+end
+
+function byte_tostring(byte)
+    if byte < 16 then
+        return string.format('0x0%x', byte)
+    else
+        return string.format('0x%x', byte)
+    end
+end
+
+-- ## Test cases
+
+-- Null program
+test_assemble([[ nop ]], {0})
+
+-- Opcodes
+test_assemble([[
+ add
+ sub
+ mul ]], {4, 8, 12})
+
+-- Instructions with arguments
+test_assemble([[
+push 0x10
+add 0x10 ]], {0x01, 0x10, 0x05, 0x10})
+
+-- Instructions with arguments and a .org
+test_assemble([[
+.org 0x0100
+push 0x10
+add 0x10 ]], {0x01, 0x10, 0x05, 0x10})
+
+-- Instructions with long arguments
+test_assemble([[
+push 0x123456
+add 0x1234 ]], {0x03, 0x56, 0x34, 0x12, 0x06, 0x34, 0x12})
+
+-- .org directives at the beginning
+test_assemble([[
+.org 123
+nop ]], {0x00})
+
+-- .org directives in the middle
+test_assemble([[
+.org 0
+add
+.org 5
+add ]], {0x04, 0, 0, 0, 0, 0x04})
+
+-- .equ directives
+test_assemble([[
+foo: .equ 5
+add foo ]], {0x05, 5})
+
+-- Jumping to labels
+test_assemble([[
+.org 0x0100
+       push 10
+start: dup
+       add 0x1000
+       vstore 0
+       sub 1
+       brz start]],
+    {0x01, 0x0a, 0x38, 0x06, 0x00, 0x10, 0x95, 0x00, 0x09, 0x01, 0x5f, 0x02, 0x01, 0x00})
+
+-- .db directives
+test_assemble([[
+add 10
+.db 0x1234]], {0x05, 10, 0x34, 0x12, 0x00})
+
+-- .db directives with .orgs
+test_assemble([[
+.org 0x100
+add 10
+.db 0x1234]], {0x05, 10, 0x34, 0x12, 0x00})
+
+-- .db directives with strings
+test_assemble([[
+.org 0x100
+add 10
+.db "Hello"]], {0x05, 10, 0x48, 0x65, 0x6c, 0x6c, 0x6f})

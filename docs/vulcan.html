@@ -121,6 +121,45 @@ video display and keyboard in a window.</p>
     <a class="pilcrow" href="#section-6">&#182;</a>
   </div>
   
+<p>A debugging aid to pretty-print our internal representation of an instruction</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">print_line</span>(line, recur)
+    <span class="k">local</span> elements = {}
+    <span class="k">local</span> keys = {}
+
+    <span class="k">for</span> k, _ <span class="k">in</span> <span class="nt">pairs</span>(line) <span class="k">do</span>
+        table.insert(keys, k)
+    <span class="k">end</span>
+
+    table.sort(keys)
+
+    <span class="k">for</span> _, k <span class="k">in</span> <span class="nt">ipairs</span>(keys) <span class="k">do</span>
+        <span class="k">local</span> v = line[k]
+        <span class="k">if</span> <span class="nt">type</span>(v) == <span class="s">'table'</span> <span class="k">then</span>
+            table.insert(elements, k .. <span class="s">'='</span> .. print_line(v, <span class="k">true</span>))
+        <span class="k">else</span>
+            table.insert(elements, k .. <span class="s">'='</span> .. string.format(<span class="s">'&#37;q'</span>, v))
+        <span class="k">end</span>
+    <span class="k">end</span>
+
+    <span class="k">local</span> str = <span class="s">'{'</span> .. table.concat(elements, <span class="s">' '</span>) .. <span class="s">'}'</span>
+    <span class="k">if</span> recur <span class="k">then</span>
+        <span class="k">return</span> str
+    <span class="k">else</span>
+        <span class="nt">print</span>(str)
+    <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-7">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-7">&#182;</a>
+  </div>
+  
 <h1>Assembly parser</h1>
 
 
@@ -129,10 +168,10 @@ video display and keyboard in a window.</p>
   <div class="highlight"><pre>
 </pre></div>
 </td>
-</tr><tr id="section-7">
+</tr><tr id="section-8">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-7">&#182;</a>
+    <a class="pilcrow" href="#section-8">&#182;</a>
   </div>
   
 <p>Put this all in a function so we don't have a bunch of
@@ -144,10 +183,10 @@ stuff in the namespace</p>
   <div class="highlight"><pre><span class="k">function</span> <span class="nf">statement_pattern</span>()
 </pre></div>
 </td>
-</tr><tr id="section-8">
+</tr><tr id="section-9">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-8">&#182;</a>
+    <a class="pilcrow" href="#section-9">&#182;</a>
   </div>
   
 <p>First, we want to define some basic patterns. <code>space</code> will be any sequence of whitespace,
@@ -159,10 +198,10 @@ so we can ignore it easily:</p>
   <div class="highlight"><pre>    <span class="k">local</span> space = lpeg.S(<span class="s">" \t"</span>)^0
 </pre></div>
 </td>
-</tr><tr id="section-9">
+</tr><tr id="section-10">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-9">&#182;</a>
+    <a class="pilcrow" href="#section-10">&#182;</a>
   </div>
   
 <p>A comment will start with a semicolon and go to the end of the line. Actually everything is parsed
@@ -174,10 +213,10 @@ line by line, so anything that starts with a semicolon is a comment:</p>
   <div class="highlight"><pre>    <span class="k">local</span> comment = lpeg.P(<span class="s">';'</span>) * lpeg.P(1)^0
 </pre></div>
 </td>
-</tr><tr id="section-10">
+</tr><tr id="section-11">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-10">&#182;</a>
+    <a class="pilcrow" href="#section-11">&#182;</a>
   </div>
   
 <p>Numbers are more complicated. We'll support three formats:</p>
@@ -186,6 +225,10 @@ line by line, so anything that starts with a semicolon is a comment:</p>
     <li>Decimal numbers like 42</li>
     <li>Hexadecimal like 0x2a</li>
     <li>Binary like 0b00101010</li>
+    <li>Decimal zero needs its own pattern: it's not a decimal because
+    it starts with a 0, but it has to be matched after hex and bin
+    because otherwise any "0x" will parse as "decimal 0 followed
+    by unparseable x"</li>
 </ul>
 
 
@@ -194,13 +237,14 @@ line by line, so anything that starts with a semicolon is a comment:</p>
   <div class="highlight"><pre>    <span class="k">local</span> dec_number = (lpeg.R(<span class="s">'19'</span>) * lpeg.R(<span class="s">'09'</span>)^0) / <span class="nt">tonumber</span>
     <span class="k">local</span> hex_number = lpeg.P(<span class="s">'0x'</span>) * lpeg.C(lpeg.R(<span class="s">'09'</span>,<span class="s">'af'</span>,<span class="s">'AF'</span>)^1) / <span class="k">function</span>(s) <span class="k">return</span> <span class="nt">tonumber</span>(s, 16) <span class="k">end</span>
     <span class="k">local</span> bin_number = lpeg.P(<span class="s">'0b'</span>) * lpeg.C(lpeg.S(<span class="s">'01'</span>)^1) / <span class="k">function</span>(s) <span class="k">return</span> <span class="nt">tonumber</span>(s, 2) <span class="k">end</span>
-    <span class="k">local</span> number = dec_number + hex_number + bin_number
+    <span class="k">local</span> dec_zero = lpeg.P(<span class="s">'0'</span>) / <span class="nt">tonumber</span>
+    <span class="k">local</span> number = dec_number + hex_number + bin_number + dec_zero
 </pre></div>
 </td>
-</tr><tr id="section-11">
+</tr><tr id="section-12">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-11">&#182;</a>
+    <a class="pilcrow" href="#section-12">&#182;</a>
   </div>
   
 <p>A label can be any sequence of C-identifier-y characters, as long as it doesn't start with
@@ -213,10 +257,10 @@ a digit:</p>
     <span class="k">local</span> label = lpeg.C(label_char * (label_char + lpeg.R(<span class="s">'09'</span>))^0)
 </pre></div>
 </td>
-</tr><tr id="section-12">
+</tr><tr id="section-13">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-12">&#182;</a>
+    <a class="pilcrow" href="#section-13">&#182;</a>
   </div>
   
 <h2>Opcodes</h2>
@@ -236,10 +280,10 @@ a digit:</p>
 </span>    }
 </pre></div>
 </td>
-</tr><tr id="section-13">
+</tr><tr id="section-14">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-13">&#182;</a>
+    <a class="pilcrow" href="#section-14">&#182;</a>
   </div>
   
 <p>Combine the opcodes into one pattern:</p>
@@ -256,10 +300,10 @@ a digit:</p>
     ))
 </pre></div>
 </td>
-</tr><tr id="section-14">
+</tr><tr id="section-15">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-14">&#182;</a>
+    <a class="pilcrow" href="#section-15">&#182;</a>
   </div>
   
 <h2>Directives</h2>
@@ -277,10 +321,10 @@ a digit:</p>
   <div class="highlight"><pre>    <span class="k">local</span> directive = lpeg.C(lpeg.P(<span class="s">'.org'</span>) + lpeg.P(<span class="s">'.db'</span>) + lpeg.P(<span class="s">'.equ'</span>))
 </pre></div>
 </td>
-</tr><tr id="section-15">
+</tr><tr id="section-16">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-15">&#182;</a>
+    <a class="pilcrow" href="#section-16">&#182;</a>
   </div>
   
 <p>The .equ directive isn't much use without the ability to have expressions based on
@@ -297,10 +341,10 @@ symbols, so, a quick arithmetic expression parser:</p>
     }
 </pre></div>
 </td>
-</tr><tr id="section-16">
+</tr><tr id="section-17">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-16">&#182;</a>
+    <a class="pilcrow" href="#section-17">&#182;</a>
   </div>
   
 <p>Likewise, .db would get tedious quick without a string syntax, so, let's define one of those. An escape
@@ -312,10 +356,10 @@ sequence is a backslash followed by certain other characters:</p>
   <div class="highlight"><pre>    <span class="k">local</span> escape = lpeg.C(lpeg.P(<span class="s">'\\'</span>) * lpeg.S(<span class="s">'trns0"\\'</span>))
 </pre></div>
 </td>
-</tr><tr id="section-17">
+</tr><tr id="section-18">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-17">&#182;</a>
+    <a class="pilcrow" href="#section-18">&#182;</a>
   </div>
   
 <p>And a string is a quoted sequence of escapes or other characters:</p>
@@ -326,10 +370,10 @@ sequence is a backslash followed by certain other characters:</p>
   <div class="highlight"><pre>    <span class="k">local</span> string_pattern = lpeg.Ct(lpeg.Cc(<span class="s">'string'</span>) * lpeg.P(<span class="s">'"'</span>) * lpeg.Ct((lpeg.C(lpeg.P(1)-lpeg.S(<span class="s">'"\\'</span>)) + escape)^1) * <span class="s">'"'</span>)
 </pre></div>
 </td>
-</tr><tr id="section-18">
+</tr><tr id="section-19">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-18">&#182;</a>
+    <a class="pilcrow" href="#section-19">&#182;</a>
   </div>
   
 <h2>Parsing a line</h2>
@@ -343,10 +387,10 @@ argument exists. Comments are parsed but don't capture anything.</p>
   <div class="highlight"><pre>
 </pre></div>
 </td>
-</tr><tr id="section-19">
+</tr><tr id="section-20">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-19">&#182;</a>
+    <a class="pilcrow" href="#section-20">&#182;</a>
   </div>
   
 <p>Some sub-patterns for the portions of a line:</p>
@@ -359,10 +403,10 @@ argument exists. Comments are parsed but don't capture anything.</p>
     <span class="k">local</span> comment_group = comment
 </pre></div>
 </td>
-</tr><tr id="section-20">
+</tr><tr id="section-21">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-20">&#182;</a>
+    <a class="pilcrow" href="#section-21">&#182;</a>
   </div>
   
 <p>An opcode might be an actual opcode, or a directive</p>
@@ -374,10 +418,10 @@ argument exists. Comments are parsed but don't capture anything.</p>
     <span class="k">local</span> instruction_group = opcode_group * space * argument_group^-1
 </pre></div>
 </td>
-</tr><tr id="section-21">
+</tr><tr id="section-22">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-21">&#182;</a>
+    <a class="pilcrow" href="#section-22">&#182;</a>
   </div>
   
 <p>Finally the entire pattern for an assembly line:</p>
@@ -391,10 +435,10 @@ argument exists. Comments are parsed but don't capture anything.</p>
 statement = statement_pattern()
 </pre></div>
 </td>
-</tr><tr id="section-22">
+</tr><tr id="section-23">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-22">&#182;</a>
+    <a class="pilcrow" href="#section-23">&#182;</a>
   </div>
   
 <h1>Assembler</h1>
@@ -405,10 +449,10 @@ statement = statement_pattern()
   <div class="highlight"><pre>
 </pre></div>
 </td>
-</tr><tr id="section-23">
+</tr><tr id="section-24">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-23">&#182;</a>
+    <a class="pilcrow" href="#section-24">&#182;</a>
   </div>
   
 <h2>First pass</h2>
@@ -478,10 +522,10 @@ number from the original iterator that it represents, to make giving error messa
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-24">
+</tr><tr id="section-25">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-24">&#182;</a>
+    <a class="pilcrow" href="#section-25">&#182;</a>
   </div>
   
 <h2>Evaluating expressions</h2>
@@ -501,6 +545,8 @@ the given symbol table).</p>
     <li>If the node is an expr or term, then it evaluates the children: the children are a
     sequence of evaluate-able nodes separated by operators. So first evaluate the left-most
     child, then use the operator to combine it with the following one, and so on.</li>
+    <li>If the node is a parsed string (table with the first element being 'string'), it
+    concatenates the second argument (an array of characters) into a string and returns it</li>
 </ul>
 
 <p>This works because the parser handles all the order-of-operations stuff in parsing, so
@@ -537,14 +583,18 @@ point math but Vulcan only has fixed-point, truncating division.</p>
             <span class="k">end</span>
         <span class="k">end</span>
         <span class="k">return</span> val
+    <span class="k">elseif</span> expr[1] == <span class="s">'string'</span> <span class="k">then</span>
+        <span class="k">return</span> table.concat(expr[2])
+    <span class="k">else</span>
+        <span class="nt">error</span>(<span class="s">'Unrecognized argument: type "'</span> .. <span class="nt">type</span>(expr) .. <span class="s">'"'</span>)
     <span class="k">end</span>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-25">
+</tr><tr id="section-26">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-25">&#182;</a>
+    <a class="pilcrow" href="#section-26">&#182;</a>
   </div>
   
 <h2>Second pass</h2>
@@ -570,10 +620,10 @@ only preceding .equ directives. Anything else is an error.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-26">
+</tr><tr id="section-27">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-26">&#182;</a>
+    <a class="pilcrow" href="#section-27">&#182;</a>
   </div>
   
 <h2>Third pass</h2>
@@ -624,10 +674,10 @@ full 24-bit argument.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-27">
+</tr><tr id="section-28">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-27">&#182;</a>
+    <a class="pilcrow" href="#section-28">&#182;</a>
   </div>
   
 <h2>Fourth pass</h2>
@@ -654,7 +704,7 @@ it encounters a .org that refers to something it shouldn't.</p>
 <td class="code">
   <div class="highlight"><pre><span class="k">function</span> <span class="nf">place_labels</span>(lines, symbols)
     <span class="k">local</span> address = 0
-    <span class="k">local</span> start_addr = 0
+    <span class="k">local</span> start_addr = math.maxinteger
     <span class="k">local</span> end_addr = 0
 
     <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(lines) <span class="k">do</span>
@@ -683,10 +733,10 @@ it encounters a .org that refers to something it shouldn't.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-28">
+</tr><tr id="section-29">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-28">&#182;</a>
+    <a class="pilcrow" href="#section-29">&#182;</a>
   </div>
   
 <h2>Fifth pass</h2>
@@ -714,10 +764,10 @@ a number.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-29">
+</tr><tr id="section-30">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-29">&#182;</a>
+    <a class="pilcrow" href="#section-30">&#182;</a>
   </div>
   
 <h2>Code generation</h2>
@@ -735,7 +785,7 @@ correspond to nops. So, the whole code generation process:</p>
 
 <ul>
     <li>Make an array of zeroes, indexed from 0 to (end-start-1)</li>
-    <li>Go through the list of instructions, gonorating codo for them:</li>
+    <li>Go through the list of instructions, generating code for them:</li>
     <li>.db instructions turn into byte values starting at <code>line.address - start</code></li>
     <li>Opcodes turn into instruction bytes at <code>line.address - start</code> followed (maybe) by
     arguments.</li>
@@ -764,7 +814,7 @@ least-significant byte at the lowest address, then the more significant bytes fo
             <span class="k">if</span> <span class="nt">type</span>(line.argument) == <span class="s">'string'</span> <span class="k">then</span>
                 <span class="k">local</span> a = line.address - start_addr
                 <span class="k">for</span> i = 1, #line.argument <span class="k">do</span>
-                    mem[a] = string.byte(i)
+                    mem[a] = string.byte(line.argument, i)
                     a = a + 1
                 <span class="k">end</span>
             <span class="k">else</span>
@@ -816,11 +866,11 @@ least-significant byte at the lowest address, then the more significant bytes fo
             <span class="k">elseif</span> line.opcode == <span class="s">'vstore24'</span> <span class="k">then</span> instruction = 39
             <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Unrecognized opcode on line '</span> .. line.line .. <span class="s">': '</span> .. line.opcode) <span class="k">end</span>
 
-            instruction = instruction &lt;&lt; 2 + (line.length - 1)
-            mem[line.address] = instruction
-            <span class="k">if</span> line.length &gt; 1 <span class="k">then</span> mem[line.address + 1] = line.argument &amp; 0xff <span class="k">end</span>
-            <span class="k">if</span> line.length &gt; 2 <span class="k">then</span> mem[line.address + 2] = (line.argument &gt;&gt; 8) &amp; 0xff <span class="k">end</span>
-            <span class="k">if</span> line.length &gt; 3 <span class="k">then</span> mem[line.address + 3] = (line.argument &gt;&gt; 16) &amp; 0xff <span class="k">end</span>
+            instruction = (instruction &lt;&lt; 2) + (line.length - 1)
+            mem[line.address - start_addr] = instruction
+            <span class="k">if</span> line.length &gt; 1 <span class="k">then</span> mem[line.address - start_addr + 1] = line.argument &amp; 0xff <span class="k">end</span>
+            <span class="k">if</span> line.length &gt; 2 <span class="k">then</span> mem[line.address - start_addr + 2] = (line.argument &gt;&gt; 8) &amp; 0xff <span class="k">end</span>
+            <span class="k">if</span> line.length &gt; 3 <span class="k">then</span> mem[line.address - start_addr + 3] = (line.argument &gt;&gt; 16) &amp; 0xff <span class="k">end</span>
         <span class="k">end</span>
     <span class="k">end</span>
 
@@ -828,10 +878,10 @@ least-significant byte at the lowest address, then the more significant bytes fo
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-30">
+</tr><tr id="section-31">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-30">&#182;</a>
+    <a class="pilcrow" href="#section-31">&#182;</a>
   </div>
   
 <h2>Assemble function</h2>
@@ -842,7 +892,7 @@ of bytes ready to be written to something (or interpreted by a CPU)</p>
 </td>
 <td class="code">
   <div class="highlight"><pre><span class="k">function</span> <span class="nf">assemble</span>(iterator)
-    <span class="k">local</span> lines = parse_assembly(iterator(asm))
+    <span class="k">local</span> lines = parse_assembly(iterator)
     <span class="k">local</span> symbols = solve_equs(lines)
     measure_instructions(lines, symbols)
     place_labels(lines, symbols)

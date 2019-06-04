@@ -33,6 +33,34 @@ function table:reduce(fn, sum)
     return sum
 end
 
+-- A debugging aid to pretty-print our internal representation of an instruction
+function print_line(line, recur)
+    local elements = {}
+    local keys = {}
+
+    for k, _ in pairs(line) do
+        table.insert(keys, k)
+    end
+
+    table.sort(keys)
+
+    for _, k in ipairs(keys) do
+        local v = line[k]
+        if type(v) == 'table' then
+            table.insert(elements, k .. '=' .. print_line(v, true))
+        else
+            table.insert(elements, k .. '=' .. string.format('%q', v))
+        end
+    end
+
+    local str = '{' .. table.concat(elements, ' ') .. '}'
+    if recur then
+        return str
+    else
+        print(str)
+    end
+end
+
 -- # Assembly parser
 
 -- Put this all in a function so we don't have a bunch of
@@ -51,10 +79,15 @@ function statement_pattern()
     -- - Decimal numbers like 42
     -- - Hexadecimal like 0x2a
     -- - Binary like 0b00101010
+    -- - Decimal zero needs its own pattern: it's not a decimal because
+    --   it starts with a 0, but it has to be matched after hex and bin
+    --   because otherwise any "0x" will parse as "decimal 0 followed
+    --   by unparseable x"
     local dec_number = (lpeg.R('19') * lpeg.R('09')^0) / tonumber
     local hex_number = lpeg.P('0x') * lpeg.C(lpeg.R('09','af','AF')^1) / function(s) return tonumber(s, 16) end
     local bin_number = lpeg.P('0b') * lpeg.C(lpeg.S('01')^1) / function(s) return tonumber(s, 2) end
-    local number = dec_number + hex_number + bin_number
+    local dec_zero = lpeg.P('0') / tonumber
+    local number = dec_number + hex_number + bin_number + dec_zero
 
     -- A label can be any sequence of C-identifier-y characters, as long as it doesn't start with
     -- a digit:
@@ -202,6 +235,8 @@ end
 -- - If the node is an expr or term, then it evaluates the children: the children are a
 --   sequence of evaluate-able nodes separated by operators. So first evaluate the left-most
 --   child, then use the operator to combine it with the following one, and so on.
+-- - If the node is a parsed string (table with the first element being 'string'), it
+--   concatenates the second argument (an array of characters) into a string and returns it
 --
 -- This works because the parser handles all the order-of-operations stuff in parsing, so
 -- we don't need to care what actual type of node it is, expr or term.
@@ -233,6 +268,10 @@ function evaluate(expr, symbols)
             end
         end
         return val
+    elseif expr[1] == 'string' then
+        return table.concat(expr[2])
+    else
+        error('Unrecognized argument: type "' .. type(expr) .. '"')
     end
 end
 
@@ -315,7 +354,7 @@ end
 -- it encounters a .org that refers to something it shouldn't.
 function place_labels(lines, symbols)
     local address = 0
-    local start_addr = 0
+    local start_addr = math.maxinteger
     local end_addr = 0
 
     for _, line in ipairs(lines) do
@@ -377,7 +416,7 @@ end
 -- correspond to nops. So, the whole code generation process:
 --
 -- - Make an array of zeroes, indexed from 0 to (end-start-1)
--- - Go through the list of instructions, gonorating codo for them:
+-- - Go through the list of instructions, generating code for them:
 -- - .db instructions turn into byte values starting at `line.address - start`
 -- - Opcodes turn into instruction bytes at `line.address - start` followed (maybe) by
 --   arguments.
@@ -401,7 +440,7 @@ function generate_code(lines, start_addr, end_addr)
             if type(line.argument) == 'string' then
                 local a = line.address - start_addr
                 for i = 1, #line.argument do
-                    mem[a] = string.byte(i)
+                    mem[a] = string.byte(line.argument, i)
                     a = a + 1
                 end
             else
@@ -453,11 +492,11 @@ function generate_code(lines, start_addr, end_addr)
             elseif line.opcode == 'vstore24' then instruction = 39
             else error('Unrecognized opcode on line ' .. line.line .. ': ' .. line.opcode) end
 
-            instruction = instruction << 2 + (line.length - 1)
-            mem[line.address] = instruction
-            if line.length > 1 then mem[line.address + 1] = line.argument & 0xff end
-            if line.length > 2 then mem[line.address + 2] = (line.argument >> 8) & 0xff end
-            if line.length > 3 then mem[line.address + 3] = (line.argument >> 16) & 0xff end
+            instruction = (instruction << 2) + (line.length - 1)
+            mem[line.address - start_addr] = instruction
+            if line.length > 1 then mem[line.address - start_addr + 1] = line.argument & 0xff end
+            if line.length > 2 then mem[line.address - start_addr + 2] = (line.argument >> 8) & 0xff end
+            if line.length > 3 then mem[line.address - start_addr + 3] = (line.argument >> 16) & 0xff end
         end
     end
 
@@ -468,7 +507,7 @@ end
 -- Bring everything else together to go from an iterator on lines of code, to a final array
 -- of bytes ready to be written to something (or interpreted by a CPU)
 function assemble(iterator)
-    local lines = parse_assembly(iterator(asm))
+    local lines = parse_assembly(iterator)
     local symbols = solve_equs(lines)
     measure_instructions(lines, symbols)
     place_labels(lines, symbols)
