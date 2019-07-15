@@ -1,18 +1,69 @@
 SDL = require('SDL')
+SDL.image = require('SDL.image')
 
 Display = {}
-function Display.new()
+function Display.new(double)
     local instance = setmetatable({}, { __index = Display })
-
+    local err = nil
+    
     if not Display.initialized then
         local ret, err = SDL.init(SDL.flags.Video)
         if not ret then error(err) end
+
+        Display.image, err = SDL.image.load('font.png')
+        if not Display.image then error(err) end
+
         Display.initialized = true
     end
 
-    instance.window = SDL.createWindow{title='Vulcan', width=640, height=480}
+    local props = { title = 'Vulcan', width = 640, height = 480 }
+    if double then
+        props.width = props.width * 2
+        props.height = props.height * 2
+    end
+
+    instance.window = SDL.createWindow(props)
+
+    instance.renderer, err = SDL.createRenderer(instance.window, -1)
+    if not instance.renderer then error(err) end
+
+    instance.font, err = instance.renderer:createTextureFromSurface(Display.image)
+    if not instance.font then error(err) end
+
+    if double then
+        instance.renderer:setLogicalSize(640, 480)
+    end
+
     return instance
 end
+
+function Display.to_rgb(byte)
+    local red = (byte >> 5)
+    local green = (byte >> 2) & 7
+    local blue = (byte & 3) << 1
+    if blue & 0x02 then blue = blue + 1 end
+    print(string.format('r: %x, g: %x, b: %x', red, green, blue))
+    return (red << 21) + (green << 13) + (blue << 5)
+end
+
+function Display:char(c, x, y, fg, bg)
+    local src = { w=8, h=8, x=(c%64)*8, y=math.floor(c/64)*8 }
+    local dest = { w=8, h=8, x=x*8, y=y*8 }
+    self.font:setColorMod(Display.to_rgb(fg))
+    self.renderer:setDrawColor(Display.to_rgb(bg))
+    self.renderer:fillRect(dest)
+    self.renderer:copy(self.font, src, dest)
+    self.renderer:present()
+end
+
+function Display:loop()
+    for event in SDL.pollEvent() do
+        print(event.type)
+    end
+end
+
+d = Display.new(true); d:char(65+36, 10, 10, 0xff, 0xe0); while true do d:loop() end
+----------------------------------------------------------------------------------------------------
 
 CPU = {}
 function CPU.new()
