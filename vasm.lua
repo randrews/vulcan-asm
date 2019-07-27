@@ -101,7 +101,7 @@ function statement_pattern()
         'dup', '2dup', 'swap', 'pick', 'height', -- Stack instructions
         'add', 'sub', 'mul', 'div', 'mod', -- Arithmetic instructions
         'and', 'or', 'xor', 'not', 'lshift', 'rshift', 'arshift', -- Logic instructions
-        'jmp', 'jmpr', 'call', 'ret', 'brz', 'brnz', 'brgt', 'brlt', -- Branching and jumping
+        'jmpr', 'jmp', 'call', 'ret', 'brz', 'brnz', 'brgt', 'brlt', -- Branching and jumping
         'load24', 'load16', 'load', 'vload24', 'vload16', 'vload', -- Loading from memory
         'store24', 'store16', 'store', 'vstore24', 'vstore16', 'vstore' -- Storing to memory
     }
@@ -512,7 +512,7 @@ function assemble(iterator)
     measure_instructions(lines, symbols)
     place_labels(lines, symbols)
     calculate_args(lines, symbols)
-    return generate_code(lines, symbols['$start'], symbols['$end'])
+    return generate_code(lines, symbols['$start'], symbols['$end']), symbols['$start']
 end
 
 return {
