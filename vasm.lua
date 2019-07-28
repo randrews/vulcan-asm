@@ -134,7 +134,7 @@ function statement_pattern()
 
     -- Likewise, .db would get tedious quick without a string syntax, so, let's define one of those. An escape
     -- sequence is a backslash followed by certain other characters:
-    local escape = lpeg.C(lpeg.P('\\') * lpeg.S('trns0"\\'))
+    local escape = lpeg.C(lpeg.P('\\') * lpeg.S('trn0"\\'))
 
     -- And a string is a quoted sequence of escapes or other characters:
     local string_pattern = lpeg.Ct(lpeg.Cc('string') * lpeg.P('"') * lpeg.Ct((lpeg.C(lpeg.P(1)-lpeg.S('"\\')) + escape)^1) * '"')
@@ -236,7 +236,7 @@ end
 --   sequence of evaluate-able nodes separated by operators. So first evaluate the left-most
 --   child, then use the operator to combine it with the following one, and so on.
 -- - If the node is a parsed string (table with the first element being 'string'), it
---   concatenates the second argument (an array of characters) into a string and returns it
+--   turns the second element into an array of bytes (parsing out escape sequences) and returns it.
 --
 -- This works because the parser handles all the order-of-operations stuff in parsing, so
 -- we don't need to care what actual type of node it is, expr or term.
@@ -269,7 +269,21 @@ function evaluate(expr, symbols)
         end
         return val
     elseif expr[1] == 'string' then
-        return table.concat(expr[2])
+        local string_bytes = {}
+        for _,ch in ipairs(expr[2]) do
+            if ch:sub(1,1) == '\\' then
+                local escaped = ch:sub(2,2)
+                if escaped == 't' then table.insert(string_bytes, string.byte('\t')) end
+                if escaped == 'r' then table.insert(string_bytes, string.byte('\r')) end
+                if escaped == 'n' then table.insert(string_bytes, string.byte('\n')) end
+                if escaped == '0' then table.insert(string_bytes, string.byte('\0')) end
+                if escaped == '"' then table.insert(string_bytes, string.byte('"')) end
+                if escaped == '\\' then table.insert(string_bytes, string.byte('\\')) end
+            else
+                table.insert(string_bytes, string.byte(ch))
+            end
+        end
+        return string_bytes
     else
         error('Unrecognized argument: type "' .. type(expr) .. '"')
     end
@@ -437,10 +451,10 @@ function generate_code(lines, start_addr, end_addr)
 
     for _, line in ipairs(lines) do
         if line.directive == '.db' then
-            if type(line.argument) == 'string' then
+            if type(line.argument) == 'table' then
                 local a = line.address - start_addr
                 for i = 1, #line.argument do
-                    mem[a] = string.byte(line.argument, i)
+                    mem[a] = line.argument[i]
                     a = a + 1
                 end
             else

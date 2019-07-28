@@ -2,7 +2,7 @@
 
 <html>
 <head>
-  <title>vulcan.lua</title>
+  <title>vasm.lua</title>
   <meta http-equiv="content-type" content="text/html; charset=UTF-8">
   <link rel="stylesheet" media="all" href="locco.css" />
 </head>
@@ -15,7 +15,7 @@
         <tr>
           <th class="docs">
             <h1>
-              vulcan.lua
+              vasm.lua
             </h1>
           </th>
           <th class="code">
@@ -274,7 +274,7 @@ a digit:</p>
 </span>        <span class="s">'dup'</span>, <span class="s">'2dup'</span>, <span class="s">'swap'</span>, <span class="s">'pick'</span>, <span class="s">'height'</span>, <span class="c">-- Stack instructions
 </span>        <span class="s">'add'</span>, <span class="s">'sub'</span>, <span class="s">'mul'</span>, <span class="s">'div'</span>, <span class="s">'mod'</span>, <span class="c">-- Arithmetic instructions
 </span>        <span class="s">'and'</span>, <span class="s">'or'</span>, <span class="s">'xor'</span>, <span class="s">'not'</span>, <span class="s">'lshift'</span>, <span class="s">'rshift'</span>, <span class="s">'arshift'</span>, <span class="c">-- Logic instructions
-</span>        <span class="s">'jmp'</span>, <span class="s">'jmpr'</span>, <span class="s">'call'</span>, <span class="s">'ret'</span>, <span class="s">'brz'</span>, <span class="s">'brnz'</span>, <span class="s">'brgt'</span>, <span class="s">'brlt'</span>, <span class="c">-- Branching and jumping
+</span>        <span class="s">'jmpr'</span>, <span class="s">'jmp'</span>, <span class="s">'call'</span>, <span class="s">'ret'</span>, <span class="s">'brz'</span>, <span class="s">'brnz'</span>, <span class="s">'brgt'</span>, <span class="s">'brlt'</span>, <span class="c">-- Branching and jumping
 </span>        <span class="s">'load24'</span>, <span class="s">'load16'</span>, <span class="s">'load'</span>, <span class="s">'vload24'</span>, <span class="s">'vload16'</span>, <span class="s">'vload'</span>, <span class="c">-- Loading from memory
 </span>        <span class="s">'store24'</span>, <span class="s">'store16'</span>, <span class="s">'store'</span>, <span class="s">'vstore24'</span>, <span class="s">'vstore16'</span>, <span class="s">'vstore'</span> <span class="c">-- Storing to memory
 </span>    }
@@ -353,7 +353,7 @@ sequence is a backslash followed by certain other characters:</p>
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">local</span> escape = lpeg.C(lpeg.P(<span class="s">'\\'</span>) * lpeg.S(<span class="s">'trns0"\\'</span>))
+  <div class="highlight"><pre>    <span class="k">local</span> escape = lpeg.C(lpeg.P(<span class="s">'\\'</span>) * lpeg.S(<span class="s">'trn0"\\'</span>))
 </pre></div>
 </td>
 </tr><tr id="section-18">
@@ -546,7 +546,7 @@ the given symbol table).</p>
     sequence of evaluate-able nodes separated by operators. So first evaluate the left-most
     child, then use the operator to combine it with the following one, and so on.</li>
     <li>If the node is a parsed string (table with the first element being 'string'), it
-    concatenates the second argument (an array of characters) into a string and returns it</li>
+    turns the second element into an array of bytes (parsing out escape sequences) and returns it.</li>
 </ul>
 
 <p>This works because the parser handles all the order-of-operations stuff in parsing, so
@@ -584,7 +584,21 @@ point math but Vulcan only has fixed-point, truncating division.</p>
         <span class="k">end</span>
         <span class="k">return</span> val
     <span class="k">elseif</span> expr[1] == <span class="s">'string'</span> <span class="k">then</span>
-        <span class="k">return</span> table.concat(expr[2])
+        <span class="k">local</span> string_bytes = {}
+        <span class="k">for</span> _,ch <span class="k">in</span> <span class="nt">ipairs</span>(expr[2]) <span class="k">do</span>
+            <span class="k">if</span> ch:sub(1,1) == <span class="s">'\\'</span> <span class="k">then</span>
+                <span class="k">local</span> escaped = ch:sub(2,2)
+                <span class="k">if</span> escaped == <span class="s">'t'</span> <span class="k">then</span> table.insert(string_bytes, string.byte(<span class="s">'\t'</span>)) <span class="k">end</span>
+                <span class="k">if</span> escaped == <span class="s">'r'</span> <span class="k">then</span> table.insert(string_bytes, string.byte(<span class="s">'\r'</span>)) <span class="k">end</span>
+                <span class="k">if</span> escaped == <span class="s">'n'</span> <span class="k">then</span> table.insert(string_bytes, string.byte(<span class="s">'\n'</span>)) <span class="k">end</span>
+                <span class="k">if</span> escaped == <span class="s">'0'</span> <span class="k">then</span> table.insert(string_bytes, string.byte(<span class="s">'\0'</span>)) <span class="k">end</span>
+                <span class="k">if</span> escaped == <span class="s">'"'</span> <span class="k">then</span> table.insert(string_bytes, string.byte(<span class="s">'"'</span>)) <span class="k">end</span>
+                <span class="k">if</span> escaped == <span class="s">'\\'</span> <span class="k">then</span> table.insert(string_bytes, string.byte(<span class="s">'\\'</span>)) <span class="k">end</span>
+            <span class="k">else</span>
+                table.insert(string_bytes, string.byte(ch))
+            <span class="k">end</span>
+        <span class="k">end</span>
+        <span class="k">return</span> string_bytes
     <span class="k">else</span>
         <span class="nt">error</span>(<span class="s">'Unrecognized argument: type "'</span> .. <span class="nt">type</span>(expr) .. <span class="s">'"'</span>)
     <span class="k">end</span>
@@ -811,10 +825,10 @@ least-significant byte at the lowest address, then the more significant bytes fo
 
     <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(lines) <span class="k">do</span>
         <span class="k">if</span> line.directive == <span class="s">'.db'</span> <span class="k">then</span>
-            <span class="k">if</span> <span class="nt">type</span>(line.argument) == <span class="s">'string'</span> <span class="k">then</span>
+            <span class="k">if</span> <span class="nt">type</span>(line.argument) == <span class="s">'table'</span> <span class="k">then</span>
                 <span class="k">local</span> a = line.address - start_addr
                 <span class="k">for</span> i = 1, #line.argument <span class="k">do</span>
-                    mem[a] = string.byte(line.argument, i)
+                    mem[a] = line.argument[i]
                     a = a + 1
                 <span class="k">end</span>
             <span class="k">else</span>
@@ -897,7 +911,7 @@ of bytes ready to be written to something (or interpreted by a CPU)</p>
     measure_instructions(lines, symbols)
     place_labels(lines, symbols)
     calculate_args(lines, symbols)
-    <span class="k">return</span> generate_code(lines, symbols[<span class="s">'$start'</span>], symbols[<span class="s">'$end'</span>])
+    <span class="k">return</span> generate_code(lines, symbols[<span class="s">'$start'</span>], symbols[<span class="s">'$end'</span>]), symbols[<span class="s">'$start'</span>]
 <span class="k">end</span>
 
 <span class="k">return</span> {

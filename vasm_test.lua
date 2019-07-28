@@ -191,11 +191,16 @@ evaluate = vulcan.evaluate
 
 function test_eval(ast, val, symbols)
     local actual_val = evaluate(ast, symbols or {})
+    if type(actual_val) == 'table' then
+        actual_val = prettify(actual_val)
+        val = prettify({ val:byte(1, #val) })
+    end
+
     if actual_val == val then return true
     else
         print('FAIL:\nExpected: ' .. val .. '\n  Actual: ' .. actual_val)
         return false
-    end    
+    end
 end
 
 -- ## Test cases
@@ -220,6 +225,9 @@ assert(success == false and err:match('Symbol not defined: start'))
 
 -- A parsed string
 test_eval({'string', {'H', 'e', 'l', 'l', 'o'}}, 'Hello')
+
+-- A parsed string with escapes
+test_eval({'string', {'H', 'e', 'l', 'l', 'o', '\\"'}}, 'Hello"')
 
 -- # Second pass tests
 
@@ -517,3 +525,9 @@ test_assemble([[
 .org 0x100
 add 10
 .db "Hello"]], {0x05, 10, 0x48, 0x65, 0x6c, 0x6c, 0x6f})
+
+-- .db directives with strings and escapes
+test_assemble([[
+.org 0x100
+add 10
+.db "Hello\0"]], {0x05, 10, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x00})

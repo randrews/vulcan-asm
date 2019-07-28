@@ -455,6 +455,9 @@ end
 
 ----------------------------------------------------------------------------------------------------
 
+local random_seed = os.time()
+math.randomseed(random_seed)
+
 local argv = {...}
 if argv[1] then
     local iterator = io.open(argv[1])
@@ -463,5 +466,6 @@ if argv[1] then
     iterator:close()
     cpu:reset()
     cpu:run()
+    print('Random seed: ' .. random_seed)
     cpu:print_stack()
 end
