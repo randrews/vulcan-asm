@@ -3,9 +3,11 @@ SDL.image = require('SDL.image')
 local VASM = require('vasm')
 
 Display = {}
-function Display.new(double)
+function Display.new(double, memory)
     local instance = setmetatable({}, { __index = Display })
     local err = nil
+
+    instance.memory = memory
     
     if not Display.initialized then
         local ret, err = SDL.init(SDL.flags.Video)
@@ -63,11 +65,31 @@ function Display:loop()
     end
 end
 
+function Display:refresh()
+    -- vram starts at 0x01ac00:
+    -- Two buffers of 80x60x2 text screens: 0x01ac00 and 0x01d180
+    -- 2048 bytes of font ram: 0x01f700
+    -- 16 bytes of foreground palette: 0x01ff00
+    -- 16 bytes of background palette: 0x01ff10
+
+    local pico_palette = { 0x00, 0x05, 0x65, 0x11, 0xa8, 0x49, 0xeb, 0xff, 0xe1, 0xf4, 0xfc, 0x1c, 0x37, 0x8e, 0xee, 0xfa }
+
+    for y=0, 59 do
+        for x=0, 79 do
+            local char = self.memory[0x01ac00 + x + 80 * y]
+            local color = self.memory[0x01ac00 + x + 80 * y + 4800]
+            local fg_color = pico_palette[1 + (color & 0x0f)]
+            local bg_color = pico_palette[1 + (color >> 4)]
+            self:char(char, x, y, fg_color, bg_color)
+        end
+    end
+end
+
 -- d = Display.new(true); d:char(65+36, 10, 10, 0xff, 0xe0); while true do d:loop() end
 ----------------------------------------------------------------------------------------------------
 
 CPU = {}
-function CPU.new()
+function CPU.new(with_display)
     local instance = setmetatable({}, { __index = CPU })
 
     instance.stack = {}
@@ -77,7 +99,12 @@ function CPU.new()
 
     instance.mem = {}
     for n = 0, 131071 do
-        instance.mem[n] = 0
+        instance.mem[n] = math.floor(math.random() * 256)
+    end
+
+    if with_display then
+        instance.display = Display.new(false, instance.mem)
+        instance.display:refresh()
     end
 
     return instance:reset()
@@ -215,6 +242,10 @@ end
 function CPU:run()
     while not self.halted do
         self:execute(self:fetch())
+
+        if self.display then
+            self.display:loop()
+        end
     end
 end
 
@@ -386,6 +417,7 @@ function CPU:store24()
     self.mem[addr] = val & 0xff
     self.mem[addr+1] = (val >> 8) & 0xff
     self.mem[addr+2] = (val >> 16) & 0xff
+    if self.display and addr+2 >= 0x01ac00 then self.display:refresh() end
 end
 
 function CPU:store16()
@@ -393,11 +425,13 @@ function CPU:store16()
     local val = self:pop_data()
     self.mem[addr] = val & 0xff
     self.mem[addr+1] = (val >> 8) & 0xff
+    if self.display and addr+1 >= 0x01ac00 then self.display:refresh() end
 end
 
 function CPU:store()
     local addr = self:pop_data()
     self.mem[addr] = self:pop_data() & 0xff
+    if self.display and addr >= 0x01ac00 then self.display:refresh() end
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -405,7 +439,7 @@ end
 local argv = {...}
 if argv[1] then
     local iterator = io.open(argv[1])
-    local cpu = CPU.new()
+    local cpu = CPU.new(true)
     cpu:load(iterator:lines())
     iterator:close()
     cpu:reset()
