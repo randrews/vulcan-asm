@@ -3,12 +3,12 @@ SDL.image = require('SDL.image')
 local VASM = require('vasm')
 
 Display = {}
-function Display.new(double, memory)
+function Display.new(double, cpu)
     local instance = setmetatable({}, { __index = Display })
     local err = nil
 
-    instance.memory = memory
-    
+    instance.cpu = cpu
+
     if not Display.initialized then
         local ret, err = SDL.init(SDL.flags.Video)
         if not ret then error(err) end
@@ -61,8 +61,15 @@ end
 
 function Display:loop()
     for event in SDL.pollEvent() do
-        print(event.type)
+        if event.type == SDL.event.Quit then
+            self.cpu:hlt()
+        end
     end
+end
+
+function Display:palette(num)
+    local pico_palette = { 0x00, 0x05, 0x65, 0x11, 0xa8, 0x49, 0xeb, 0xff, 0xe1, 0xf4, 0xfc, 0x1c, 0x37, 0x8e, 0xee, 0xfa }
+    return pico_palette[num]
 end
 
 function Display:refresh()
@@ -72,16 +79,25 @@ function Display:refresh()
     -- 16 bytes of foreground palette: 0x01ff00
     -- 16 bytes of background palette: 0x01ff10
 
-    local pico_palette = { 0x00, 0x05, 0x65, 0x11, 0xa8, 0x49, 0xeb, 0xff, 0xe1, 0xf4, 0xfc, 0x1c, 0x37, 0x8e, 0xee, 0xfa }
-
     for y=0, 59 do
         for x=0, 79 do
-            local char = self.memory[0x01ac00 + x + 80 * y]
-            local color = self.memory[0x01ac00 + x + 80 * y + 4800]
-            local fg_color = pico_palette[1 + (color & 0x0f)]
-            local bg_color = pico_palette[1 + (color >> 4)]
+            local char = self.cpu:peek(0x01ac00 + x + 80 * y)
+            local color = self.cpu:peek(0x01ac00 + x + 80 * y + 4800)
+            local fg_color = self:palette(1 + (color & 0x0f))
+            local bg_color = self:palette(1 + (color >> 4))
             self:char(char, x, y, fg_color, bg_color)
         end
+    end
+end
+
+function Display:refresh_address(addr)
+    if addr >= 0x01ac00 and addr < 0x01ac00 + 9600 then
+        local offset = (addr - 0x01ac00) % 4800
+        local char = self.cpu:peek(0x01ac00 + offset)
+        local color = self.cpu:peek(0x01ac00 + offset + 4800)
+        local fg_color = self:palette(1 + (color & 0x0f))
+        local bg_color = self:palette(1 + (color >> 4))
+        self:char(char, offset % 80, math.floor(offset / 80), fg_color, bg_color)
     end
 end
 
@@ -103,7 +119,7 @@ function CPU.new(with_display)
     end
 
     if with_display then
-        instance.display = Display.new(false, instance.mem)
+        instance.display = Display.new(true, instance)
         instance.display:refresh()
     end
 
@@ -417,7 +433,9 @@ function CPU:store24()
     self.mem[addr] = val & 0xff
     self.mem[addr+1] = (val >> 8) & 0xff
     self.mem[addr+2] = (val >> 16) & 0xff
-    if self.display and addr+2 >= 0x01ac00 then self.display:refresh() end
+    self.display:refresh_address(addr)
+    self.display:refresh_address(addr+1)
+    self.display:refresh_address(addr+2)
 end
 
 function CPU:store16()
@@ -425,13 +443,14 @@ function CPU:store16()
     local val = self:pop_data()
     self.mem[addr] = val & 0xff
     self.mem[addr+1] = (val >> 8) & 0xff
-    if self.display and addr+1 >= 0x01ac00 then self.display:refresh() end
+    self.display:refresh_address(addr)
+    self.display:refresh_address(addr+1)
 end
 
 function CPU:store()
     local addr = self:pop_data()
     self.mem[addr] = self:pop_data() & 0xff
-    if self.display and addr >= 0x01ac00 then self.display:refresh() end
+    self.display:refresh_address(addr)
 end
 
 ----------------------------------------------------------------------------------------------------
