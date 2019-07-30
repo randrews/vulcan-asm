@@ -263,6 +263,21 @@ a digit:</p>
     <a class="pilcrow" href="#section-13">&#182;</a>
   </div>
   
+<p>To make relative jumps easier, we'll also allow an '@' at the start of a label, and interpret
+that as meaning "relative to the first byte of this instruction:"</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> relative_label = lpeg.C(lpeg.P(<span class="s">'@'</span>) * label_char * (label_char + lpeg.R(<span class="s">'09'</span>))^0)
+</pre></div>
+</td>
+</tr><tr id="section-14">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-14">&#182;</a>
+  </div>
+  
 <h2>Opcodes</h2>
 <p>An opcode is any one of several possible strings:</p>
 
@@ -280,10 +295,10 @@ a digit:</p>
 </span>    }
 </pre></div>
 </td>
-</tr><tr id="section-14">
+</tr><tr id="section-15">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-14">&#182;</a>
+    <a class="pilcrow" href="#section-15">&#182;</a>
   </div>
   
 <p>Combine the opcodes into one pattern:</p>
@@ -300,10 +315,10 @@ a digit:</p>
     ))
 </pre></div>
 </td>
-</tr><tr id="section-15">
+</tr><tr id="section-16">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-15">&#182;</a>
+    <a class="pilcrow" href="#section-16">&#182;</a>
   </div>
   
 <h2>Directives</h2>
@@ -321,10 +336,10 @@ a digit:</p>
   <div class="highlight"><pre>    <span class="k">local</span> directive = lpeg.C(lpeg.P(<span class="s">'.org'</span>) + lpeg.P(<span class="s">'.db'</span>) + lpeg.P(<span class="s">'.equ'</span>))
 </pre></div>
 </td>
-</tr><tr id="section-16">
+</tr><tr id="section-17">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-16">&#182;</a>
+    <a class="pilcrow" href="#section-17">&#182;</a>
   </div>
   
 <p>The .equ directive isn't much use without the ability to have expressions based on
@@ -337,14 +352,14 @@ symbols, so, a quick arithmetic expression parser:</p>
         <span class="s">'EXPR'</span>;
         EXPR = lpeg.Ct( lpeg.Cc(<span class="s">'expr'</span>) * lpeg.V(<span class="s">'TERM'</span>) * (lpeg.C( lpeg.S(<span class="s">'+-'</span>) ) * lpeg.V(<span class="s">'TERM'</span>))^0 ),
         TERM = lpeg.Ct( lpeg.Cc(<span class="s">'term'</span>) * lpeg.V(<span class="s">'FACT'</span>) * (lpeg.C( lpeg.S(<span class="s">'/*&#37;'</span>) ) * lpeg.V(<span class="s">'FACT'</span>))^0 ),
-        FACT = (space * <span class="s">'('</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">')'</span>) + (space * (number + label) * space)
+        FACT = (space * <span class="s">'('</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">')'</span>) + (space * (number + relative_label + label) * space)
     }
 </pre></div>
 </td>
-</tr><tr id="section-17">
+</tr><tr id="section-18">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-17">&#182;</a>
+    <a class="pilcrow" href="#section-18">&#182;</a>
   </div>
   
 <p>Likewise, .db would get tedious quick without a string syntax, so, let's define one of those. An escape
@@ -356,10 +371,10 @@ sequence is a backslash followed by certain other characters:</p>
   <div class="highlight"><pre>    <span class="k">local</span> escape = lpeg.C(lpeg.P(<span class="s">'\\'</span>) * lpeg.S(<span class="s">'trn0"\\'</span>))
 </pre></div>
 </td>
-</tr><tr id="section-18">
+</tr><tr id="section-19">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-18">&#182;</a>
+    <a class="pilcrow" href="#section-19">&#182;</a>
   </div>
   
 <p>And a string is a quoted sequence of escapes or other characters:</p>
@@ -370,10 +385,10 @@ sequence is a backslash followed by certain other characters:</p>
   <div class="highlight"><pre>    <span class="k">local</span> string_pattern = lpeg.Ct(lpeg.Cc(<span class="s">'string'</span>) * lpeg.P(<span class="s">'"'</span>) * lpeg.Ct((lpeg.C(lpeg.P(1)-lpeg.S(<span class="s">'"\\'</span>)) + escape)^1) * <span class="s">'"'</span>)
 </pre></div>
 </td>
-</tr><tr id="section-19">
+</tr><tr id="section-20">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-19">&#182;</a>
+    <a class="pilcrow" href="#section-20">&#182;</a>
   </div>
   
 <h2>Parsing a line</h2>
@@ -387,10 +402,10 @@ argument exists. Comments are parsed but don't capture anything.</p>
   <div class="highlight"><pre>
 </pre></div>
 </td>
-</tr><tr id="section-20">
+</tr><tr id="section-21">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-20">&#182;</a>
+    <a class="pilcrow" href="#section-21">&#182;</a>
   </div>
   
 <p>Some sub-patterns for the portions of a line:</p>
@@ -403,10 +418,10 @@ argument exists. Comments are parsed but don't capture anything.</p>
     <span class="k">local</span> comment_group = comment
 </pre></div>
 </td>
-</tr><tr id="section-21">
+</tr><tr id="section-22">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-21">&#182;</a>
+    <a class="pilcrow" href="#section-22">&#182;</a>
   </div>
   
 <p>An opcode might be an actual opcode, or a directive</p>
@@ -418,10 +433,10 @@ argument exists. Comments are parsed but don't capture anything.</p>
     <span class="k">local</span> instruction_group = opcode_group * space * argument_group^-1
 </pre></div>
 </td>
-</tr><tr id="section-22">
+</tr><tr id="section-23">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-22">&#182;</a>
+    <a class="pilcrow" href="#section-23">&#182;</a>
   </div>
   
 <p>Finally the entire pattern for an assembly line:</p>
@@ -435,10 +450,10 @@ argument exists. Comments are parsed but don't capture anything.</p>
 statement = statement_pattern()
 </pre></div>
 </td>
-</tr><tr id="section-23">
+</tr><tr id="section-24">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-23">&#182;</a>
+    <a class="pilcrow" href="#section-24">&#182;</a>
   </div>
   
 <h1>Assembler</h1>
@@ -449,10 +464,10 @@ statement = statement_pattern()
   <div class="highlight"><pre>
 </pre></div>
 </td>
-</tr><tr id="section-24">
+</tr><tr id="section-25">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-24">&#182;</a>
+    <a class="pilcrow" href="#section-25">&#182;</a>
   </div>
   
 <h2>First pass</h2>
@@ -522,10 +537,10 @@ number from the original iterator that it represents, to make giving error messa
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-25">
+</tr><tr id="section-26">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-25">&#182;</a>
+    <a class="pilcrow" href="#section-26">&#182;</a>
   </div>
   
 <h2>Evaluating expressions</h2>
@@ -542,6 +557,9 @@ the given symbol table).</p>
 <ul>
     <li>If the node is a number, then it returns that number.</li>
     <li>If the node is a string, it tries to look it up in the symbol table or explodes.</li>
+    <li>If the node is a relative label, it tries to look it up in the symbol table, and then
+    subtracts a given start<em>address. If start</em>address is nil (as when we're solving .equs)
+    then it errors.</li>
     <li>If the node is an expr or term, then it evaluates the children: the children are a
     sequence of evaluate-able nodes separated by operators. So first evaluate the left-most
     child, then use the operator to combine it with the following one, and so on.</li>
@@ -558,18 +576,23 @@ point math but Vulcan only has fixed-point, truncating division.</p>
 
 </td>
 <td class="code">
-  <div class="highlight"><pre><span class="k">function</span> <span class="nf">evaluate</span>(expr, symbols)
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">evaluate</span>(expr, symbols, start_address)
     <span class="k">if</span> <span class="nt">type</span>(expr) == <span class="s">'number'</span> <span class="k">then</span>
         <span class="k">return</span> expr
     <span class="k">elseif</span> <span class="nt">type</span>(expr) == <span class="s">'string'</span> <span class="k">then</span>
-        <span class="k">if</span> symbols[expr] <span class="k">then</span> <span class="k">return</span> symbols[expr]
+        <span class="k">if</span> expr:sub(1,1) == <span class="s">'@'</span> <span class="k">then</span>
+            <span class="k">if</span> <span class="o">not</span> start_address <span class="k">then</span> <span class="nt">error</span>(<span class="s">'Cannot resolve relative label'</span>) <span class="k">end</span>
+            <span class="k">local</span> label_name = expr:sub(2)
+            <span class="k">if</span> symbols[label_name] <span class="k">then</span> <span class="k">return</span> symbols[label_name] - start_address
+            <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Symbol not defined: '</span> .. label_name) <span class="k">end</span>
+        <span class="k">elseif</span> symbols[expr] <span class="k">then</span> <span class="k">return</span> symbols[expr]
         <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Symbol not defined: '</span> .. expr) <span class="k">end</span>
     <span class="k">elseif</span> expr[1] == <span class="s">'expr'</span> <span class="o">or</span> expr[1] == <span class="s">'term'</span> <span class="k">then</span>
-        <span class="k">local</span> val = evaluate(expr[2], symbols)
+        <span class="k">local</span> val = evaluate(expr[2], symbols, start_address)
 
         <span class="k">for</span> i = 3, #expr, 2 <span class="k">do</span>
             <span class="k">local</span> operator = expr[i]
-            <span class="k">local</span> rhs = evaluate(expr[i+1], symbols)
+            <span class="k">local</span> rhs = evaluate(expr[i+1], symbols, start_address)
             <span class="k">if</span> operator == <span class="s">'+'</span> <span class="k">then</span>
                 val = val + rhs
             <span class="k">elseif</span> operator == <span class="s">'-'</span> <span class="k">then</span>
@@ -605,10 +628,10 @@ point math but Vulcan only has fixed-point, truncating division.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-26">
+</tr><tr id="section-27">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-26">&#182;</a>
+    <a class="pilcrow" href="#section-27">&#182;</a>
   </div>
   
 <h2>Second pass</h2>
@@ -634,10 +657,10 @@ only preceding .equ directives. Anything else is an error.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-27">
+</tr><tr id="section-28">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-27">&#182;</a>
+    <a class="pilcrow" href="#section-28">&#182;</a>
   </div>
   
 <h2>Third pass</h2>
@@ -688,10 +711,10 @@ full 24-bit argument.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-28">
+</tr><tr id="section-29">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-28">&#182;</a>
+    <a class="pilcrow" href="#section-29">&#182;</a>
   </div>
   
 <h2>Fourth pass</h2>
@@ -747,10 +770,10 @@ it encounters a .org that refers to something it shouldn't.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-29">
+</tr><tr id="section-30">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-29">&#182;</a>
+    <a class="pilcrow" href="#section-30">&#182;</a>
   </div>
   
 <h2>Fifth pass</h2>
@@ -767,7 +790,7 @@ a number.</p>
   <div class="highlight"><pre><span class="k">function</span> <span class="nf">calculate_args</span>(lines, symbols)
     <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(lines) <span class="k">do</span>
         <span class="k">if</span> line.argument <span class="k">then</span>
-            <span class="k">local</span> success, ret = <span class="nt">pcall</span>(evaluate, line.argument, symbols)
+            <span class="k">local</span> success, ret = <span class="nt">pcall</span>(evaluate, line.argument, symbols, line.address)
             <span class="k">if</span> success <span class="k">then</span>
                 line.argument = ret
             <span class="k">else</span>
@@ -778,10 +801,10 @@ a number.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-30">
+</tr><tr id="section-31">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-30">&#182;</a>
+    <a class="pilcrow" href="#section-31">&#182;</a>
   </div>
   
 <h2>Code generation</h2>
@@ -892,10 +915,10 @@ least-significant byte at the lowest address, then the more significant bytes fo
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-31">
+</tr><tr id="section-32">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-31">&#182;</a>
+    <a class="pilcrow" href="#section-32">&#182;</a>
   </div>
   
 <h2>Assemble function</h2>

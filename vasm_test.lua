@@ -105,6 +105,9 @@ test([[add 2*(14-3)]], [[("opcode" "add" "argument" ("expr" ("term" 2 "*" ("expr
 -- Labels in expressions
 test([[jmp start + 2]], [[("opcode" "jmp" "argument" ("expr" ("term" "start") "+" ("term" 2)))]])
 
+-- Relative labels in expressions
+test([[brnz @loop]], [[("opcode" "brnz" "argument" ("expr" ("term" "@loop")))]])
+
 -- Comments
 test([[hlt ; whatever]], [[("opcode" "hlt")]])
 
@@ -189,8 +192,8 @@ evaluate = vulcan.evaluate
 
 -- ## Utility functions
 
-function test_eval(ast, val, symbols)
-    local actual_val = evaluate(ast, symbols or {})
+function test_eval(ast, val, symbols, start_address)
+    local actual_val = evaluate(ast, symbols or {}, start_address)
     if type(actual_val) == 'table' then
         actual_val = prettify(actual_val)
         val = prettify({ val:byte(1, #val) })
@@ -222,6 +225,15 @@ local success, err = pcall(function()
         evaluate({'expr', {'term', 'start'}, '+', {'term', 2}}, {})
 end)
 assert(success == false and err:match('Symbol not defined: start'))
+
+-- Relative label lookups
+test_eval({'expr', {'term', '@loop'}}, 5, {loop=15}, 10)
+
+-- Failing relative label lookup
+local success, err = pcall(function()
+        evaluate({'expr', {'term', '@loop'}}, {}, 5, 10)
+end)
+assert(success == false and err:match('Symbol not defined: loop'))
 
 -- A parsed string
 test_eval({'string', {'H', 'e', 'l', 'l', 'o'}}, 'Hello')
@@ -261,6 +273,12 @@ success, err = pcall(test_equs, [[foo: .equ bar]], '')
 assert(success == false and
            err:match('Cannot resolve .equ on line 1:') and
            err:match('Symbol not defined: bar'))
+
+-- Contains a relative address:
+success, err = pcall(test_equs, [[foo: .equ @bar]], '')
+assert(success == false and
+           err:match('Cannot resolve .equ on line 1:') and
+           err:match('Cannot resolve relative label'))
 
 -- # Third pass tests
 
@@ -313,6 +331,9 @@ test_measure([[push 0xaa1023]], [[(4)]])
 
 -- Args with unknown length
 test_measure([[push banana+12]], [[(4)]])
+
+-- Relative label args
+test_measure([[brnz @loop]], [[(4)]])
 
 -- # Fourth pass tests
 
@@ -382,6 +403,12 @@ test_place([[
 .org 123
 nop]], nil, [[{$end=123 $start=123}]])
 
+-- A .org with a relative label:
+success, err = pcall(test_place,[[.org @loop+4]])
+assert(success == false
+           and err:match('Unable to resolve .org on line 1')
+           and err:match('Cannot resolve relative label'))
+
 -- # Fifth pass tests
 
 calculate_args = vulcan.calculate_args
@@ -422,6 +449,12 @@ add foo+5
 test_calculate([[
 blah: .equ 17
 mul blah*2]], [[(17 34)]] )
+
+-- Referring to relative labels
+test_calculate([[
+loop: sub 1
+brnz @loop
+]], [[(1 -2)]])
 
 -- # Full assembler tests
 
@@ -469,6 +502,11 @@ test_assemble([[
 test_assemble([[
 push 0x10
 add 0x10 ]], {0x01, 0x10, 0x05, 0x10})
+
+-- Instructions with negative arguments
+test_assemble([[
+loop: sub 1
+brnz @loop]], {0x09, 0x01, 0x63, 0xfe, 0xff, 0xff})
 
 -- Instructions with arguments and a .org
 test_assemble([[

@@ -94,6 +94,10 @@ function statement_pattern()
     local label_char = (lpeg.R('az', 'AZ') + lpeg.S('_$'))
     local label = lpeg.C(label_char * (label_char + lpeg.R('09'))^0)
 
+    -- To make relative jumps easier, we'll also allow an '@' at the start of a label, and interpret
+    -- that as meaning "relative to the first byte of this instruction:"
+    local relative_label = lpeg.C(lpeg.P('@') * label_char * (label_char + lpeg.R('09'))^0)
+
     -- ## Opcodes
     -- An opcode is any one of several possible strings:
     local opcodes = {
@@ -129,7 +133,7 @@ function statement_pattern()
         'EXPR';
         EXPR = lpeg.Ct( lpeg.Cc('expr') * lpeg.V('TERM') * (lpeg.C( lpeg.S('+-') ) * lpeg.V('TERM'))^0 ),
         TERM = lpeg.Ct( lpeg.Cc('term') * lpeg.V('FACT') * (lpeg.C( lpeg.S('/*%') ) * lpeg.V('FACT'))^0 ),
-        FACT = (space * '(' * lpeg.V('EXPR') * ')') + (space * (number + label) * space)
+        FACT = (space * '(' * lpeg.V('EXPR') * ')') + (space * (number + relative_label + label) * space)
     }
 
     -- Likewise, .db would get tedious quick without a string syntax, so, let's define one of those. An escape
@@ -232,6 +236,9 @@ end
 --
 -- - If the node is a number, then it returns that number.
 -- - If the node is a string, it tries to look it up in the symbol table or explodes.
+-- - If the node is a relative label, it tries to look it up in the symbol table, and then
+--   subtracts a given start_address. If start_address is nil (as when we're solving .equs)
+--   then it errors.
 -- - If the node is an expr or term, then it evaluates the children: the children are a
 --   sequence of evaluate-able nodes separated by operators. So first evaluate the left-most
 --   child, then use the operator to combine it with the following one, and so on.
@@ -243,18 +250,23 @@ end
 --
 -- One tricky point is that we call `math.floor` when dividing, because Lua has all floating-
 -- point math but Vulcan only has fixed-point, truncating division.
-function evaluate(expr, symbols)
+function evaluate(expr, symbols, start_address)
     if type(expr) == 'number' then
         return expr
     elseif type(expr) == 'string' then
-        if symbols[expr] then return symbols[expr]
+        if expr:sub(1,1) == '@' then
+            if not start_address then error('Cannot resolve relative label') end
+            local label_name = expr:sub(2)
+            if symbols[label_name] then return symbols[label_name] - start_address
+            else error('Symbol not defined: ' .. label_name) end
+        elseif symbols[expr] then return symbols[expr]
         else error('Symbol not defined: ' .. expr) end
     elseif expr[1] == 'expr' or expr[1] == 'term' then
-        local val = evaluate(expr[2], symbols)
+        local val = evaluate(expr[2], symbols, start_address)
 
         for i = 3, #expr, 2 do
             local operator = expr[i]
-            local rhs = evaluate(expr[i+1], symbols)
+            local rhs = evaluate(expr[i+1], symbols, start_address)
             if operator == '+' then
                 val = val + rhs
             elseif operator == '-' then
@@ -406,7 +418,7 @@ end
 function calculate_args(lines, symbols)
     for _, line in ipairs(lines) do
         if line.argument then
-            local success, ret = pcall(evaluate, line.argument, symbols)
+            local success, ret = pcall(evaluate, line.argument, symbols, line.address)
             if success then
                 line.argument = ret
             else
