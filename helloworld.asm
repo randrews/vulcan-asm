@@ -11,10 +11,21 @@ str: .db "Hello, there!\0"
     push 0
     call print
 
+    setiv onkeypress
+    inton
     jmpr 0                      ; spin forever
 
     hlt
 
+    ;; --------------------------------------------------
+
+onkeypress:
+    pop
+    pop
+    store vram
+    inton
+    ret
+    
     ;; --------------------------------------------------
 
 print:                          ; (addr x y -- )

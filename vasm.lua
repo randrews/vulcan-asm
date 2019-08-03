@@ -103,11 +103,12 @@ function statement_pattern()
     local opcodes = {
         'push', 'nop', 'hlt', 'pop', -- Basic instructions
         'dup', '2dup', 'swap', 'pick', 'height', -- Stack instructions
-        'add', 'sub', 'mul', 'div', 'mod', -- Arithmetic instructions
+        'add', 'sub', 'mul', 'div', 'mod', 'rand', -- Arithmetic instructions
         'and', 'or', 'xor', 'not', 'lshift', 'rshift', 'arshift', -- Logic instructions
         'jmpr', 'jmp', 'call', 'ret', 'brz', 'brnz', 'brgt', 'brlt', -- Branching and jumping
-        'load24', 'load16', 'load', 'vload24', 'vload16', 'vload', -- Loading from memory
-        'store24', 'store16', 'store', 'vstore24', 'vstore16', 'vstore' -- Storing to memory
+        'load24', 'load16', 'load', -- Loading from memory
+        'store24', 'store16', 'store', -- Storing to memory
+        'inton', 'intoff', 'setiv'
     }
 
     -- Combine the opcodes into one pattern:
@@ -482,40 +483,38 @@ function generate_code(lines, start_addr, end_addr)
             elseif line.opcode == 'mul' then instruction = 3
             elseif line.opcode == 'div' then instruction = 4
             elseif line.opcode == 'mod' then instruction = 5
-            elseif line.opcode == 'and' then instruction = 6
-            elseif line.opcode == 'or' then instruction = 7
-            elseif line.opcode == 'xor' then instruction = 8
-            elseif line.opcode == 'not' then instruction = 9
-            elseif line.opcode == 'lshift' then instruction = 10
-            elseif line.opcode == 'rshift' then instruction = 11
-            elseif line.opcode == 'arshift' then instruction = 12
-            elseif line.opcode == 'pop' then instruction = 13
-            elseif line.opcode == 'dup' then instruction = 14
-            elseif line.opcode == '2dup' then instruction = 15
-            elseif line.opcode == 'swap' then instruction = 16
-            elseif line.opcode == 'pick' then instruction = 17
-            elseif line.opcode == 'height' then instruction = 18
-            elseif line.opcode == 'jmp' then instruction = 19
-            elseif line.opcode == 'jmpr' then instruction = 20
-            elseif line.opcode == 'call' then instruction = 21
-            elseif line.opcode == 'ret' then instruction = 22
-            elseif line.opcode == 'brz' then instruction = 23
-            elseif line.opcode == 'brnz' then instruction = 24
-            elseif line.opcode == 'brgt' then instruction = 25
-            elseif line.opcode == 'brlt' then instruction = 26
-            elseif line.opcode == 'hlt' then instruction = 27
-            elseif line.opcode == 'load' then instruction = 28
-            elseif line.opcode == 'load16' then instruction = 29
-            elseif line.opcode == 'load24' then instruction = 30
-            elseif line.opcode == 'vload' then instruction = 31
-            elseif line.opcode == 'vload16' then instruction = 32
-            elseif line.opcode == 'vload24' then instruction = 33
-            elseif line.opcode == 'store' then instruction = 34
-            elseif line.opcode == 'store16' then instruction = 35
-            elseif line.opcode == 'store24' then instruction = 36
-            elseif line.opcode == 'vstore' then instruction = 37
-            elseif line.opcode == 'vstore16' then instruction = 38
-            elseif line.opcode == 'vstore24' then instruction = 39
+            elseif line.opcode == 'rand' then instruction = 6
+            elseif line.opcode == 'and' then instruction = 7
+            elseif line.opcode == 'or' then instruction = 8
+            elseif line.opcode == 'xor' then instruction = 9
+            elseif line.opcode == 'not' then instruction = 10
+            elseif line.opcode == 'lshift' then instruction = 11
+            elseif line.opcode == 'rshift' then instruction = 12
+            elseif line.opcode == 'arshift' then instruction = 13
+            elseif line.opcode == 'pop' then instruction = 14
+            elseif line.opcode == 'dup' then instruction = 15
+            elseif line.opcode == '2dup' then instruction = 16
+            elseif line.opcode == 'swap' then instruction = 17
+            elseif line.opcode == 'pick' then instruction = 18
+            elseif line.opcode == 'height' then instruction = 19
+            elseif line.opcode == 'jmp' then instruction = 20
+            elseif line.opcode == 'jmpr' then instruction = 21
+            elseif line.opcode == 'call' then instruction = 22
+            elseif line.opcode == 'ret' then instruction = 23
+            elseif line.opcode == 'brz' then instruction = 24
+            elseif line.opcode == 'brnz' then instruction = 25
+            elseif line.opcode == 'brgt' then instruction = 26
+            elseif line.opcode == 'brlt' then instruction = 27
+            elseif line.opcode == 'hlt' then instruction = 28
+            elseif line.opcode == 'load' then instruction = 29
+            elseif line.opcode == 'load16' then instruction = 30
+            elseif line.opcode == 'load24' then instruction = 31
+            elseif line.opcode == 'store' then instruction = 32
+            elseif line.opcode == 'store16' then instruction = 33
+            elseif line.opcode == 'store24' then instruction = 34
+            elseif line.opcode == 'inton' then instruction = 35
+            elseif line.opcode == 'intoff' then instruction = 36
+            elseif line.opcode == 'setiv' then instruction = 37
             else error('Unrecognized opcode on line ' .. line.line .. ': ' .. line.opcode) end
 
             instruction = (instruction << 2) + (line.length - 1)
