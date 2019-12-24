@@ -476,46 +476,49 @@ function generate_code(lines, start_addr, end_addr)
                 mem[line.address - start_addr + 2] = (line.argument >> 16) & 0xff
             end
         elseif line.opcode then
-            local instruction = 0
-            if line.opcode == 'push' or line.opcode == 'nop' then instruction = 0
-            elseif line.opcode == 'add' then instruction = 1
-            elseif line.opcode == 'sub' then instruction = 2
-            elseif line.opcode == 'mul' then instruction = 3
-            elseif line.opcode == 'div' then instruction = 4
-            elseif line.opcode == 'mod' then instruction = 5
-            elseif line.opcode == 'rand' then instruction = 6
-            elseif line.opcode == 'and' then instruction = 7
-            elseif line.opcode == 'or' then instruction = 8
-            elseif line.opcode == 'xor' then instruction = 9
-            elseif line.opcode == 'not' then instruction = 10
-            elseif line.opcode == 'lshift' then instruction = 11
-            elseif line.opcode == 'rshift' then instruction = 12
-            elseif line.opcode == 'arshift' then instruction = 13
-            elseif line.opcode == 'pop' then instruction = 14
-            elseif line.opcode == 'dup' then instruction = 15
-            elseif line.opcode == '2dup' then instruction = 16
-            elseif line.opcode == 'swap' then instruction = 17
-            elseif line.opcode == 'pick' then instruction = 18
-            elseif line.opcode == 'height' then instruction = 19
-            elseif line.opcode == 'jmp' then instruction = 20
-            elseif line.opcode == 'jmpr' then instruction = 21
-            elseif line.opcode == 'call' then instruction = 22
-            elseif line.opcode == 'ret' then instruction = 23
-            elseif line.opcode == 'brz' then instruction = 24
-            elseif line.opcode == 'brnz' then instruction = 25
-            elseif line.opcode == 'brgt' then instruction = 26
-            elseif line.opcode == 'brlt' then instruction = 27
-            elseif line.opcode == 'hlt' then instruction = 28
-            elseif line.opcode == 'load' then instruction = 29
-            elseif line.opcode == 'load16' then instruction = 30
-            elseif line.opcode == 'load24' then instruction = 31
-            elseif line.opcode == 'store' then instruction = 32
-            elseif line.opcode == 'store16' then instruction = 33
-            elseif line.opcode == 'store24' then instruction = 34
-            elseif line.opcode == 'inton' then instruction = 35
-            elseif line.opcode == 'intoff' then instruction = 36
-            elseif line.opcode == 'setiv' then instruction = 37
-            else error('Unrecognized opcode on line ' .. line.line .. ': ' .. line.opcode) end
+            local opcode_values = {
+                push = 0,
+                nop = 0,
+                add = 1,
+                sub = 2,
+                mul = 3,
+                div = 4,
+                mod = 5,
+                rand = 6,
+                ['and'] = 7,
+                ['or'] = 8,
+                xor = 9,
+                ['not'] = 10,
+                lshift = 11,
+                rshift = 12,
+                arshift = 13,
+                pop = 14,
+                dup = 15,
+                ['2dup'] = 16,
+                swap = 17,
+                pick = 18,
+                height = 19,
+                jmp = 20,
+                jmpr = 21,
+                call = 22,
+                ret = 23,
+                brz = 24,
+                brnz = 25,
+                brgt = 26,
+                brlt = 27,
+                hlt = 28,
+                load = 29,
+                load16 = 30,
+                load24 = 31,
+                store = 32,
+                store16 = 33,
+                store24 = 34,
+                inton = 35,
+                intoff = 36,
+                setiv = 37
+            }
+
+            local instruction = opcode_values[line.opcode] or error('Unrecognized opcode on line ' .. line.line .. ': ' .. line.opcode)
 
             instruction = (instruction << 2) + (line.length - 1)
             mem[line.address - start_addr] = instruction
