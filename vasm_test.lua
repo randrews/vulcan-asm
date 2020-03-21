@@ -42,6 +42,34 @@ function prettify(t)
     end
 end
 
+-- A debugging aid to pretty-print our internal representation of an instruction
+function print_line(line, recur)
+    local elements = {}
+    local keys = {}
+
+    for k, _ in pairs(line) do
+        table.insert(keys, k)
+    end
+
+    table.sort(keys)
+
+    for _, k in ipairs(keys) do
+        local v = line[k]
+        if type(v) == 'table' then
+            table.insert(elements, k .. '=' .. print_line(v, true))
+        else
+            table.insert(elements, k .. '=' .. string.format('%q', v))
+        end
+    end
+
+    local str = '{' .. table.concat(elements, ' ') .. '}'
+    if recur then
+        return str
+    else
+        print(str)
+    end
+end
+
 -- A wrapper for testing that ASTs are equal:
 function test(line, ast)
     local actual_ast = prettify(statement:match(line))

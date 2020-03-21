@@ -33,34 +33,6 @@ function table:reduce(fn, sum)
     return sum
 end
 
--- A debugging aid to pretty-print our internal representation of an instruction
-function print_line(line, recur)
-    local elements = {}
-    local keys = {}
-
-    for k, _ in pairs(line) do
-        table.insert(keys, k)
-    end
-
-    table.sort(keys)
-
-    for _, k in ipairs(keys) do
-        local v = line[k]
-        if type(v) == 'table' then
-            table.insert(elements, k .. '=' .. print_line(v, true))
-        else
-            table.insert(elements, k .. '=' .. string.format('%q', v))
-        end
-    end
-
-    local str = '{' .. table.concat(elements, ' ') .. '}'
-    if recur then
-        return str
-    else
-        print(str)
-    end
-end
-
 -- # Assembly parser
 
 -- Put this all in a function so we don't have a bunch of

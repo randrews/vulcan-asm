@@ -1,0 +1,20 @@
+var guess = 0;
+var target = rand(1000);
+var guessStr = string(10); // Reserve 10 bytes for a string, store the length in the first byte, return the address of that byte
+
+print("Guess the number:\n"); // Constant strings also work
+
+loop {
+     input(guessStr); // Takes the address of the first byte of a string, which contains the max length of that string (including that byte)
+     guess = atoi(guessStr);
+     if (guess < target) {
+        print("Too low!\n");
+     } else if (guess > target) {
+       print("Too high!\n");
+     } else {
+       print("You got it!\n");
+       break;
+     }
+}
+
+// B171H 6FR 22FR3NT
