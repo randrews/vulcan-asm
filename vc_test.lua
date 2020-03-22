@@ -1,10 +1,6 @@
 vc = require('vc')
 
--- # Expression parsing tests
-
-expr = vc.expr
-
--- ## Utility functions
+-- # Utility functions
 
 -- Map a function across a table
 function table:map(fn)
@@ -66,9 +62,13 @@ function prettify(t)
     end
 end
 
+-- # Expression parsing tests
+
+expr = vc.expr
+
 -- A wrapper for testing that ASTs are equal:
-function test(line, ast)
-    local actual_ast = prettify(expr:match(line))
+function test(pattern, line, ast)
+    local actual_ast = prettify(pattern:match(line))
     if actual_ast == ast then return true
     else
         print('FAIL: [[' .. line .. ']]\nExpected: ' .. ast .. '\n  Actual: ' .. actual_ast)
@@ -76,116 +76,121 @@ function test(line, ast)
     end
 end
 
--- ## Test cases
-
 -- Hex number
-test([[0x10]], [[(expr (term 16))]])
+test(expr, [[0x10]], [[(expr (term 16))]])
 
 -- Binary number
-test([[0b1010]], [[(expr (term 10))]])
+test(expr, [[0b1010]], [[(expr (term 10))]])
 
 -- Decimal number
-test([[23]], [[(expr (term 23))]])
+test(expr, [[23]], [[(expr (term 23))]])
 
 -- Decimal zero
-test([[0]], [[(expr (term 0))]])
+test(expr, [[0]], [[(expr (term 0))]])
 
 -- Negative decimal
-test([[-35]], [[(expr (term -35))]])
+test(expr, [[-35]], [[(expr (term -35))]])
 
 -- Strings
-test([["hello"]], [[(expr (term (string (h e l l o))))]])
+test(expr, [["hello"]], [[(expr (term (string (h e l l o))))]])
 
 -- Strings with escapes
-test([["hello\""]], [[(expr (term (string (h e l l o \"))))]])
+test(expr, [["hello\""]], [[(expr (term (string (h e l l o \"))))]])
 
 -- Expressions
-test([[43+17]], [[(expr (term 43) + (term 17))]])
+test(expr, [[43+17]], [[(expr (term 43) + (term 17))]])
 
 -- Expressions with negatives
-test([[43/-17]], [[(expr (term 43 / -17))]])
+test(expr, [[43/-17]], [[(expr (term 43 / -17))]])
 
 -- Multiple terms
-test([[43+17 - 3]], [[(expr (term 43) + (term 17) - (term 3))]])
+test(expr, [[43+17 - 3]], [[(expr (term 43) + (term 17) - (term 3))]])
 
 -- Multiplication
-test([[2*14-3]], [[(expr (term 2 * 14) - (term 3))]])
+test(expr, [[2*14-3]], [[(expr (term 2 * 14) - (term 3))]])
 
 -- Sub-expressions
-test([[2*(14-3)]], [[(expr (term 2 * (expr (term 14) - (term 3))))]])
+test(expr, [[2*(14-3)]], [[(expr (term 2 * (expr (term 14) - (term 3))))]])
 
 -- Identifiers in expressions
-test([[start + 2]], [[(expr (term (id start)) + (term 2))]])
+test(expr, [[start + 2]], [[(expr (term (id start)) + (term 2))]])
 
 -- Array references in expressions
-test([[foo[3] ]], [[(expr (term (id foo (subscript (expr (term 3))))))]])
+test(expr, [[foo[3] ]], [[(expr (term (id foo (subscript (expr (term 3))))))]])
 
 -- Addresses in expressions
-test([[blah + @{x *4}]], [[(expr (term (id blah)) + (term (address (expr (term (id x) * 4)))))]])
+test(expr, [[blah + @{x *4}]], [[(expr (term (id blah)) + (term (address (expr (term (id x) * 4)))))]])
 
 -- Param-less function calls
-test([[blah()]], [[(expr (term (id blah (params))))]])
+test(expr, [[blah()]], [[(expr (term (id blah (params))))]])
 
 -- Unary function calls
-test([[blah(3)]], [[(expr (term (id blah (params (expr (term 3))))))]])
+test(expr, [[blah(3)]], [[(expr (term (id blah (params (expr (term 3))))))]])
 
 -- Unary function calls with exprs
-test([[blah(x+4)]], [[(expr (term (id blah (params (expr (term (id x)) + (term 4))))))]])
+test(expr, [[blah(x+4)]], [[(expr (term (id blah (params (expr (term (id x)) + (term 4))))))]])
 
 -- Binary function calls
-test([[blah(a, b)]], [[(expr (term (id blah (params (expr (term (id a))) (expr (term (id b)))))))]])
+test(expr, [[blah(a, b)]], [[(expr (term (id blah (params (expr (term (id a))) (expr (term (id b)))))))]])
 
 -- Ternary function calls
-test([[blah(a,b,c)]], [[(expr (term (id blah (params (expr (term (id a))) (expr (term (id b))) (expr (term (id c)))))))]])
+test(expr, [[blah(a,b,c)]], [[(expr (term (id blah (params (expr (term (id a))) (expr (term (id b))) (expr (term (id c)))))))]])
 
 -- Blocks
-test([[{ 3*4; 5+2 }]], [[(expr (term (block (expr (term 3 * 4)) (expr (term 5) + (term 2)))))]])
+test(expr, [[{ 3*4; 5+2 }]], [[(expr (term (block (expr (term 3 * 4)) (expr (term 5) + (term 2)))))]])
 str = [[
   {
     3*4;
     5+2   ;
   }
 ]]
-test(str, [[(expr (term (block (expr (term 3 * 4)) (expr (term 5) + (term 2)))))]])
+test(expr, str, [[(expr (term (block (expr (term 3 * 4)) (expr (term 5) + (term 2)))))]])
 
 -- Empty blocks
-test([[{;}]], [[(expr (term (block)))]])
-test([[{ }]], [[(expr (term (block)))]])
-test([[{}]], [[(expr (term (block)))]])
-test([[{ ; }]], [[(expr (term (block)))]])
+test(expr, [[{;}]], [[(expr (term (block)))]])
+test(expr, [[{ }]], [[(expr (term (block)))]])
+test(expr, [[{}]], [[(expr (term (block)))]])
+test(expr, [[{ ; }]], [[(expr (term (block)))]])
 
 -- Assignments
-test([[x = 3]], [[(expr (term (assign (id x) (expr (term 3)))))]])
+test(expr, [[x = 3]], [[(expr (term (assign (id x) (expr (term 3)))))]])
 
 -- Assignments to array
-test([[x[2]=3]], [[(expr (term (assign (id x (subscript (expr (term 2)))) (expr (term 3)))))]])
+test(expr, [[x[2]=3]], [[(expr (term (assign (id x (subscript (expr (term 2)))) (expr (term 3)))))]])
 
 -- Assignments to memory
-test([[@{ 1500 } = 3]], [[(expr (term (assign (address (expr (term 1500))) (expr (term 3)))))]])
+test(expr, [[@{ 1500 } = 3]], [[(expr (term (assign (address (expr (term 1500))) (expr (term 3)))))]])
 
 -- Assignments in complex expressions
-test([[3 + (x = 4) * 2]], [[(expr (term 3) + (term (expr (term (assign (id x) (expr (term 4))))) * 2))]])
+test(expr, [[3 + (x = 4) * 2]], [[(expr (term 3) + (term (expr (term (assign (id x) (expr (term 4))))) * 2))]])
 
 -- Conditionals
-test([[x = if (y) 3)]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3))))))))]])
+test(expr, [[x = if (y) 3)]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3))))))))]])
 
 -- Conditionals with else
-test([[x = if(y) 3 else 5)]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3)) (expr (term 5))))))))]])
+test(expr, [[x = if(y) 3 else 5)]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3)) (expr (term 5))))))))]])
 
 -- Ternary conditionals
-test([[x = (y ? 3 : 5)]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3)) (expr (term 5))))))))]])
+test(expr, [[x = (y ? 3 : 5)]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3)) (expr (term 5))))))))]])
 
 -- Member references
-test([[blah.foo]], [[(expr (term (id blah (member foo))))]])
+test(expr, [[blah.foo]], [[(expr (term (id blah (member foo))))]])
 
 -- Member array references
-test([[blah.foo[3] ]], [[(expr (term (id blah (member foo (subscript (expr (term 3)))))))]])
+test(expr, [[blah.foo[3] ]], [[(expr (term (id blah (member foo (subscript (expr (term 3)))))))]])
 
 -- Member lvalues
-test([[blah.foo = 7]], [[(expr (term (assign (id blah (member foo)) (expr (term 7)))))]])
+test(expr, [[blah.foo = 7]], [[(expr (term (assign (id blah (member foo)) (expr (term 7)))))]])
 
 -- Member array lvalues
-test([[blah.foo[3] = 7]], [[(expr (term (assign (id blah (member foo (subscript (expr (term 3))))) (expr (term 7)))))]])
+test(expr, [[blah.foo[3] = 7]], [[(expr (term (assign (id blah (member foo (subscript (expr (term 3))))) (expr (term 7)))))]])
 
 -- Assignments from new
-test([[x = new Player]], [[(expr (term (assign (id x) (new Player))))]])
+test(expr, [[x = new Player]], [[(expr (term (assign (id x) (new Player))))]])
+
+-- # Statement parsing tests
+
+statement = vc.statement
+
+-- Expressions
+test(statement, [[x+3;]], [[(expr (term (assign (id blah (member foo)) (expr (term 7)))))]])

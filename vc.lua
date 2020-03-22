@@ -51,10 +51,10 @@ lpeg = require('lpeg')
 -- - As a string: `string name(64)`
 
 -- ## Parser
-function expr_pattern()
-    -- Identify whitespace: spaces and tabs
-    local space = lpeg.S(" \t\n")^0
+-- Identify whitespace: spaces and tabs
+local space = lpeg.S(" \t\n")^0
 
+function expr_pattern()
     -- A number can be expressed in decimal, binary, or hex
     local number = (function()
             local dec_number = (lpeg.S('-')^-1 * lpeg.R('19') * lpeg.R('09')^0) / tonumber
@@ -79,9 +79,12 @@ function expr_pattern()
     -- - identifiers
     -- - strings
     -- - array references
-    -- - memory references
+    -- - struct references
     -- - function calls
+    -- - memory references
     -- - blocks
+    -- - assignments
+    -- - conditionals
     return lpeg.P{
         'EXPR';
         EXPR = lpeg.Ct( lpeg.Cc('expr') * space * (lpeg.V('TERM') * (lpeg.C( lpeg.S('+-') ) * lpeg.V('TERM'))^0) * lpeg.S(';')^-1 ),
@@ -114,4 +117,15 @@ function expr_pattern()
     }
 end
 
-return { expr = expr_pattern() }
+local expr = expr_pattern()
+
+function statement_pattern(expr)
+    return lpeg.P{
+        'STMT';
+        STMT = lpeg.Ct( lpeg.Cc('stmt') * space * expr * space * ';' )
+    }
+end
+
+local statement = statement_pattern(expr)
+
+return { expr = expr, statement = statement }
