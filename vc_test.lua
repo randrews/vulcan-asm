@@ -174,3 +174,18 @@ test([[x = if(y) 3 else 5)]], [[(expr (term (assign (id x) (expr (term (if (expr
 
 -- Ternary conditionals
 test([[x = (y ? 3 : 5)]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3)) (expr (term 5))))))))]])
+
+-- Member references
+test([[blah.foo]], [[(expr (term (id blah (member foo))))]])
+
+-- Member array references
+test([[blah.foo[3] ]], [[(expr (term (id blah (member foo (subscript (expr (term 3)))))))]])
+
+-- Member lvalues
+test([[blah.foo = 7]], [[(expr (term (assign (id blah (member foo)) (expr (term 7)))))]])
+
+-- Member array lvalues
+test([[blah.foo[3] = 7]], [[(expr (term (assign (id blah (member foo (subscript (expr (term 3))))) (expr (term 7)))))]])
+
+-- Assignments from new
+test([[x = new Player]], [[(expr (term (assign (id x) (new Player))))]])

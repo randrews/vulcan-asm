@@ -97,15 +97,17 @@ function expr_pattern()
                 lpeg.V('BLOCK') +
                 string_pattern) * space,
 
-        NAME = lpeg.Ct( lpeg.Cc('id') * identifier * (lpeg.V('SUBSCRIPT') + lpeg.V('PARAMS'))^-1 ),
+        NAME = lpeg.Ct( lpeg.Cc('id') * identifier * (lpeg.V('SUBSCRIPT') + lpeg.V('PARAMS') + lpeg.V('MEMBER'))^-1 ),
         SUBSCRIPT = lpeg.Ct( lpeg.Cc('subscript') * space * '[' * lpeg.V('EXPR') * ']' ),
         PARAMS = lpeg.Ct( lpeg.Cc('params') * space * (('(' * space * ')') + ('(' * lpeg.V('EXPR') * (',' * lpeg.V('EXPR'))^0 * ')' )) ),
+        MEMBER = lpeg.Ct( lpeg.Cc('member') * space * '.' * identifier * lpeg.V('SUBSCRIPT')^-1 ),
 
         ADDRESS = lpeg.Ct( lpeg.Cc('address') * '@{' * lpeg.V('EXPR') * '}' ),
         BLOCK = lpeg.Ct( lpeg.Cc('block') * (('{' * space * lpeg.S(';')^-1 * space * '}') + ('{' * lpeg.V('EXPR') * lpeg.V('EXPR')^0 * space * '}')) ),
 
-        ASSIGN = lpeg.Ct( lpeg.Cc('assign') * lpeg.V('LVALUE') * space * '=' * space * lpeg.V('EXPR') ),
-        LVALUE = lpeg.Ct( (lpeg.Cc('id') * identifier * lpeg.V('SUBSCRIPT')^-1) ) + lpeg.V('ADDRESS'),
+        ASSIGN = lpeg.Ct( lpeg.Cc('assign') * lpeg.V('LVALUE') * space * '=' * space * (lpeg.V('NEW') + lpeg.V('EXPR')) ),
+        LVALUE = lpeg.Ct( (lpeg.Cc('id') * identifier * (lpeg.V('SUBSCRIPT') + lpeg.V('MEMBER'))^-1) ) + lpeg.V('ADDRESS'),
+        NEW = lpeg.Ct( lpeg.Cc('new') * space * 'new' * space * identifier ),
 
         COND = lpeg.Ct( lpeg.Cc('if') * 'if' * space * '(' * space * lpeg.V('EXPR') * space * ')' * space * lpeg.V('EXPR') * (space * 'else' * space * lpeg.V('EXPR'))^-1 ),
         SHORTCOND = lpeg.Ct( lpeg.Cc('if') * '(' * space * lpeg.V('EXPR') * space * '?' * space * lpeg.V('EXPR') * space * ':' * space * lpeg.V('EXPR') * space * ')' ),
