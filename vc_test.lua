@@ -227,6 +227,9 @@ test(statement, [[function foo(a, b) { }]], [[(stmt (func foo (args a b)))]])
 test(statement, [[function foo(a, b) { a+b*2; }]], [[(stmt (func foo (args a b) (expr (term (id a)) + (term (id b) * 2))))]])
 test(statement, [[function foo(a, b) { var x=a*b; x+2 }]], [[(stmt (func foo (args a b) (var x (init (expr (term (id a) * (id b))))) (expr (term (id x)) + (term 2))))]])
 
+-- Function declarations with return
+test(statement, [[function foo() { return 6 }]], [[(stmt (func foo (return (expr (term 6)))))]])
+
 -- Struct declarations
 test(statement, [[struct Coord { x, y }]], [[(stmt (struct Coord (member x) (member y)))]])
 

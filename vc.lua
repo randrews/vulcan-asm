@@ -138,7 +138,8 @@ function statement_pattern(expr)
                 '{' * space * lpeg.V('BODY') * space * '}'
         ),
         ARGLIST = lpeg.Ct( lpeg.Cc('args') * identifier * (space * ',' * space * identifier)^0 ),
-        BODY = (lpeg.V('VAR') + expr)^0,
+        BODY = (lpeg.V('VAR') + lpeg.V('RETURN') + expr)^0,
+        RETURN = lpeg.Ct( lpeg.Cc('return') * space * 'return' * space * expr ),
 
         STRUCT = lpeg.Ct(
             lpeg.Cc('struct') * space *
