@@ -51,8 +51,14 @@ lpeg = require('lpeg')
 -- - As a string: `string name(64)`
 
 -- ## Parser
+
 -- Identify whitespace: spaces and tabs
 local space = lpeg.S(" \t\n")^0
+
+-- Identifiers are any sequence of letters, digits, underscores, or dollar signs, not starting with a digit
+local identifier = (function()
+        local identifier_char = (lpeg.R('az', 'AZ') + lpeg.S('_$'))
+        return lpeg.C(identifier_char * (identifier_char + lpeg.R('09'))^0) end)()
 
 function expr_pattern()
     -- A number can be expressed in decimal, binary, or hex
@@ -62,11 +68,6 @@ function expr_pattern()
             local bin_number = lpeg.P('0b') * lpeg.C(lpeg.S('01')^1) / function(s) return tonumber(s, 2) end
             local dec_zero = lpeg.P('0') / tonumber
             return dec_number + hex_number + bin_number + dec_zero end)()
-
-    -- Identifiers are any sequence of letters, digits, underscores, or dollar signs, not starting with a digit
-    local identifier = (function()
-            local identifier_char = (lpeg.R('az', 'AZ') + lpeg.S('_$'))
-            return lpeg.C(identifier_char * (identifier_char + lpeg.R('09'))^0) end)()
 
     -- A string is a quoted sequence of escapes or other characters:
     local string_pattern = (function()
@@ -91,6 +92,7 @@ function expr_pattern()
         TERM = lpeg.Ct( lpeg.Cc('term') * space * lpeg.V('FACT') * (lpeg.C( lpeg.S('/*%') ) * lpeg.V('FACT'))^0 ),
         FACT = space * (
             '(' * lpeg.V('EXPR') * ')' +
+                lpeg.V('NEW') +
                 lpeg.V('ASSIGN') +
                 number +
                 lpeg.V('COND') +
@@ -108,7 +110,7 @@ function expr_pattern()
         ADDRESS = lpeg.Ct( lpeg.Cc('address') * '@{' * lpeg.V('EXPR') * '}' ),
         BLOCK = lpeg.Ct( lpeg.Cc('block') * (('{' * space * lpeg.S(';')^-1 * space * '}') + ('{' * lpeg.V('EXPR') * lpeg.V('EXPR')^0 * space * '}')) ),
 
-        ASSIGN = lpeg.Ct( lpeg.Cc('assign') * lpeg.V('LVALUE') * space * '=' * space * (lpeg.V('NEW') + lpeg.V('EXPR')) ),
+        ASSIGN = lpeg.Ct( lpeg.Cc('assign') * lpeg.V('LVALUE') * space * '=' * space * lpeg.V('EXPR') ),
         LVALUE = lpeg.Ct( (lpeg.Cc('id') * identifier * (lpeg.V('SUBSCRIPT') + lpeg.V('MEMBER'))^-1) ) + lpeg.V('ADDRESS'),
         NEW = lpeg.Ct( lpeg.Cc('new') * space * 'new' * space * identifier ),
 
@@ -122,7 +124,31 @@ local expr = expr_pattern()
 function statement_pattern(expr)
     return lpeg.P{
         'STMT';
-        STMT = lpeg.Ct( lpeg.Cc('stmt') * space * expr * space * ';' )
+        STMT = lpeg.Ct( lpeg.Cc('stmt') * (lpeg.V('VAR') + lpeg.V('FUNC') + lpeg.V('STRUCT') + expr) ),
+
+        VAR = lpeg.Ct( lpeg.Cc('var') * space * 'var' * space * identifier * lpeg.V('TYPE')^-1 * lpeg.V('INITIAL')^-1 ),
+        TYPE = lpeg.Ct(lpeg.Cc('type') * space * ':' * space * identifier),
+        INITIAL = lpeg.Ct(lpeg.Cc('init') * space * '=' * expr),
+
+        FUNC = lpeg.Ct(
+            lpeg.Cc('func') * space *
+                'function' * space *
+                identifier * space *
+                '(' * space * lpeg.V('ARGLIST')^-1 * space * ')' * space *
+                '{' * space * lpeg.V('BODY') * space * '}'
+        ),
+        ARGLIST = lpeg.Ct( lpeg.Cc('args') * identifier * (space * ',' * space * identifier)^0 ),
+        BODY = (lpeg.V('VAR') + expr)^0,
+
+        STRUCT = lpeg.Ct(
+            lpeg.Cc('struct') * space *
+                'struct' * space *
+                identifier * space *
+                '{' * space * lpeg.V('MEMBERLIST') * space * '}'
+        ),
+        MEMBERLIST = space * lpeg.V('MEMBER') * (space * ',' * lpeg.V('MEMBER') * space)^0,
+        MEMBER = lpeg.Ct( lpeg.Cc('member') * space * identifier * space * (lpeg.V('LENGTH') + lpeg.V('INITIAL'))^-1),
+        LENGTH = lpeg.Ct( lpeg.Cc('length') * space * '(' * space * expr * space * ')' * space )
     }
 end
 
