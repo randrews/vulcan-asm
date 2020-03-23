@@ -83,7 +83,6 @@ function expr_pattern()
     -- - struct references
     -- - function calls
     -- - memory references
-    -- - blocks
     -- - assignments
     -- - conditionals
     return lpeg.P{
@@ -95,11 +94,9 @@ function expr_pattern()
                 lpeg.V('NEW') +
                 lpeg.V('ASSIGN') +
                 number +
-                lpeg.V('COND') +
                 lpeg.V('SHORTCOND') +
                 lpeg.V('NAME') +
                 lpeg.V('ADDRESS') +
-                lpeg.V('BLOCK') +
                 string_pattern) * space,
 
         NAME = lpeg.Ct( lpeg.Cc('id') * identifier * (lpeg.V('SUBSCRIPT') + lpeg.V('PARAMS') + lpeg.V('MEMBER'))^-1 ),
@@ -108,13 +105,11 @@ function expr_pattern()
         MEMBER = lpeg.Ct( lpeg.Cc('member') * space * '.' * identifier * lpeg.V('SUBSCRIPT')^-1 ),
 
         ADDRESS = lpeg.Ct( lpeg.Cc('address') * '@{' * lpeg.V('EXPR') * '}' ),
-        BLOCK = lpeg.Ct( lpeg.Cc('block') * (('{' * space * lpeg.S(';')^-1 * space * '}') + ('{' * lpeg.V('EXPR') * lpeg.V('EXPR')^0 * space * '}')) ),
 
         ASSIGN = lpeg.Ct( lpeg.Cc('assign') * lpeg.V('LVALUE') * space * '=' * space * lpeg.V('EXPR') ),
         LVALUE = lpeg.Ct( (lpeg.Cc('id') * identifier * (lpeg.V('SUBSCRIPT') + lpeg.V('MEMBER'))^-1) ) + lpeg.V('ADDRESS'),
         NEW = lpeg.Ct( lpeg.Cc('new') * space * 'new' * space * identifier ),
 
-        COND = lpeg.Ct( lpeg.Cc('if') * 'if' * space * '(' * space * lpeg.V('EXPR') * space * ')' * space * lpeg.V('EXPR') * (space * 'else' * space * lpeg.V('EXPR'))^-1 ),
         SHORTCOND = lpeg.Ct( lpeg.Cc('if') * '(' * space * lpeg.V('EXPR') * space * '?' * space * lpeg.V('EXPR') * space * ':' * space * lpeg.V('EXPR') * space * ')' ),
     }
 end
@@ -124,7 +119,26 @@ local expr = expr_pattern()
 function statement_pattern(expr)
     return lpeg.P{
         'STMT';
-        STMT = lpeg.Ct( lpeg.Cc('stmt') * (lpeg.V('VAR') + lpeg.V('FUNC') + lpeg.V('STRUCT') + expr) ),
+        STMT = lpeg.Ct( lpeg.Cc('stmt') *
+                            (lpeg.V('FUNC') +
+                                 lpeg.V('STRUCT') +
+                                 lpeg.V('VAR') +
+                                 lpeg.V('LOOP') +
+                                 lpeg.V('COND') +
+                                 expr)
+        ),
+
+        BODY = lpeg.Ct( lpeg.Cc('body') *
+                            (lpeg.V('VAR') +
+                                 lpeg.V('LOOP') +
+                                 lpeg.V('COND') +
+                                 lpeg.V('BREAK') +
+                                 lpeg.V('RETURN') +
+                                 expr
+                            )^0 ),
+
+        RETURN = lpeg.Ct( lpeg.Cc('return') * space * 'return' * space * expr ),
+        BREAK = lpeg.Ct( lpeg.Cc('break') * space * 'break' * space ),
 
         VAR = lpeg.Ct( lpeg.Cc('var') * space * 'var' * space * identifier * lpeg.V('TYPE')^-1 * lpeg.V('INITIAL')^-1 ),
         TYPE = lpeg.Ct(lpeg.Cc('type') * space * ':' * space * identifier),
@@ -138,8 +152,6 @@ function statement_pattern(expr)
                 '{' * space * lpeg.V('BODY') * space * '}'
         ),
         ARGLIST = lpeg.Ct( lpeg.Cc('args') * identifier * (space * ',' * space * identifier)^0 ),
-        BODY = (lpeg.V('VAR') + lpeg.V('RETURN') + expr)^0,
-        RETURN = lpeg.Ct( lpeg.Cc('return') * space * 'return' * space * expr ),
 
         STRUCT = lpeg.Ct(
             lpeg.Cc('struct') * space *
@@ -149,7 +161,22 @@ function statement_pattern(expr)
         ),
         MEMBERLIST = space * lpeg.V('MEMBER') * (space * ',' * lpeg.V('MEMBER') * space)^0,
         MEMBER = lpeg.Ct( lpeg.Cc('member') * space * identifier * space * (lpeg.V('LENGTH') + lpeg.V('INITIAL'))^-1),
-        LENGTH = lpeg.Ct( lpeg.Cc('length') * space * '(' * space * expr * space * ')' * space )
+        LENGTH = lpeg.Ct( lpeg.Cc('length') * space * '(' * space * expr * space * ')' * space ),
+
+        LOOP = lpeg.Ct(
+            lpeg.Cc('loop') * space *
+                'loop' * space *
+                '{' * space * lpeg.V('BODY') * space * '}'
+        ),
+
+        COND = lpeg.Ct(
+            lpeg.Cc('if') * space *
+            'if' * space *
+                '(' * space * expr * space * ')' * space *
+                '{' * space * lpeg.V('BODY') * space * '}' *
+            (space * 'else' * space *
+                 '{' * space * lpeg.V('BODY') * space * '}'
+            )^-1 ),
     }
 end
 

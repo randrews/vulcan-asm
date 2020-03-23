@@ -145,22 +145,6 @@ test(expr, [[blah(a, b)]], [[(expr (term (id blah (params (expr (term (id a))) (
 -- Ternary function calls
 test(expr, [[blah(a,b,c)]], [[(expr (term (id blah (params (expr (term (id a))) (expr (term (id b))) (expr (term (id c)))))))]])
 
--- Blocks
-test(expr, [[{ 3*4; 5+2 }]], [[(expr (term (block (expr (term 3 * 4)) (expr (term 5) + (term 2)))))]])
-str = [[
-  {
-    3*4;
-    5+2   ;
-  }
-]]
-test(expr, str, [[(expr (term (block (expr (term 3 * 4)) (expr (term 5) + (term 2)))))]])
-
--- Empty blocks
-test(expr, [[{;}]], [[(expr (term (block)))]])
-test(expr, [[{ }]], [[(expr (term (block)))]])
-test(expr, [[{}]], [[(expr (term (block)))]])
-test(expr, [[{ ; }]], [[(expr (term (block)))]])
-
 -- Assignments
 test(expr, [[x = 3]], [[(expr (term (assign (id x) (expr (term 3)))))]])
 
@@ -172,12 +156,6 @@ test(expr, [[@{ 1500 } = 3]], [[(expr (term (assign (address (expr (term 1500)))
 
 -- Assignments in complex expressions
 test(expr, [[3 + (x = 4) * 2]], [[(expr (term 3) + (term (expr (term (assign (id x) (expr (term 4))))) * 2))]])
-
--- Conditionals
-test(expr, [[x = if (y) 3]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3))))))))]])
-
--- Conditionals with else
-test(expr, [[x = if(y) 3 else 5]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3)) (expr (term 5))))))))]])
 
 -- Ternary conditionals
 test(expr, [[x = (y ? 3 : 5)]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3)) (expr (term 5))))))))]])
@@ -203,7 +181,7 @@ statement = vc.statement
 
 -- Expressions
 test(statement, [[3]], [[(stmt (expr (term 3)))]])
-test(statement, [[if(x) {3} else {y=4; foo(7)}]], [[(stmt (expr (term (if (expr (term (id x))) (expr (term (block (expr (term 3))))) (expr (term (block (expr (term (assign (id y) (expr (term 4))))) (expr (term (id foo (params (expr (term 7)))))))))))))]])
+test(statement, [[if(x) {3} else {y=4; foo(7)}]], [[(stmt (if (expr (term (id x))) (body (expr (term 3))) (body (expr (term (assign (id y) (expr (term 4))))) (expr (term (id foo (params (expr (term 7)))))))))]])
 
 -- Variable declarations
 test(statement, [[var x]], [[(stmt (var x))]])
@@ -218,17 +196,17 @@ test(statement, [[var x:Weapon]], [[(stmt (var x (type Weapon)))]])
 test(statement, [[var x:Weapon = new Weapon]], [[(stmt (var x (type Weapon) (init (expr (term (new Weapon))))))]])
 
 -- Function declarations
-test(statement, [[function foo() { }]], [[(stmt (func foo))]])
+test(statement, [[function foo() { }]], [[(stmt (func foo (body)))]])
 
 -- Function declarations with args
-test(statement, [[function foo(a, b) { }]], [[(stmt (func foo (args a b)))]])
+test(statement, [[function foo(a, b) { }]], [[(stmt (func foo (args a b) (body)))]])
 
 -- Function declarations with args and body
-test(statement, [[function foo(a, b) { a+b*2; }]], [[(stmt (func foo (args a b) (expr (term (id a)) + (term (id b) * 2))))]])
-test(statement, [[function foo(a, b) { var x=a*b; x+2 }]], [[(stmt (func foo (args a b) (var x (init (expr (term (id a) * (id b))))) (expr (term (id x)) + (term 2))))]])
+test(statement, [[function foo(a, b) { a+b*2; }]], [[(stmt (func foo (args a b) (body (expr (term (id a)) + (term (id b) * 2)))))]])
+test(statement, [[function foo(a, b) { var x=a*b; x+2 }]], [[(stmt (func foo (args a b) (body (var x (init (expr (term (id a) * (id b))))) (expr (term (id x)) + (term 2)))))]])
 
 -- Function declarations with return
-test(statement, [[function foo() { return 6 }]], [[(stmt (func foo (return (expr (term 6)))))]])
+test(statement, [[function foo() { return 6 }]], [[(stmt (func foo (body (return (expr (term 6))))))]])
 
 -- Struct declarations
 test(statement, [[struct Coord { x, y }]], [[(stmt (struct Coord (member x) (member y)))]])
@@ -238,3 +216,18 @@ test(statement, [[struct Coord { x=0, y = 0 }]], [[(stmt (struct Coord (member x
 
 -- Struct declarations with lengths
 test(statement, [[struct Person { name(16) }]], [[(stmt (struct Person (member name (length (expr (term 16))))))]])
+
+-- Loops
+test(statement, [[loop { doThing() }]], [[(stmt (loop (body (expr (term (id doThing (params)))))))]])
+
+-- Loops with multiple statements
+test(statement, [[loop { doThing(); doOtherThing }]], [[(stmt (loop (body (expr (term (id doThing (params)))) (expr (term (id doOtherThing))))))]])
+
+-- Loops with breaks
+test(statement, [[loop { doThing(); break }]], [[(stmt (loop (body (expr (term (id doThing (params)))) (break))))]])
+
+-- Conditionals
+test(statement, [[if (y) {3}]], [[(stmt (if (expr (term (id y))) (body (expr (term 3)))))]])
+
+-- Conditionals with else
+test(statement, [[if(y) {3 } else {5}]], [[(stmt (if (expr (term (id y))) (body (expr (term 3))) (body (expr (term 5)))))]])
