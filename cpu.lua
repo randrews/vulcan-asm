@@ -10,6 +10,8 @@ function CPU.new(display)
         instance.stack[n] = 0
     end
 
+    instance.stack[2047] = 2047 -- First stack frame points at itself
+
     instance.mem = {}
     for n = 0, 131071 do
         instance.mem[n] = math.floor(math.random() * 256)
@@ -29,7 +31,7 @@ end
 
 function CPU:reset()
     self.pc = 256 -- Program counter
-    self.call = 0 -- Stack index of top of call stack
+    self.call = 2048 - 1 -- Stack index of first frame of of call stack
     self.data = 2048 - 1 -- Stack index of top of data stack
     self.halted = false -- Flag to stop execution
     self.next_pc = nil -- Set after each fetch, opcodes can change it
@@ -63,12 +65,8 @@ end
 -- stack[call - 1] is the return, etc etc.
 function CPU:push_call(addr)
     local oldcall = self.call
-    if self.call == 0 then -- This is the very first frame
-        self.call = 2047 -- Top of the call stack
-    else -- We're pointing at a frame size
-        local size = self.stack[self.call - 2] + 3 -- Size of this stack frame
-        self.call = self.call - size
-    end
+    local size = self.stack[self.call - 2] + 3 -- Size of this stack frame
+    self.call = self.call - size
 
     -- Initialize new frame
     self.stack[self.call] = oldcall -- Pointer to previous frame
@@ -401,23 +399,23 @@ end
 
 -- Call stack
 function CPU:frame()
-    if self.call ~= 0 then -- If we have a frame to mess with
-        self.stack[self.call - 2] = self:pop_data()
-    end
+    self.stack[self.call - 2] = self:pop_data()
 end
 
 function CPU:setlocal()
     local id = self:pop_data()
     local val = self:pop_data()
-    if self.call ~= 0 and self.stack[self.call - 2] > id then -- If we have a stack and it has this many locals
+    if self.stack[self.call - 2] > id then -- If we have this many locals
         self.stack[self.call - 3 - id] = val
     end
 end
 
 function CPU:_local()
     local id = self:pop_data()
-    if self.call ~= 0 and self.stack[self.call - 2] > id then -- If we have a stack and it has this many locals
+    if self.stack[self.call - 2] > id then -- If we have this many locals
         self:push_data(self.stack[self.call - 3 - id])
+    else -- Default to pushing 0
+        self:push_data(0)
     end
 end
 

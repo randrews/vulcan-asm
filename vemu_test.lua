@@ -15,12 +15,12 @@ end
 -- Initial state
 local cpu = CPU.new()
 assert(cpu.stack[0] == 0)
-assert(cpu.stack[2047] == 0)
+assert(cpu.stack[2047] == 2047)
 assert(cpu.stack[2048] == nil)
 assert(cpu.mem[0] ~= nil)
 assert(cpu.mem[131071] ~= nil)
 assert(cpu.mem[131072] == nil)
-assert(cpu.call == 0)
+assert(cpu.call == 2047)
 assert(cpu.data == 2047)
 
 -- State after pushing data
@@ -29,21 +29,25 @@ cpu:push_data(37)
 cpu:push_data(45)
 assert(cpu.stack[0] == 37)
 assert(cpu.stack[1] == 45)
-assert(cpu.call == 0)
+assert(cpu.call == 2047)
 assert(cpu.data == 1)
 
 -- State after pushing return addresses
 local cpu = CPU.new()
 cpu:push_call(37)
 cpu:push_call(45)
-assert(cpu.stack[2047] == 0) -- First frame prev
-assert(cpu.stack[2046] == 37) -- First frame ret
+assert(cpu.stack[2047] == 2047) -- First frame prev
+assert(cpu.stack[2046] == 0) -- First frame ret
 assert(cpu.stack[2045] == 0) -- First frame locals
 
 assert(cpu.stack[2044] == 2047) -- Second frame prev
-assert(cpu.stack[2043] == 45) -- Second frame ret
-assert(cpu.stack[2042] == 0) -- Seconi frame locals
-assert(cpu.call == 2044) -- Pointing at start of second frame
+assert(cpu.stack[2043] == 37) -- Second frame ret
+assert(cpu.stack[2042] == 0) -- Second frame locals
+
+assert(cpu.stack[2041] == 2044) -- Third frame prev
+assert(cpu.stack[2040] == 45) -- Third frame ret
+assert(cpu.stack[2039] == 0) -- Third frame locals
+assert(cpu.call == 2041) -- Pointing at start of second frame
 assert(cpu.data == 2047)
 
 -- Pushing and then popping data
@@ -118,8 +122,8 @@ blah: push 3
 ]]))
 cpu:run()
 assert(cpu:pop_data() == 3)
-assert(cpu.call == 2047)
-assert(cpu.stack[cpu.call] == 0)
+assert(cpu.call == 2044)
+assert(cpu.stack[cpu.call] == 2047)
 assert(cpu.stack[cpu.call-1] == 260)
 assert(cpu.stack[cpu.call-2] == 0)
 
@@ -135,7 +139,7 @@ blah: mul 2
 ]]))
 cpu:run()
 assert(cpu:pop_data() == 6)
-assert(cpu.call == 0)
+assert(cpu.call == 2047)
 
 -- Setting frame size
 local cpu = CPU.new()
@@ -146,8 +150,8 @@ blah: frame 3
     hlt
 ]]))
 cpu:run()
-assert(cpu.call == 2047)
-assert(cpu.stack[cpu.call] == 0)
+assert(cpu.call == 2044)
+assert(cpu.stack[cpu.call] == 2047)
 assert(cpu.stack[cpu.call-1] == 260)
 assert(cpu.stack[cpu.call-2] == 3)
 
@@ -164,8 +168,8 @@ blah: frame 3
     hlt
 ]]))
 cpu:run()
-assert(cpu.call == 2047)
-assert(cpu.stack[cpu.call] == 0)
+assert(cpu.call == 2044)
+assert(cpu.stack[cpu.call] == 2047)
 assert(cpu.stack[cpu.call-1] == 260)
 assert(cpu.stack[cpu.call-2] == 3)
 assert(cpu.stack[cpu.call-3] == 2)
@@ -187,3 +191,56 @@ blah: frame 3
 ]]))
 cpu:run()
 assert(cpu:pop_data() == 14)
+
+-- Top frame locals
+local cpu = CPU.new()
+cpu:load(iterator([[
+    .org 256
+    frame 2
+    push 5
+    setlocal 1
+    push 12
+    local 1
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 5)
+assert(cpu:pop_data() == 12)
+
+-- Calls after locals
+local cpu = CPU.new()
+cpu:load(iterator([[
+    .org 256
+    frame 2
+    push 5
+    setlocal 1
+    call blah
+blah: frame 2
+    push 3
+    setlocal 1
+    hlt
+]]))
+cpu:run()
+assert(cpu.call == 2042)
+assert(cpu.stack[2047] == 2047) -- First frame
+assert(cpu.stack[2046] == 0)
+assert(cpu.stack[2045] == 2)
+assert(cpu.stack[2044] == 0)
+assert(cpu.stack[2043] == 5)
+
+assert(cpu.stack[cpu.call] == 2047) -- Second frame
+assert(cpu.stack[cpu.call-1] == 266)
+assert(cpu.stack[cpu.call-2] == 2)
+assert(cpu.stack[cpu.call-3] == 0)
+assert(cpu.stack[cpu.call-4] == 3)
+
+-- Out-of-range frame locals
+local cpu = CPU.new()
+cpu:load(iterator([[
+    .org 256
+    frame 3
+    local 7
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 0)
