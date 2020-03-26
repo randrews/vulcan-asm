@@ -51,10 +51,29 @@ function CPU:push_data(word)
     self.stack[self.data] = word
 end
 
+-- A stack frame consists of:
+--
+-- - The address of the previous stack frame, or 0
+-- - The return address
+-- - The number of locals in this stack frame
+-- - A sequence of local variables (optional)
+--
+-- The 'call' variable always points to the address of the
+-- previous frame, so stack[call] is the old frame,
+-- stack[call - 1] is the return, etc etc.
 function CPU:push_call(addr)
-    addr = math.floor(addr) & 0xffffff
-    self.call = (self.call - 1 + 2048) % 2048
-    self.stack[self.call] = addr
+    local oldcall = self.call
+    if self.call == 0 then -- This is the very first frame
+        self.call = 2047 -- Top of the call stack
+    else -- We're pointing at a frame size
+        local size = self.stack[self.call - 2] + 3 -- Size of this stack frame
+        self.call = self.call - size
+    end
+
+    -- Initialize new frame
+    self.stack[self.call] = oldcall -- Pointer to previous frame
+    self.stack[self.call - 1] = math.floor(addr) & 0xffffff -- Return address
+    self.stack[self.call - 2] = 0 -- No locals (yet)
 end
 
 function CPU:pop_data()
@@ -63,10 +82,13 @@ function CPU:pop_data()
     return word
 end
 
+-- Pops a frame off the stock and returns the return address
+-- from that frame
 function CPU:pop_call()
-    local word = self.stack[self.call]
-    self.call = (self.call + 1) % 2048
-    return word
+    local prev = self.stack[self.call]
+    local ret = self.stack[self.call - 1]
+    self.call = prev
+    return ret
 end
 
 function CPU:poke(addr, value)
@@ -125,6 +147,9 @@ function CPU:decode(opcode)
     elseif opcode == 35 then return 'inton'
     elseif opcode == 36 then return 'intoff'
     elseif opcode == 37 then return 'setiv'
+    elseif opcode == 38 then return 'frame'
+    elseif opcode == 39 then return '_local' -- Renamed from local
+    elseif opcode == 40 then return 'setlocal'
     else error('Unrecognized opcode ' .. opcode) end
 end
 
@@ -372,6 +397,28 @@ end
 
 function CPU:setiv()
     self.int_vector = self:pop_data()
+end
+
+-- Call stack
+function CPU:frame()
+    if self.call ~= 0 then -- If we have a frame to mess with
+        self.stack[self.call - 2] = self:pop_data()
+    end
+end
+
+function CPU:setlocal()
+    local id = self:pop_data()
+    local val = self:pop_data()
+    if self.call ~= 0 and self.stack[self.call - 2] > id then -- If we have a stack and it has this many locals
+        self.stack[self.call - 3 - id] = val
+    end
+end
+
+function CPU:_local()
+    local id = self:pop_data()
+    if self.call ~= 0 and self.stack[self.call - 2] > id then -- If we have a stack and it has this many locals
+        self:push_data(self.stack[self.call - 3 - id])
+    end
 end
 
 return CPU

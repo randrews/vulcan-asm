@@ -80,7 +80,8 @@ function statement_pattern()
         'jmpr', 'jmp', 'call', 'ret', 'brz', 'brnz', 'brgt', 'brlt', -- Branching and jumping
         'load24', 'load16', 'load', -- Loading from memory
         'store24', 'store16', 'store', -- Storing to memory
-        'inton', 'intoff', 'setiv'
+        'inton', 'intoff', 'setiv', -- Interrupt handling
+        'frame', 'local', 'setlocal' -- Stack frame variables
     }
 
     -- Combine the opcodes into one pattern:
@@ -487,7 +488,10 @@ function generate_code(lines, start_addr, end_addr)
                 store24 = 34,
                 inton = 35,
                 intoff = 36,
-                setiv = 37
+                setiv = 37,
+                frame = 38,
+                ['local'] = 39,
+                setlocal = 40
             }
 
             local instruction = opcode_values[line.opcode] or error('Unrecognized opcode on line ' .. line.line .. ': ' .. line.opcode)
