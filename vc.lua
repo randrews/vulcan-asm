@@ -200,6 +200,9 @@ local statement = statement_pattern(expr)
 -- - gensym is a function that return unique, valid asm label names (optionally using an optional semantic name passed in)
 -- - globals is a table mapping defined global names to symbols
 function compile(src, env)
+    -- We assume src is a list of statements. We parse them (assuming at least one statement) and
+    -- if what we parsed isn't the entire string, then we say so. We know what line we failed on
+    -- because space_pattern has been keeping track for us.
     local statements, remainder = (lpeg.Ct(statement^1) * lpeg.Cp()):match(src)
     assert(remainder > #src, 'Failed to parse! Failed at line ' .. current_line())
 
@@ -218,8 +221,9 @@ function compile(src, env)
     env.emit = function(line) env.emit_to_segment('text', line) end
     env.emit_global = function(line) env.emit_to_segment('globals', line) end
 
+    -- Try to compile each statement. There are a limited number of things it could be:
     for _, ast in ipairs(statements) do
-        if ast[1] ~= 'stmt' then error('Did not compile to a statement') end
+        assert(ast[1] == 'stmt', 'Did not compile to a statement')
 
         if ast[2][1] == 'var' then
             compile_var(ast[2], env)
@@ -228,15 +232,20 @@ function compile(src, env)
         end
     end
 
+    -- Helper for emitting an entire segment to the final output at once
     local function emit_segment(segment)
         for _, line in ipairs(segment) do final_emit(line) end
     end
 
+    -- Emit all of the text followed by a hlt
     if #segments.text > 0 then
         emit_segment(segments.text)
         final_emit('hlt')
     end
 
+    -- If there are any functions or globals, emit those too.
+    -- They don't need hlts because functions will automatically return
+    -- and globals never get jumped to.
     if #segments.functions > 0 then emit_segment(segments.functions) end
     if #segments.globals > 0 then emit_segment(segments.globals) end
 end
@@ -323,6 +332,28 @@ function compile_address(addr, env)
 end
 
 function compile_assign(assign, env)
+    local _, lvalue, rvalue = table.unpack(assign)
+
+    -- Go ahead and emit the rvalue, it's now on top of the stack
+    compile_expr(rvalue, env)
+
+    -- Deal with the lvalue
+    if lvalue[1] == 'address' then
+    elseif lvalue[1] == 'id' then
+        local _, name, qualifier = table.unpack(lvalue)
+        -- Something for function scopes
+        assert(env.globals[name], 'Unrecognized name: ' .. name)
+        if qualifier then -- It's either a subscript or a member
+            if qualifier[1] == 'subscript' then
+                compile_expr(qualifier[2], env)
+                env.emit('mul 3')
+                env.emit('add ' .. env.globals[name])
+                env.emit('store24')
+            else error('TODO') end
+        else
+            env.emit('store24 ' .. env.globals[name])
+        end
+    else error('Unrecognized lvalue: ' .. lvalue[1]) end
 end
 
 function clause(node, name)

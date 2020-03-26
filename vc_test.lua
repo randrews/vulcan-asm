@@ -327,3 +327,9 @@ compile_test{[[var foo = 3*4]], {'push 3', 'push 4', 'mul', 'store24 gen1', 'hlt
 
 -- Multiple statements
 compile_test{[[var x=3; var y=(4)]], {'push 3', 'store24 gen1', 'push 4', 'store24 gen2', 'hlt', 'gen1: .db 0', 'gen2: .db 0'}}
+
+-- Assigns to globals
+compile_test{[[foo = 3*4]], {'push 3', 'push 4', 'mul', 'store24 foo', 'hlt'}, globals = {foo = 'foo'}}
+
+-- Assigns to globals with subscripts
+compile_test{[[foo[2] = 3*4]], {'push 3', 'push 4', 'mul', 'push 2', 'mul 3', 'add foo', 'store24', 'hlt'}, globals = {foo = 'foo'}}
