@@ -188,10 +188,9 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
     <span class="k">local</span> <span class="k">function</span> <span class="nf">emit</span>(str) table.insert(actual_asm, str) <span class="k">end</span>
     <span class="k">local</span> sym_idx = 0
     <span class="k">local</span> <span class="k">function</span> <span class="nf">gensym</span>() sym_idx = sym_idx + 1; <span class="k">return</span> <span class="s">'gen'</span> .. sym_idx <span class="k">end</span>
-    <span class="k">local</span> env = { emit = emit, gensym = gensym, globals = globals }
 
     <span class="k">local</span> statements = parser.parse(src)
-    compiler.compile(statements, env)
+    compiler.compile(statements, emit, globals, gensym)
 
     <span class="k">if</span> <span class="o">not</span> eq(asm, actual_asm) <span class="k">then</span>
         <span class="nt">print</span>(<span class="s">'FAIL: Produced different assembly for [['</span> .. src .. <span class="s">']]:'</span>)
@@ -203,7 +202,7 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
         <span class="k">return</span>
     <span class="k">end</span>
 
-    check(env)
+    check{ emit = emit, gensym = gensym, globals = globals }
 <span class="k">end</span>
 </pre></div>
 </td>

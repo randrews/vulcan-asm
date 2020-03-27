@@ -73,10 +73,9 @@ function test(opts)
     local function emit(str) table.insert(actual_asm, str) end
     local sym_idx = 0
     local function gensym() sym_idx = sym_idx + 1; return 'gen' .. sym_idx end
-    local env = { emit = emit, gensym = gensym, globals = globals }
 
     local statements = parser.parse(src)
-    compiler.compile(statements, env)
+    compiler.compile(statements, emit, globals, gensym)
 
     if not eq(asm, actual_asm) then
         print('FAIL: Produced different assembly for [[' .. src .. ']]:')
@@ -88,7 +87,7 @@ function test(opts)
         return
     end
 
-    check(env)
+    check{ emit = emit, gensym = gensym, globals = globals }
 end
 
 -- # Expression compilation tests

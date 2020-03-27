@@ -44,7 +44,7 @@
 
 </td>
 <td class="code">
-  <div class="highlight"><pre><span class="k">local</span> parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
+  <div class="highlight"><pre><span class="k">local</span> Generator = {}
 </pre></div>
 </td>
 </tr><tr id="section-2">
@@ -53,19 +53,19 @@
     <a class="pilcrow" href="#section-2">&#182;</a>
   </div>
   
-<p>Compile a table containing a sequence of parsed statements
-Env is a table with these members:</p>
+<p>Compile a table containing a sequence of parsed statements</p>
 
 <ul>
     <li>emit is a function that takes a string and emits that to the final asm</li>
-    <li>gensym is a function that return unique, valid asm label names (optionally using an optional semantic name passed in)</li>
     <li>globals is a table mapping defined global names to symbols</li>
+    <li>gensym is a function that return unique, valid asm label names (optionally using a semantic name passed in)</li>
 </ul>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre><span class="k">function</span> <span class="nf">compile</span>(statements, env)
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">compile</span>(statements, emit, globals, gensym)
+    <span class="k">local</span> gen = Generator.new(globals, gensym)
 </pre></div>
 </td>
 </tr><tr id="section-3">
@@ -74,18 +74,43 @@ Env is a table with these members:</p>
     <a class="pilcrow" href="#section-3">&#182;</a>
   </div>
   
-<p>This is given to us from outside, we have to call it in order for the final asm</p>
+<p>Try to generate code for each statement</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">local</span> final_emit = env.emit
+  <div class="highlight"><pre>    <span class="k">for</span> _, node <span class="k">in</span> <span class="nt">ipairs</span>(statements) <span class="k">do</span>
+        gen:generate(node, env)
+    <span class="k">end</span>
 </pre></div>
 </td>
 </tr><tr id="section-4">
 <td class="docs">
   <div class="pilwrap">
     <a class="pilcrow" href="#section-4">&#182;</a>
+  </div>
+  
+<p>Write the generated code out to the emitter</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    gen:finalize(emit)
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator.new</span>(globals, gensym)
+    <span class="k">local</span> instance = {
+        gensym = gensym,
+        globals = globals,
+        segments = {text = {}, functions = {}, globals = {}}
+    }
+    <span class="nt">setmetatable</span>(instance, {__index=Generator})
+</pre></div>
+</td>
+</tr><tr id="section-5">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-5">&#182;</a>
   </div>
   
 <p>We have three segments in the program:
@@ -96,35 +121,14 @@ Env is a table with these members:</p>
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">local</span> segments = {text = {}, functions = {}, globals = {}}
-    env.emit_to_segment = <span class="k">function</span>(segment, line)
-        <span class="nt">assert</span>(segments[segment], <span class="s">'Unknown segment '</span> .. segment)
-        table.insert(segments[segment], line)
+  <div class="highlight"><pre>    <span class="k">local</span> emit_to_segment = <span class="k">function</span>(segment, line)
+        table.insert(instance.segments[segment], line)
     <span class="k">end</span>
-    env.emit = <span class="k">function</span>(line) env.emit_to_segment(<span class="s">'text'</span>, line) <span class="k">end</span>
-    env.emit_global = <span class="k">function</span>(line) env.emit_to_segment(<span class="s">'globals'</span>, line) <span class="k">end</span>
-</pre></div>
-</td>
-</tr><tr id="section-5">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-5">&#182;</a>
-  </div>
-  
-<p>Try to compile each statement. There are a limited number of things it could be:</p>
+    instance.emit = <span class="k">function</span>(self, line) emit_to_segment(<span class="s">'text'</span>, line) <span class="k">end</span>
+    instance.emit_global = <span class="k">function</span>(self, line) emit_to_segment(<span class="s">'globals'</span>, line) <span class="k">end</span>
 
-
-</td>
-<td class="code">
-  <div class="highlight"><pre>    <span class="k">for</span> _, ast <span class="k">in</span> <span class="nt">ipairs</span>(statements) <span class="k">do</span>
-        <span class="nt">assert</span>(ast[1] == <span class="s">'stmt'</span>, <span class="s">'Did not compile to a statement'</span>)
-
-        <span class="k">if</span> ast[2][1] == <span class="s">'var'</span> <span class="k">then</span>
-            compile_var(ast[2], env)
-        <span class="k">elseif</span> ast[2][1] == <span class="s">'expr'</span> <span class="k">then</span>
-            compile_expr(ast[2], env)
-        <span class="k">end</span>
-    <span class="k">end</span>
+    <span class="k">return</span> instance
+<span class="k">end</span>
 </pre></div>
 </td>
 </tr><tr id="section-6">
@@ -133,14 +137,16 @@ Env is a table with these members:</p>
     <a class="pilcrow" href="#section-6">&#182;</a>
   </div>
   
-<p>Helper for emitting an entire segment to the final output at once</p>
+<p>After all statements have been generated, call this to emit the code (in order)</p>
+
+<ul>
+    <li>emit is a function that takes a string and writes it to an assembly file</li>
+</ul>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">local</span> <span class="k">function</span> <span class="nf">emit_segment</span>(segment)
-        <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(segment) <span class="k">do</span> final_emit(line) <span class="k">end</span>
-    <span class="k">end</span>
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:finalize</span>(emit)
 </pre></div>
 </td>
 </tr><tr id="section-7">
@@ -149,14 +155,13 @@ Env is a table with these members:</p>
     <a class="pilcrow" href="#section-7">&#182;</a>
   </div>
   
-<p>Emit all of the text followed by a hlt</p>
+<p>Helper for emitting an entire segment to the final output at once</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">if</span> #segments.text &gt; 0 <span class="k">then</span>
-        emit_segment(segments.text)
-        final_emit(<span class="s">'hlt'</span>)
+  <div class="highlight"><pre>    <span class="k">local</span> <span class="k">function</span> <span class="nf">emit_segment</span>(segment)
+        <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(segment) <span class="k">do</span> emit(line) <span class="k">end</span>
     <span class="k">end</span>
 </pre></div>
 </td>
@@ -166,18 +171,15 @@ Env is a table with these members:</p>
     <a class="pilcrow" href="#section-8">&#182;</a>
   </div>
   
-<p>If there are any functions or globals, emit those too.
-They don't need hlts because functions will automatically return
-and globals never get jumped to.</p>
+<p>Emit all of the text followed by a hlt</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">if</span> #segments.functions &gt; 0 <span class="k">then</span> emit_segment(segments.functions) <span class="k">end</span>
-    <span class="k">if</span> #segments.globals &gt; 0 <span class="k">then</span> emit_segment(segments.globals) <span class="k">end</span>
-<span class="k">end</span>
-
-<span class="k">function</span> <span class="nf">compile_var</span>(var, env)
+  <div class="highlight"><pre>    <span class="k">if</span> #(self.segments.text) &gt; 0 <span class="k">then</span>
+        emit_segment(self.segments.text)
+        emit(<span class="s">'hlt'</span>)
+    <span class="k">end</span>
 </pre></div>
 </td>
 </tr><tr id="section-9">
@@ -186,22 +188,81 @@ and globals never get jumped to.</p>
     <a class="pilcrow" href="#section-9">&#182;</a>
   </div>
   
+<p>If there are any functions or globals, emit those too.
+They don't need hlts because functions will automatically return
+and globals never get jumped to.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> #(self.segments.functions) &gt; 0 <span class="k">then</span> emit_segment(self.segments.functions) <span class="k">end</span>
+    <span class="k">if</span> #(self.segments.globals) &gt; 0 <span class="k">then</span> emit_segment(self.segments.globals) <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-10">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-10">&#182;</a>
+  </div>
+  
+<p>Generate code (sending to whatever the active segment is) for the passed-in node.
+This will work on any node, so it gets called recursively by most other node types.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:generate</span>(node)
+    <span class="k">local</span> name = node[1]
+</pre></div>
+</td>
+</tr><tr id="section-11">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-11">&#182;</a>
+  </div>
+  
+<p>Some names aren't viable method names; 'new' because it's
+also the constructor, 'if' because it's a keyword</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> name == <span class="s">'if'</span> <span class="o">or</span> name == <span class="s">'new'</span> <span class="k">then</span> name = <span class="s">'_'</span> .. name <span class="k">end</span>
+    <span class="k">local</span> fn = self[name]
+    <span class="k">if</span> fn <span class="k">then</span> <span class="k">return</span> fn(self, node)
+    <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Unrecognized node type: '</span> .. name) <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator:stmt</span>(stmt)
+    self:generate(stmt[2])
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator:var</span>(var)
+</pre></div>
+</td>
+</tr><tr id="section-12">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-12">&#182;</a>
+  </div>
+  
 <p>Something for functions here</p>
 
 
 </td>
 <td class="code">
   <div class="highlight"><pre>    <span class="k">local</span> name = var[2]
-    <span class="k">local</span> label = env.gensym(name)
-    env.globals[name] = label
-    env.emit_global(label .. <span class="s">': .db 0'</span>)
+    <span class="k">local</span> label = self.gensym(name)
+    self.globals[name] = label
+    self:emit_global(label .. <span class="s">': .db 0'</span>)
 
     <span class="k">local</span> typename = clause(var, <span class="s">'type'</span>)
     <span class="k">local</span> initial = clause(var, <span class="s">'init'</span>)
 
     <span class="k">if</span> initial <span class="k">then</span>
-        compile_expr(initial[2], env)
-        env.emit(<span class="s">'store24 '</span> .. label)
+        self:generate(initial[2])
+        self:emit(<span class="s">'store24 '</span> .. label)
     <span class="k">end</span>
 
     <span class="k">if</span> typename <span class="k">then</span>
@@ -209,64 +270,56 @@ and globals never get jumped to.</p>
     <span class="k">end</span>
 <span class="k">end</span>
 
-<span class="k">function</span> <span class="nf">compile_expr</span>(expr, env)
+<span class="k">function</span> <span class="nf">Generator:expr</span>(expr)
     <span class="k">for</span> index = 2, #expr, 2 <span class="k">do</span>
         <span class="k">local</span> term = expr[index]
-        compile_term(term, env)
+        self:generate(term, env)
         <span class="k">if</span> index &gt; 2 <span class="k">then</span>
             <span class="k">local</span> op = expr[index-1]
-            <span class="k">if</span> op == <span class="s">'+'</span> <span class="k">then</span> env.emit(<span class="s">'add'</span>)
-            <span class="k">elseif</span> op == <span class="s">'-'</span> <span class="k">then</span> env.emit(<span class="s">'sub'</span>) <span class="k">end</span>
+            <span class="k">if</span> op == <span class="s">'+'</span> <span class="k">then</span> self:emit(<span class="s">'add'</span>)
+            <span class="k">elseif</span> op == <span class="s">'-'</span> <span class="k">then</span> self:emit(<span class="s">'sub'</span>) <span class="k">end</span>
         <span class="k">end</span>
     <span class="k">end</span>
 <span class="k">end</span>
 
-<span class="k">function</span> <span class="nf">compile_term</span>(term, env)
+<span class="k">function</span> <span class="nf">Generator:term</span>(term)
     <span class="k">for</span> index = 2, #term, 2 <span class="k">do</span>
         <span class="k">local</span> fact = term[index]
 
-        <span class="k">if</span> <span class="nt">type</span>(fact) == <span class="s">'number'</span> <span class="k">then</span> env.emit(<span class="s">'push '</span> .. fact)
-        <span class="k">elseif</span> <span class="nt">type</span>(fact) == <span class="s">'table'</span> <span class="k">then</span>
-            <span class="k">if</span> fact[1] == <span class="s">'expr'</span> <span class="k">then</span> compile_expr(fact, env)
-            <span class="k">elseif</span> fact[1] == <span class="s">'new'</span> <span class="k">then</span> <span class="nt">error</span>(<span class="s">'TODO'</span>)
-            <span class="k">elseif</span> fact[1] == <span class="s">'assign'</span> <span class="k">then</span> compile_assign(fact, env)
-            <span class="k">elseif</span> fact[1] == <span class="s">'if'</span> <span class="k">then</span> <span class="nt">error</span>(<span class="s">'TODO'</span>)
-            <span class="k">elseif</span> fact[1] == <span class="s">'id'</span> <span class="k">then</span> compile_id(fact, env)
-            <span class="k">elseif</span> fact[1] == <span class="s">'string'</span> <span class="k">then</span> <span class="nt">error</span>(<span class="s">'TODO'</span>)
-            <span class="k">elseif</span> fact[1] == <span class="s">'address'</span> <span class="k">then</span> compile_address(fact, env) <span class="k">end</span>
-        <span class="k">end</span>
+        <span class="k">if</span> <span class="nt">type</span>(fact) == <span class="s">'number'</span> <span class="k">then</span> self:emit(<span class="s">'push '</span> .. fact)
+        <span class="k">elseif</span> <span class="nt">type</span>(fact) == <span class="s">'table'</span> <span class="k">then</span> self:generate(fact) <span class="k">end</span>
 
         <span class="k">if</span> index &gt; 2 <span class="k">then</span>
             <span class="k">local</span> op = term[index-1]
-            <span class="k">if</span> op == <span class="s">'*'</span> <span class="k">then</span> env.emit(<span class="s">'mul'</span>)
-            <span class="k">elseif</span> op == <span class="s">'/'</span> <span class="k">then</span> env.emit(<span class="s">'div'</span>)
-            <span class="k">elseif</span> op == <span class="s">'&#37;'</span> <span class="k">then</span> env.emit(<span class="s">'mod'</span>) <span class="k">end</span>
+            <span class="k">if</span> op == <span class="s">'*'</span> <span class="k">then</span> self:emit(<span class="s">'mul'</span>)
+            <span class="k">elseif</span> op == <span class="s">'/'</span> <span class="k">then</span> self:emit(<span class="s">'div'</span>)
+            <span class="k">elseif</span> op == <span class="s">'&#37;'</span> <span class="k">then</span> self:emit(<span class="s">'mod'</span>) <span class="k">end</span>
         <span class="k">end</span>
     <span class="k">end</span>
 <span class="k">end</span>
 
-<span class="k">function</span> <span class="nf">compile_id</span>(id, env)
+<span class="k">function</span> <span class="nf">Generator:id</span>(id)
     <span class="k">local</span> name = id[2]
-    <span class="k">if</span> env.globals[name] <span class="k">then</span>
+    <span class="k">if</span> self.globals[name] <span class="k">then</span>
         <span class="k">if</span> id[3] <span class="o">and</span> id[3][1] == <span class="s">'subscript'</span> <span class="k">then</span>
-            compile_expr(id[3][2], env)
-            env.emit(<span class="s">'mul 3'</span>)
-            env.emit(<span class="s">'add '</span> .. env.globals[name])
-            env.emit(<span class="s">'load24'</span>)
+            self:generate(id[3][2])
+            self:emit(<span class="s">'mul 3'</span>)
+            self:emit(<span class="s">'add '</span> .. self.globals[name])
+            self:emit(<span class="s">'load24'</span>)
         <span class="k">elseif</span> id[3] <span class="o">and</span> id[3] == <span class="s">'params'</span> <span class="k">then</span> <span class="nt">error</span>(<span class="s">'TODO'</span>)
         <span class="k">elseif</span> id[3] <span class="o">and</span> id[3] == <span class="s">'member'</span> <span class="k">then</span> <span class="nt">error</span>(<span class="s">'TODO'</span>)
         <span class="k">elseif</span> <span class="o">not</span> id[3] <span class="k">then</span>
-            env.emit(<span class="s">'load24 '</span> .. env.globals[name])
+            self:emit(<span class="s">'load24 '</span> .. self.globals[name])
         <span class="k">end</span>
     <span class="k">else</span>
         <span class="nt">error</span>(<span class="s">'Unrecognized identifier: '</span> .. name)
     <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-10">
+</tr><tr id="section-13">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-10">&#182;</a>
+    <a class="pilcrow" href="#section-13">&#182;</a>
   </div>
   
 <p>Something for function scopes later</p>
@@ -277,10 +330,10 @@ and globals never get jumped to.</p>
   <div class="highlight"><pre><span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-11">
+</tr><tr id="section-14">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-11">&#182;</a>
+    <a class="pilcrow" href="#section-14">&#182;</a>
   </div>
   
 <p>An address reference (in an rvalue, not an lvalue)</p>
@@ -288,19 +341,19 @@ and globals never get jumped to.</p>
 
 </td>
 <td class="code">
-  <div class="highlight"><pre><span class="k">function</span> <span class="nf">compile_address</span>(addr, env)
-    compile_expr(addr[2], env)
-    env.emit(<span class="s">'load24'</span>)
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:address</span>(addr)
+    self:generate(addr[2])
+    self:emit(<span class="s">'load24'</span>)
 <span class="k">end</span>
 
-<span class="k">function</span> <span class="nf">compile_assign</span>(assign, env)
+<span class="k">function</span> <span class="nf">Generator:assign</span>(assign)
     <span class="k">local</span> _, lvalue, rvalue = table.<span class="nt">unpack</span>(assign)
 </pre></div>
 </td>
-</tr><tr id="section-12">
+</tr><tr id="section-15">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-12">&#182;</a>
+    <a class="pilcrow" href="#section-15">&#182;</a>
   </div>
   
 <p>Go ahead and emit the rvalue, it's now on top of the stack</p>
@@ -308,13 +361,13 @@ and globals never get jumped to.</p>
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    compile_expr(rvalue, env)
+  <div class="highlight"><pre>    self:generate(rvalue)
 </pre></div>
 </td>
-</tr><tr id="section-13">
+</tr><tr id="section-16">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-13">&#182;</a>
+    <a class="pilcrow" href="#section-16">&#182;</a>
   </div>
   
 <p>Deal with the lvalue</p>
@@ -327,10 +380,10 @@ and globals never get jumped to.</p>
         <span class="k">local</span> _, name, qualifier = table.<span class="nt">unpack</span>(lvalue)
 </pre></div>
 </td>
-</tr><tr id="section-14">
+</tr><tr id="section-17">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-14">&#182;</a>
+    <a class="pilcrow" href="#section-17">&#182;</a>
   </div>
   
 <p>Something for function scopes</p>
@@ -338,18 +391,30 @@ and globals never get jumped to.</p>
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>        <span class="nt">assert</span>(env.globals[name], <span class="s">'Unrecognized name: '</span> .. name)
+  <div class="highlight"><pre>        <span class="nt">assert</span>(self.globals[name], <span class="s">'Unrecognized name: '</span> .. name)
         <span class="k">if</span> qualifier <span class="k">then</span> <span class="c">-- It's either a subscript or a member
 </span>            <span class="k">if</span> qualifier[1] == <span class="s">'subscript'</span> <span class="k">then</span>
-                compile_expr(qualifier[2], env)
-                env.emit(<span class="s">'mul 3'</span>)
-                env.emit(<span class="s">'add '</span> .. env.globals[name])
-                env.emit(<span class="s">'store24'</span>)
+                self:generate(qualifier[2], env)
+                self:emit(<span class="s">'mul 3'</span>)
+                self:emit(<span class="s">'add '</span> .. self.globals[name])
+                self:emit(<span class="s">'store24'</span>)
             <span class="k">else</span> <span class="nt">error</span>(<span class="s">'TODO'</span>) <span class="k">end</span>
         <span class="k">else</span>
-            env.emit(<span class="s">'store24 '</span> .. env.globals[name])
+            self:emit(<span class="s">'store24 '</span> .. self.globals[name])
         <span class="k">end</span>
     <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Unrecognized lvalue: '</span> .. lvalue[1]) <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator:_new</span>(new)
+    <span class="nt">error</span>(<span class="s">'TODO'</span>)
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator:_<span class="k">if</span></span>(_<span class="k">if</span>)
+    <span class="nt">error</span>(<span class="s">'TODO'</span>)
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator:string</span>(str)
+    <span class="nt">error</span>(<span class="s">'TODO'</span>)
 <span class="k">end</span>
 
 <span class="k">function</span> <span class="nf">clause</span>(node, name)
