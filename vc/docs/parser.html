@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>parser.lua</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <link rel="stylesheet" media="all" href="locco.css" />
+</head>
+<body>
+  <div id="container">
+    <div id="background"></div>
+    <div id="jump_to">
+  Jump To &hellip;
+  <div id="jump_wrapper">
+  <div id="jump_page">
+  <a class="source" href="compiler.html">compiler.lua</a>
+  <a class="source" href="compiler_test.html">compiler_test.lua</a>
+  <a class="source" href="parser.html">parser.lua</a>
+  <a class="source" href="parser_test.html">parser_test.lua</a>
+    </div>
+  </div>
+</div>
+
+    <table cellpadding="0" cellspacing="0">
+      <thead>
+        <tr>
+          <th class="docs">
+            <h1>
+              parser.lua
+            </h1>
+          </th>
+          <th class="code">
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+<tr id="section-1">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-1">&#182;</a>
+  </div>
+  
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>lpeg = <span class="nt">require</span>(<span class="s">'lpeg'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-2">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-2">&#182;</a>
+  </div>
+  
+<h1>Vulcan Compiler</h1>
+<p>Being a compiler for an un-named high level language for the Vulcan computer.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-3">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-3">&#182;</a>
+  </div>
+  
+<h2>Language design</h2>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-4">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-4">&#182;</a>
+  </div>
+  
+<h3>Statements and expressions</h3>
+<p>A Vulcan program is a series of statements. A statement can be any of:</p>
+
+<ul>
+    <li>A variable declaration</li>
+    <li>A struct declaration</li>
+    <li>A function declaration</li>
+    <li>An expression</li>
+</ul>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-5">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-5">&#182;</a>
+  </div>
+  
+<p>An expression can be any of:</p>
+
+<ul>
+    <li>An assignment like <code>x = 4</code></li>
+    <li>A mathematical expression like <code>2+3*(4-1)</code></li>
+    <li>A function call like <code>foo(2, 34)</code></li>
+    <li>A identifier like <code>blah</code></li>
+    <li>A string like <code>"Hello\n"</code></li>
+    <li>An address reference like <code>@{blah + 3}</code></li>
+    <li>A struct reference like <code>player.x</code></li>
+    <li>An array reference like <code>coords[3]</code></li>
+</ul>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-6">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-6">&#182;</a>
+  </div>
+  
+<p>Variables in Vulcan all have the same type: they are a single Vulcan word long (24 bits).
+Any data type that can be longer than a single word (a function, an array, string, etc) is
+stored as a variable containing the address of the first byte.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-7">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-7">&#182;</a>
+  </div>
+  
+<h3>Assignment statements</h3>
+<p>An assignment statement conists of an lvalue, which must evaluate to an address, and an
+rvalue, which evaluates to a word, separated by the assignment operator <code>=</code>.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-8">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-8">&#182;</a>
+  </div>
+  
+<p>Valid lvalues are:</p>
+
+<ul>
+    <li>Any address reference: <code>@{blah + 3}</code></li>
+    <li>Any array reference: <code>blah[3]</code> (being equivalent to the above address reference)</li>
+    <li>Any identifier name: <code>foo</code> (being equivalent to an address reference <code>@{foo}</code>)</li>
+    <li>Any struct member reference: <code>foo.blah</code></li>
+    <li>Any struct member reference with a subscript: <code>foo.blah[3]</code></li>
+</ul>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-9">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-9">&#182;</a>
+  </div>
+  
+<p>Valid rvalues are any expression</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-10">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-10">&#182;</a>
+  </div>
+  
+<h3>Variable declarations</h3>
+<p>Variables must be declared before being used.</p>
+
+<ul>
+    <li>Variable declarations can declare a variable as a word: <code>var foo</code></li>
+    <li>As an array of words: <code>var foo[10]</code></li>
+    <li>As an instance of a struct: <code>var p:Player</code></li>
+</ul>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-11">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-11">&#182;</a>
+  </div>
+  
+<h2>Parser</h2>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-12">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-12">&#182;</a>
+  </div>
+  
+<p>Identify whitespace: spaces and tabs and newlines
+Every time we actually match a newline though, increment an internal variable
+so we know which line we're on. If the final parse fails for whatever reason,
+then we'll have the number of the line we were on that contained the last valid
+statement.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">space_pattern</span>()
+    <span class="k">local</span> line_num = 1
+    <span class="k">local</span> <span class="k">function</span> <span class="nf">current_line</span>() <span class="k">return</span> line_num <span class="k">end</span>
+    <span class="k">local</span> <span class="k">function</span> <span class="nf">inc_line</span>() line_num = line_num + 1 <span class="k">end</span>
+    <span class="k">return</span> (lpeg.S(<span class="s">" \t"</span>) + lpeg.S(<span class="s">"\n"</span>) / inc_line)^0, current_line
+<span class="k">end</span>
+
+<span class="k">local</span> space, current_line = space_pattern()
+</pre></div>
+</td>
+</tr><tr id="section-13">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-13">&#182;</a>
+  </div>
+  
+<p>Identifiers are any sequence of letters, digits, underscores, or dollar signs, not starting with a digit
+This is used in both statements and exprs, so we'll declare it outside:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> identifier = (<span class="k">function</span>()
+        <span class="k">local</span> identifier_char = (lpeg.R(<span class="s">'az'</span>, <span class="s">'AZ'</span>) + lpeg.S(<span class="s">'_$'</span>))
+        <span class="k">return</span> lpeg.C(identifier_char * (identifier_char + lpeg.R(<span class="s">'09'</span>))^0) <span class="k">end</span>)()
+</pre></div>
+</td>
+</tr><tr id="section-14">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-14">&#182;</a>
+  </div>
+  
+<h3>Expressions</h3>
+<p>This builds and returns a pattern that matches an expr</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">expr_pattern</span>()
+</pre></div>
+</td>
+</tr><tr id="section-15">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-15">&#182;</a>
+  </div>
+  
+<p>A number can be expressed in decimal, binary, or hex</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> number = (<span class="k">function</span>()
+            <span class="k">local</span> dec_number = (lpeg.S(<span class="s">'-'</span>)^-1 * lpeg.R(<span class="s">'19'</span>) * lpeg.R(<span class="s">'09'</span>)^0) / <span class="nt">tonumber</span>
+            <span class="k">local</span> hex_number = lpeg.P(<span class="s">'0x'</span>) * lpeg.C(lpeg.R(<span class="s">'09'</span>,<span class="s">'af'</span>,<span class="s">'AF'</span>)^1) / <span class="k">function</span>(s) <span class="k">return</span> <span class="nt">tonumber</span>(s, 16) <span class="k">end</span>
+            <span class="k">local</span> bin_number = lpeg.P(<span class="s">'0b'</span>) * lpeg.C(lpeg.S(<span class="s">'01'</span>)^1) / <span class="k">function</span>(s) <span class="k">return</span> <span class="nt">tonumber</span>(s, 2) <span class="k">end</span>
+            <span class="k">local</span> dec_zero = lpeg.P(<span class="s">'0'</span>) / <span class="nt">tonumber</span>
+            <span class="k">return</span> dec_number + hex_number + bin_number + dec_zero <span class="k">end</span>)()
+</pre></div>
+</td>
+</tr><tr id="section-16">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-16">&#182;</a>
+  </div>
+  
+<p>A string is a quoted sequence of escapes or other characters:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> string_pattern = (<span class="k">function</span>()
+            <span class="k">local</span> escape = lpeg.C(lpeg.P(<span class="s">'\\'</span>) * lpeg.S(<span class="s">'trn0"\\'</span>))
+            <span class="k">return</span> lpeg.Ct(lpeg.Cc(<span class="s">'string'</span>) * lpeg.P(<span class="s">'"'</span>) * lpeg.Ct((lpeg.C(lpeg.P(1)-lpeg.S(<span class="s">'"\\'</span>)) + escape)^1) * <span class="s">'"'</span>) <span class="k">end</span>)()
+</pre></div>
+</td>
+</tr><tr id="section-17">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-17">&#182;</a>
+  </div>
+  
+<p>An expression is a mathematical expression with parens or the standard five operators, with the atoms being:</p>
+
+<ul>
+    <li>numbers</li>
+    <li>identifiers</li>
+    <li>strings</li>
+    <li>array references</li>
+    <li>struct references</li>
+    <li>function calls</li>
+    <li>memory references</li>
+    <li>assignments</li>
+    <li>conditionals</li>
+</ul>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">return</span> lpeg.P{
+        <span class="s">'EXPR'</span>;
+        EXPR = lpeg.Ct( lpeg.Cc(<span class="s">'expr'</span>) * space * (lpeg.V(<span class="s">'TERM'</span>) * (lpeg.C( lpeg.S(<span class="s">'+-'</span>) ) * lpeg.V(<span class="s">'TERM'</span>))^0) * lpeg.S(<span class="s">';'</span>)^-1 ),
+        TERM = lpeg.Ct( lpeg.Cc(<span class="s">'term'</span>) * space * lpeg.V(<span class="s">'FACT'</span>) * (lpeg.C( lpeg.S(<span class="s">'/*&#37;'</span>) ) * lpeg.V(<span class="s">'FACT'</span>))^0 ),
+        FACT = space * (
+            <span class="s">'('</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">')'</span> +
+                lpeg.V(<span class="s">'NEW'</span>) +
+                lpeg.V(<span class="s">'ASSIGN'</span>) +
+                number +
+                lpeg.V(<span class="s">'SHORTCOND'</span>) +
+                lpeg.V(<span class="s">'NAME'</span>) +
+                lpeg.V(<span class="s">'ADDRESS'</span>) +
+                string_pattern) * space,
+
+        NAME = lpeg.Ct( lpeg.Cc(<span class="s">'id'</span>) * identifier * (lpeg.V(<span class="s">'SUBSCRIPT'</span>) + lpeg.V(<span class="s">'PARAMS'</span>) + lpeg.V(<span class="s">'MEMBER'</span>))^-1 ),
+        SUBSCRIPT = lpeg.Ct( lpeg.Cc(<span class="s">'subscript'</span>) * space * <span class="s">'['</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">']'</span> ),
+        PARAMS = lpeg.Ct( lpeg.Cc(<span class="s">'params'</span>) * space * ((<span class="s">'('</span> * space * <span class="s">')'</span>) + (<span class="s">'('</span> * lpeg.V(<span class="s">'EXPR'</span>) * (<span class="s">','</span> * lpeg.V(<span class="s">'EXPR'</span>))^0 * <span class="s">')'</span> )) ),
+        MEMBER = lpeg.Ct( lpeg.Cc(<span class="s">'member'</span>) * space * <span class="s">'.'</span> * identifier * lpeg.V(<span class="s">'SUBSCRIPT'</span>)^-1 ),
+
+        ADDRESS = lpeg.Ct( lpeg.Cc(<span class="s">'address'</span>) * <span class="s">'@{'</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">'}'</span> ),
+
+        ASSIGN = lpeg.Ct( lpeg.Cc(<span class="s">'assign'</span>) * lpeg.V(<span class="s">'LVALUE'</span>) * space * <span class="s">'='</span> * space * lpeg.V(<span class="s">'EXPR'</span>) ),
+        LVALUE = lpeg.Ct( (lpeg.Cc(<span class="s">'id'</span>) * identifier * (lpeg.V(<span class="s">'SUBSCRIPT'</span>) + lpeg.V(<span class="s">'MEMBER'</span>))^-1) ) + lpeg.V(<span class="s">'ADDRESS'</span>),
+        NEW = lpeg.Ct( lpeg.Cc(<span class="s">'new'</span>) * space * <span class="s">'new'</span> * space * identifier ),
+
+        SHORTCOND = lpeg.Ct( lpeg.Cc(<span class="s">'if'</span>) * <span class="s">'('</span> * space * lpeg.V(<span class="s">'EXPR'</span>) * space * <span class="s">'?'</span> * space * lpeg.V(<span class="s">'EXPR'</span>) * space * <span class="s">':'</span> * space * lpeg.V(<span class="s">'EXPR'</span>) * space * <span class="s">')'</span> ),
+    }
+<span class="k">end</span>
+
+<span class="k">local</span> expr = expr_pattern()
+
+<span class="k">function</span> <span class="nf">statement_pattern</span>(expr)
+    <span class="k">return</span> lpeg.P{
+        <span class="s">'STMT'</span>;
+        STMT = lpeg.Ct( lpeg.Cc(<span class="s">'stmt'</span>) *
+                            (lpeg.V(<span class="s">'FUNC'</span>) +
+                                 lpeg.V(<span class="s">'STRUCT'</span>) +
+                                 lpeg.V(<span class="s">'VAR'</span>) +
+                                 lpeg.V(<span class="s">'LOOP'</span>) +
+                                 lpeg.V(<span class="s">'COND'</span>) +
+                                 expr)
+        ),
+
+        BODY = lpeg.Ct( lpeg.Cc(<span class="s">'body'</span>) *
+                            (lpeg.V(<span class="s">'VAR'</span>) +
+                                 lpeg.V(<span class="s">'LOOP'</span>) +
+                                 lpeg.V(<span class="s">'COND'</span>) +
+                                 lpeg.V(<span class="s">'BREAK'</span>) +
+                                 lpeg.V(<span class="s">'RETURN'</span>) +
+                                 expr
+                            )^0 ),
+
+        RETURN = lpeg.Ct( lpeg.Cc(<span class="s">'return'</span>) * space * <span class="s">'return'</span> * space * expr ),
+        BREAK = lpeg.Ct( lpeg.Cc(<span class="s">'break'</span>) * space * <span class="s">'break'</span> * space ),
+
+        VAR = lpeg.Ct( lpeg.Cc(<span class="s">'var'</span>) * space * <span class="s">'var'</span> * space * identifier * lpeg.V(<span class="s">'TYPE'</span>)^-1 * lpeg.V(<span class="s">'INITIAL'</span>)^-1 ),
+        TYPE = lpeg.Ct(lpeg.Cc(<span class="s">'type'</span>) * space * <span class="s">':'</span> * space * identifier),
+        INITIAL = lpeg.Ct(lpeg.Cc(<span class="s">'init'</span>) * space * <span class="s">'='</span> * expr),
+
+        FUNC = lpeg.Ct(
+            lpeg.Cc(<span class="s">'func'</span>) * space *
+                <span class="s">'function'</span> * space *
+                identifier * space *
+                <span class="s">'('</span> * space * lpeg.V(<span class="s">'ARGLIST'</span>)^-1 * space * <span class="s">')'</span> * space *
+                <span class="s">'{'</span> * space * lpeg.V(<span class="s">'BODY'</span>) * space * <span class="s">'}'</span>
+        ),
+        ARGLIST = lpeg.Ct( lpeg.Cc(<span class="s">'args'</span>) * identifier * (space * <span class="s">','</span> * space * identifier)^0 ),
+
+        STRUCT = lpeg.Ct(
+            lpeg.Cc(<span class="s">'struct'</span>) * space *
+                <span class="s">'struct'</span> * space *
+                identifier * space *
+                <span class="s">'{'</span> * space * lpeg.V(<span class="s">'MEMBERLIST'</span>) * space * <span class="s">'}'</span>
+        ),
+        MEMBERLIST = space * lpeg.V(<span class="s">'MEMBER'</span>) * (space * <span class="s">','</span> * lpeg.V(<span class="s">'MEMBER'</span>) * space)^0,
+        MEMBER = lpeg.Ct( lpeg.Cc(<span class="s">'member'</span>) * space * identifier * space * (lpeg.V(<span class="s">'LENGTH'</span>) + lpeg.V(<span class="s">'INITIAL'</span>))^-1),
+        LENGTH = lpeg.Ct( lpeg.Cc(<span class="s">'length'</span>) * space * <span class="s">'('</span> * space * expr * space * <span class="s">')'</span> * space ),
+
+        LOOP = lpeg.Ct(
+            lpeg.Cc(<span class="s">'loop'</span>) * space *
+                <span class="s">'loop'</span> * space *
+                <span class="s">'{'</span> * space * lpeg.V(<span class="s">'BODY'</span>) * space * <span class="s">'}'</span>
+        ),
+
+        COND = lpeg.Ct(
+            lpeg.Cc(<span class="s">'if'</span>) * space *
+            <span class="s">'if'</span> * space *
+                <span class="s">'('</span> * space * expr * space * <span class="s">')'</span> * space *
+                <span class="s">'{'</span> * space * lpeg.V(<span class="s">'BODY'</span>) * space * <span class="s">'}'</span> *
+            (space * <span class="s">'else'</span> * space *
+                 ((<span class="s">'{'</span> * space * lpeg.V(<span class="s">'BODY'</span>) * space * <span class="s">'}'</span>) + lpeg.V(<span class="s">'COND'</span>))
+            )^-1 ),
+    }
+<span class="k">end</span>
+
+<span class="k">local</span> statement = statement_pattern(expr)
+</pre></div>
+</td>
+</tr><tr id="section-18">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-18">&#182;</a>
+  </div>
+  
+<p>We assume src is a list of statements. We parse them (assuming at least one statement) and
+if what we parsed isn't the entire string, then we say so. We know what line we failed on
+because space_pattern has been keeping track for us.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">parse</span>(src)
+    <span class="k">local</span> statements, remainder = (lpeg.Ct(statement^1) * lpeg.Cp()):match(src)
+    <span class="nt">assert</span>(remainder &gt; #src, <span class="s">'Failed to parse! Failed at line '</span> .. current_line())
+    <span class="k">return</span> statements
+<span class="k">end</span>
+
+<span class="k">return</span> { expr = expr, statement = statement, parse = parse }
+</pre></div>
+</td>
+</tr></tbody>
+    </table>
+  </div>
+</body>
+</html>

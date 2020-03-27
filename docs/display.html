@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>../display.lua</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <link rel="stylesheet" media="all" href="locco.css" />
+</head>
+<body>
+  <div id="container">
+    <div id="background"></div>
+    <div id="jump_to">
+  Jump To &hellip;
+  <div id="jump_wrapper">
+  <div id="jump_page">
+  <a class="source" href="cpu.html">../cpu.lua</a>
+  <a class="source" href="display.html">../display.lua</a>
+  <a class="source" href="vasm.html">../vasm.lua</a>
+  <a class="source" href="vasm_test.html">../vasm_test.lua</a>
+  <a class="source" href="vemu.html">../vemu.lua</a>
+  <a class="source" href="vemu_test.html">../vemu_test.lua</a>
+    </div>
+  </div>
+</div>
+
+    <table cellpadding="0" cellspacing="0">
+      <thead>
+        <tr>
+          <th class="docs">
+            <h1>
+              ../display.lua
+            </h1>
+          </th>
+          <th class="code">
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+<tr id="section-1">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-1">&#182;</a>
+  </div>
+  
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>Display = {}
+</pre></div>
+</td>
+</tr><tr id="section-2">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-2">&#182;</a>
+  </div>
+  
+<p>In addition to calling this, you need to set <code>cpu</code></p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Display.new</span>(double)
+    <span class="k">local</span> instance = <span class="nt">setmetatable</span>({}, { __index = Display })
+    <span class="k">local</span> err = <span class="k">nil</span>
+
+    <span class="k">if</span> <span class="o">not</span> Display.initialized <span class="k">then</span>
+        <span class="k">local</span> ret, err = SDL.init(SDL.flags.Video)
+        <span class="k">if</span> <span class="o">not</span> ret <span class="k">then</span> <span class="nt">error</span>(err) <span class="k">end</span>
+
+        Display.image, err = SDL.image.<span class="nt">load</span>(<span class="s">'font.png'</span>)
+        <span class="k">if</span> <span class="o">not</span> Display.image <span class="k">then</span> <span class="nt">error</span>(err) <span class="k">end</span>
+
+        Display.initialized = <span class="k">true</span>
+    <span class="k">end</span>
+
+    <span class="k">local</span> props = { title = <span class="s">'Vulcan'</span>, width = 640, height = 480 }
+    <span class="k">if</span> double <span class="k">then</span>
+        props.width = props.width * 2
+        props.height = props.height * 2
+    <span class="k">end</span>
+
+    instance.window = SDL.createWindow(props)
+
+    instance.renderer, err = SDL.createRenderer(instance.window, -1)
+    <span class="k">if</span> <span class="o">not</span> instance.renderer <span class="k">then</span> <span class="nt">error</span>(err) <span class="k">end</span>
+
+    instance.font, err = instance.renderer:createTextureFromSurface(Display.image)
+    <span class="k">if</span> <span class="o">not</span> instance.font <span class="k">then</span> <span class="nt">error</span>(err) <span class="k">end</span>
+
+    <span class="k">if</span> double <span class="k">then</span>
+        instance.renderer:setLogicalSize(640, 480)
+    <span class="k">end</span>
+
+    <span class="k">return</span> instance
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Display.to_rgb</span>(byte)
+    <span class="k">local</span> red = (byte &gt;&gt; 5)
+    <span class="k">local</span> green = (byte &gt;&gt; 2) &amp; 7
+    <span class="k">local</span> blue = (byte &amp; 3) &lt;&lt; 1
+    <span class="k">if</span> blue &amp; 0x02 <span class="k">then</span> blue = blue + 1 <span class="k">end</span>
+    <span class="k">return</span> (red &lt;&lt; 21) + (green &lt;&lt; 13) + (blue &lt;&lt; 5)
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Display:char</span>(c, x, y, fg, bg)
+    <span class="k">local</span> src = { w=8, h=8, x=(c&#37;64)*8, y=math.floor(c/64)*8 }
+    <span class="k">local</span> dest = { w=8, h=8, x=x*8, y=y*8 }
+    self.font:setColorMod(Display.to_rgb(fg))
+    self.renderer:setDrawColor(Display.to_rgb(bg))
+    self.renderer:fillRect(dest)
+    self.renderer:copy(self.font, src, dest)
+    self.renderer:present()
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Display:loop</span>()
+    <span class="k">for</span> event <span class="k">in</span> SDL.pollEvent() <span class="k">do</span>
+        <span class="k">if</span> event.<span class="nt">type</span> == SDL.event.Quit <span class="k">then</span>
+            self.cpu:hlt()
+        <span class="k">elseif</span> event.<span class="nt">type</span> == SDL.event.KeyDown <span class="o">or</span> event.<span class="nt">type</span> == SDL.event.KeyUp <span class="k">then</span>
+            self.cpu:interrupt(event.keysym.sym, event.state, 1)
+        <span class="k">end</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Display:palette</span>(num)
+    <span class="k">local</span> pico_palette = { 0x00, 0x05, 0x65, 0x11, 0xa8, 0x49, 0xeb, 0xff, 0xe1, 0xf4, 0xfc, 0x1c, 0x37, 0x8e, 0xee, 0xfa }
+    <span class="k">return</span> pico_palette[num]
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Display:refresh</span>()
+</pre></div>
+</td>
+</tr><tr id="section-3">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-3">&#182;</a>
+  </div>
+  
+<p>vram starts at 0x01ac00:
+Two buffers of 80x60x2 text screens: 0x01ac00 and 0x01d180
+2048 bytes of font ram: 0x01f700
+16 bytes of foreground palette: 0x01ff00
+16 bytes of background palette: 0x01ff10</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+    <span class="k">for</span> y=0, 59 <span class="k">do</span>
+        <span class="k">for</span> x=0, 79 <span class="k">do</span>
+            <span class="k">local</span> char = self.cpu:peek(0x01ac00 + x + 80 * y)
+            <span class="k">local</span> color = self.cpu:peek(0x01ac00 + x + 80 * y + 4800)
+            <span class="k">local</span> fg_color = self:palette(1 + (color &amp; 0x0f))
+            <span class="k">local</span> bg_color = self:palette(1 + (color &gt;&gt; 4))
+            self:char(char, x, y, fg_color, bg_color)
+        <span class="k">end</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Display:refresh_address</span>(addr)
+    <span class="k">if</span> addr &gt;= 0x01ac00 <span class="o">and</span> addr &lt; 0x01ac00 + 9600 <span class="k">then</span>
+        <span class="k">local</span> offset = (addr - 0x01ac00) &#37; 4800
+        <span class="k">local</span> char = self.cpu:peek(0x01ac00 + offset)
+        <span class="k">local</span> color = self.cpu:peek(0x01ac00 + offset + 4800)
+        <span class="k">local</span> fg_color = self:palette(1 + (color &amp; 0x0f))
+        <span class="k">local</span> bg_color = self:palette(1 + (color &gt;&gt; 4))
+        self:char(char, offset &#37; 80, math.floor(offset / 80), fg_color, bg_color)
+    <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">return</span> Display
+</pre></div>
+</td>
+</tr></tbody>
+    </table>
+  </div>
+</body>
+</html>

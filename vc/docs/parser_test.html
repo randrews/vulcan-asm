@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>parser_test.lua</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <link rel="stylesheet" media="all" href="locco.css" />
+</head>
+<body>
+  <div id="container">
+    <div id="background"></div>
+    <div id="jump_to">
+  Jump To &hellip;
+  <div id="jump_wrapper">
+  <div id="jump_page">
+  <a class="source" href="compiler.html">compiler.lua</a>
+  <a class="source" href="compiler_test.html">compiler_test.lua</a>
+  <a class="source" href="parser.html">parser.lua</a>
+  <a class="source" href="parser_test.html">parser_test.lua</a>
+    </div>
+  </div>
+</div>
+
+    <table cellpadding="0" cellspacing="0">
+      <thead>
+        <tr>
+          <th class="docs">
+            <h1>
+              parser_test.lua
+            </h1>
+          </th>
+          <th class="code">
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+<tr id="section-1">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-1">&#182;</a>
+  </div>
+  
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
+lpeg = <span class="nt">require</span>(<span class="s">'lpeg'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-2">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-2">&#182;</a>
+  </div>
+  
+<h1>Utility functions</h1>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-3">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-3">&#182;</a>
+  </div>
+  
+<p>Map a function across a table</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">table:map</span>(fn)
+    <span class="k">local</span> t = {}
+    <span class="k">for</span> _, v <span class="k">in</span> <span class="nt">ipairs</span>(self) <span class="k">do</span>
+        table.insert(t, fn(v))
+    <span class="k">end</span>
+    <span class="k">return</span> t
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-4">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-4">&#182;</a>
+  </div>
+  
+<p>Reduce a table with a function</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">table:reduce</span>(fn, sum)
+    <span class="k">local</span> start_idx = 1
+    <span class="k">if</span> <span class="o">not</span> sum <span class="k">then</span>
+        start_idx = 2
+        sum = self[1]
+    <span class="k">end</span>
+
+    <span class="k">for</span> i = start_idx, #self <span class="k">do</span>
+        sum = fn(sum, self[i])
+    <span class="k">end</span>
+
+    <span class="k">return</span> sum
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-5">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-5">&#182;</a>
+  </div>
+  
+<p>Pretty-print an array</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">prettify</span>(t)
+</pre></div>
+</td>
+</tr><tr id="section-6">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-6">&#182;</a>
+  </div>
+  
+<p>It's an empty object or an array</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> t[1] <span class="o">or</span> <span class="o">not</span> <span class="nt">next</span>(t) <span class="k">then</span>
+        <span class="k">local</span> elements = table.map(t, <span class="k">function</span>(el)
+                                       <span class="k">if</span> <span class="nt">type</span>(el) == <span class="s">'table'</span> <span class="k">then</span>
+                                           <span class="k">return</span> prettify(el)
+                                       <span class="k">else</span>
+                                           <span class="k">return</span> string.format(<span class="s">'&#37;s'</span>, el)
+                                       <span class="k">end</span>
+        <span class="k">end</span>)
+
+        <span class="k">return</span> <span class="s">'('</span> .. table.concat(elements, <span class="s">' '</span>) .. <span class="s">')'</span>
+    <span class="k">else</span>
+</pre></div>
+</td>
+</tr><tr id="section-7">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-7">&#182;</a>
+  </div>
+  
+<p>It has a key but that key isn't 1, so it's a hash / object:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">local</span> elements = {}
+        <span class="k">local</span> keys = {}
+
+        <span class="k">for</span> k, _ <span class="k">in</span> <span class="nt">pairs</span>(t) <span class="k">do</span>
+            table.insert(keys, k)
+        <span class="k">end</span>
+
+        table.sort(keys)
+
+        <span class="k">for</span> _, k <span class="k">in</span> <span class="nt">ipairs</span>(keys) <span class="k">do</span>
+            <span class="k">local</span> v = t[k]
+            <span class="k">if</span> <span class="nt">type</span>(v) == <span class="s">'table'</span> <span class="k">then</span>
+                table.insert(elements, k .. <span class="s">'='</span> .. prettify(v))
+            <span class="k">else</span>
+                table.insert(elements, k .. <span class="s">'='</span> .. string.format(<span class="s">'&#37;q'</span>, v))
+            <span class="k">end</span>
+        <span class="k">end</span>
+        <span class="k">return</span> <span class="s">'{'</span> .. table.concat(elements, <span class="s">' '</span>) .. <span class="s">'}'</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-8">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-8">&#182;</a>
+  </div>
+  
+<h1>Expression parsing tests</h1>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+expr = parser.expr
+</pre></div>
+</td>
+</tr><tr id="section-9">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-9">&#182;</a>
+  </div>
+  
+<p>A wrapper for testing that ASTs are equal:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">test</span>(pattern, line, ast)
+    <span class="k">local</span> tree, remainder = (pattern * lpeg.Cp()):match(line)
+    <span class="k">if</span> tree == <span class="k">nil</span> <span class="k">then</span>
+        <span class="nt">print</span>(<span class="s">'FAIL: [['</span> .. line .. <span class="s">']]\n  Failed to parse!'</span>)
+    <span class="k">elseif</span> remainder &lt;= #line <span class="k">then</span>
+        <span class="k">local</span> partial_ast = prettify(tree)
+        <span class="nt">print</span>(<span class="s">'FAIL: [['</span> .. line .. <span class="s">']]\nDid not fully parse!\n  Matched: '</span> .. line:sub(1, remainder-1) .. <span class="s">'\n  Parsed as: '</span> .. partial_ast)
+    <span class="k">elseif</span> tree <span class="k">then</span>
+        <span class="k">local</span> actual_ast = prettify(tree)
+        <span class="k">if</span> actual_ast == ast <span class="k">then</span> <span class="k">return</span> <span class="k">true</span>
+        <span class="k">else</span>
+            <span class="nt">print</span>(<span class="s">'FAIL: [['</span> .. line .. <span class="s">']]\nExpected: '</span> .. ast .. <span class="s">'\n  Actual: '</span> .. actual_ast)
+            <span class="k">return</span> <span class="k">false</span>
+        <span class="k">end</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-10">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-10">&#182;</a>
+  </div>
+  
+<p>Hex number</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[0x10]]</span>, <span class="s">[[(expr (term 16))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-11">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-11">&#182;</a>
+  </div>
+  
+<p>Binary number</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[0b1010]]</span>, <span class="s">[[(expr (term 10))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-12">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-12">&#182;</a>
+  </div>
+  
+<p>Decimal number</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[23]]</span>, <span class="s">[[(expr (term 23))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-13">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-13">&#182;</a>
+  </div>
+  
+<p>Decimal zero</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[0]]</span>, <span class="s">[[(expr (term 0))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-14">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-14">&#182;</a>
+  </div>
+  
+<p>Negative decimal</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[-35]]</span>, <span class="s">[[(expr (term -35))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-15">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-15">&#182;</a>
+  </div>
+  
+<p>Strings</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[["hello"]]</span>, <span class="s">[[(expr (term (string (h e l l o))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-16">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-16">&#182;</a>
+  </div>
+  
+<p>Strings with escapes</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[["hello\""]]</span>, <span class="s">[[(expr (term (string (h e l l o \"))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-17">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-17">&#182;</a>
+  </div>
+  
+<p>Expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[43+17]]</span>, <span class="s">[[(expr (term 43) + (term 17))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-18">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-18">&#182;</a>
+  </div>
+  
+<p>Expressions with negatives</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[43/-17]]</span>, <span class="s">[[(expr (term 43 / -17))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-19">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-19">&#182;</a>
+  </div>
+  
+<p>Multiple terms</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[43+17 - 3]]</span>, <span class="s">[[(expr (term 43) + (term 17) - (term 3))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-20">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-20">&#182;</a>
+  </div>
+  
+<p>Multiplication</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[2*14-3]]</span>, <span class="s">[[(expr (term 2 * 14) - (term 3))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-21">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-21">&#182;</a>
+  </div>
+  
+<p>Sub-expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[2*(14-3)]]</span>, <span class="s">[[(expr (term 2 * (expr (term 14) - (term 3))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-22">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-22">&#182;</a>
+  </div>
+  
+<p>Identifiers in expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[start + 2]]</span>, <span class="s">[[(expr (term (id start)) + (term 2))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-23">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-23">&#182;</a>
+  </div>
+  
+<p>Array references in expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[foo[3] ]]</span>, <span class="s">[[(expr (term (id foo (subscript (expr (term 3))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-24">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-24">&#182;</a>
+  </div>
+  
+<p>Addresses in expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[blah + @{x *4}]]</span>, <span class="s">[[(expr (term (id blah)) + (term (address (expr (term (id x) * 4)))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-25">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-25">&#182;</a>
+  </div>
+  
+<p>Param-less function calls</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[blah()]]</span>, <span class="s">[[(expr (term (id blah (params))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-26">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-26">&#182;</a>
+  </div>
+  
+<p>Unary function calls</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[blah(3)]]</span>, <span class="s">[[(expr (term (id blah (params (expr (term 3))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-27">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-27">&#182;</a>
+  </div>
+  
+<p>Unary function calls with exprs</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[blah(x+4)]]</span>, <span class="s">[[(expr (term (id blah (params (expr (term (id x)) + (term 4))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-28">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-28">&#182;</a>
+  </div>
+  
+<p>Binary function calls</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[blah(a, b)]]</span>, <span class="s">[[(expr (term (id blah (params (expr (term (id a))) (expr (term (id b)))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-29">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-29">&#182;</a>
+  </div>
+  
+<p>Ternary function calls</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[blah(a,b,c)]]</span>, <span class="s">[[(expr (term (id blah (params (expr (term (id a))) (expr (term (id b))) (expr (term (id c)))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-30">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-30">&#182;</a>
+  </div>
+  
+<p>Assignments</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[x = 3]]</span>, <span class="s">[[(expr (term (assign (id x) (expr (term 3)))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-31">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-31">&#182;</a>
+  </div>
+  
+<p>Assignments to array</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[x[2]=3]]</span>, <span class="s">[[(expr (term (assign (id x (subscript (expr (term 2)))) (expr (term 3)))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-32">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-32">&#182;</a>
+  </div>
+  
+<p>Assignments to memory</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[@{ 1500 } = 3]]</span>, <span class="s">[[(expr (term (assign (address (expr (term 1500))) (expr (term 3)))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-33">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-33">&#182;</a>
+  </div>
+  
+<p>Assignments in complex expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[3 + (x = 4) * 2]]</span>, <span class="s">[[(expr (term 3) + (term (expr (term (assign (id x) (expr (term 4))))) * 2))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-34">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-34">&#182;</a>
+  </div>
+  
+<p>Ternary conditionals</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[x = (y ? 3 : 5)]]</span>, <span class="s">[[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3)) (expr (term 5))))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-35">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-35">&#182;</a>
+  </div>
+  
+<p>Member references</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[blah.foo]]</span>, <span class="s">[[(expr (term (id blah (member foo))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-36">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-36">&#182;</a>
+  </div>
+  
+<p>Member array references</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[blah.foo[3] ]]</span>, <span class="s">[[(expr (term (id blah (member foo (subscript (expr (term 3)))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-37">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-37">&#182;</a>
+  </div>
+  
+<p>Member lvalues</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[blah.foo = 7]]</span>, <span class="s">[[(expr (term (assign (id blah (member foo)) (expr (term 7)))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-38">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-38">&#182;</a>
+  </div>
+  
+<p>Member array lvalues</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[blah.foo[3] = 7]]</span>, <span class="s">[[(expr (term (assign (id blah (member foo (subscript (expr (term 3))))) (expr (term 7)))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-39">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-39">&#182;</a>
+  </div>
+  
+<p>Assignments from new</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(expr, <span class="s">[[x = new Player]]</span>, <span class="s">[[(expr (term (assign (id x) (expr (term (new Player))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-40">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-40">&#182;</a>
+  </div>
+  
+<h1>Statement parsing tests</h1>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+statement = parser.statement
+</pre></div>
+</td>
+</tr><tr id="section-41">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-41">&#182;</a>
+  </div>
+  
+<p>Expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[3]]</span>, <span class="s">[[(stmt (expr (term 3)))]]</span>)
+test(statement, <span class="s">[[if(x) {3} else {y=4; foo(7)}]]</span>, <span class="s">[[(stmt (if (expr (term (id x))) (body (expr (term 3))) (body (expr (term (assign (id y) (expr (term 4))))) (expr (term (id foo (params (expr (term 7)))))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-42">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-42">&#182;</a>
+  </div>
+  
+<p>Variable declarations</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[var x]]</span>, <span class="s">[[(stmt (var x))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-43">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-43">&#182;</a>
+  </div>
+  
+<p>Variable declarations with initial value</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[var x = 7]]</span>, <span class="s">[[(stmt (var x (init (expr (term 7)))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-44">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-44">&#182;</a>
+  </div>
+  
+<p>Variable declarations with type</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[var x:Weapon]]</span>, <span class="s">[[(stmt (var x (type Weapon)))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-45">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-45">&#182;</a>
+  </div>
+  
+<p>Variable declarations with type and initial value</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[var x:Weapon = new Weapon]]</span>, <span class="s">[[(stmt (var x (type Weapon) (init (expr (term (new Weapon))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-46">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-46">&#182;</a>
+  </div>
+  
+<p>Function declarations</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[function foo() { }]]</span>, <span class="s">[[(stmt (func foo (body)))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-47">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-47">&#182;</a>
+  </div>
+  
+<p>Function declarations with args</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[function foo(a, b) { }]]</span>, <span class="s">[[(stmt (func foo (args a b) (body)))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-48">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-48">&#182;</a>
+  </div>
+  
+<p>Function declarations with args and body</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[function foo(a, b) { a+b*2; }]]</span>, <span class="s">[[(stmt (func foo (args a b) (body (expr (term (id a)) + (term (id b) * 2)))))]]</span>)
+test(statement, <span class="s">[[function foo(a, b) { var x=a*b; x+2 }]]</span>, <span class="s">[[(stmt (func foo (args a b) (body (var x (init (expr (term (id a) * (id b))))) (expr (term (id x)) + (term 2)))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-49">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-49">&#182;</a>
+  </div>
+  
+<p>Function declarations with return</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[function foo() { return 6 }]]</span>, <span class="s">[[(stmt (func foo (body (return (expr (term 6))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-50">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-50">&#182;</a>
+  </div>
+  
+<p>Struct declarations</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[struct Coord { x, y }]]</span>, <span class="s">[[(stmt (struct Coord (member x) (member y)))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-51">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-51">&#182;</a>
+  </div>
+  
+<p>Struct declarations with initial values</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[struct Coord { x=0, y = 0 }]]</span>, <span class="s">[[(stmt (struct Coord (member x (init (expr (term 0)))) (member y (init (expr (term 0))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-52">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-52">&#182;</a>
+  </div>
+  
+<p>Struct declarations with lengths</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[struct Person { name(16) }]]</span>, <span class="s">[[(stmt (struct Person (member name (length (expr (term 16))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-53">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-53">&#182;</a>
+  </div>
+  
+<p>Loops</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[loop { doThing() }]]</span>, <span class="s">[[(stmt (loop (body (expr (term (id doThing (params)))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-54">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-54">&#182;</a>
+  </div>
+  
+<p>Loops with multiple statements</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[loop { doThing(); doOtherThing }]]</span>, <span class="s">[[(stmt (loop (body (expr (term (id doThing (params)))) (expr (term (id doOtherThing))))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-55">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-55">&#182;</a>
+  </div>
+  
+<p>Loops with breaks</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[loop { doThing(); break }]]</span>, <span class="s">[[(stmt (loop (body (expr (term (id doThing (params)))) (break))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-56">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-56">&#182;</a>
+  </div>
+  
+<p>Conditionals</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[if (y) {3}]]</span>, <span class="s">[[(stmt (if (expr (term (id y))) (body (expr (term 3)))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-57">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-57">&#182;</a>
+  </div>
+  
+<p>Conditionals with else</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[if(y) {3 } else {5}]]</span>, <span class="s">[[(stmt (if (expr (term (id y))) (body (expr (term 3))) (body (expr (term 5)))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-58">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-58">&#182;</a>
+  </div>
+  
+<p>Conditionals with else if</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[if(y) {3 } else if (z) {5}else{7}]]</span>, <span class="s">[[(stmt (if (expr (term (id y))) (body (expr (term 3))) (if (expr (term (id z))) (body (expr (term 5))) (body (expr (term 7))))))]]</span>)
+</pre></div>
+</td>
+</tr></tbody>
+    </table>
+  </div>
+</body>
+</html>

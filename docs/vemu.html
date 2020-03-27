@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>../vemu.lua</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <link rel="stylesheet" media="all" href="locco.css" />
+</head>
+<body>
+  <div id="container">
+    <div id="background"></div>
+    <div id="jump_to">
+  Jump To &hellip;
+  <div id="jump_wrapper">
+  <div id="jump_page">
+  <a class="source" href="cpu.html">../cpu.lua</a>
+  <a class="source" href="display.html">../display.lua</a>
+  <a class="source" href="vasm.html">../vasm.lua</a>
+  <a class="source" href="vasm_test.html">../vasm_test.lua</a>
+  <a class="source" href="vemu.html">../vemu.lua</a>
+  <a class="source" href="vemu_test.html">../vemu_test.lua</a>
+    </div>
+  </div>
+</div>
+
+    <table cellpadding="0" cellspacing="0">
+      <thead>
+        <tr>
+          <th class="docs">
+            <h1>
+              ../vemu.lua
+            </h1>
+          </th>
+          <th class="code">
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+<tr id="section-1">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-1">&#182;</a>
+  </div>
+  
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>SDL = <span class="nt">require</span>(<span class="s">'SDL'</span>)
+SDL.image = <span class="nt">require</span>(<span class="s">'SDL.image'</span>)
+<span class="k">local</span> Display = <span class="nt">require</span>(<span class="s">'display'</span>)
+<span class="k">local</span> CPU = <span class="nt">require</span>(<span class="s">'cpu'</span>)
+
+<span class="k">local</span> random_seed = os.time()
+math.randomseed(random_seed)
+
+<span class="k">local</span> argv = {...}
+<span class="k">if</span> argv[1] <span class="k">then</span>
+    <span class="k">local</span> iterator = io.open(argv[1])
+    <span class="k">local</span> display = Display.new(<span class="k">false</span>)
+    <span class="k">local</span> cpu = CPU.new(display)
+    cpu:<span class="nt">load</span>(iterator:lines())
+    iterator:close()
+    cpu:reset()
+    cpu:run()
+    <span class="nt">print</span>(<span class="s">'Random seed: '</span> .. random_seed)
+    cpu:print_stack()
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr></tbody>
+    </table>
+  </div>
+</body>
+</html>

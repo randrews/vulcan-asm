@@ -1,4 +1,4 @@
-vc = require('vc')
+parser = require('parser')
 lpeg = require('lpeg')
 
 -- # Utility functions
@@ -65,7 +65,7 @@ end
 
 -- # Expression parsing tests
 
-expr = vc.expr
+expr = parser.expr
 
 -- A wrapper for testing that ASTs are equal:
 function test(pattern, line, ast)
@@ -177,7 +177,7 @@ test(expr, [[x = new Player]], [[(expr (term (assign (id x) (expr (term (new Pla
 
 -- # Statement parsing tests
 
-statement = vc.statement
+statement = parser.statement
 
 -- Expressions
 test(statement, [[3]], [[(stmt (expr (term 3)))]])
@@ -232,104 +232,5 @@ test(statement, [[if (y) {3}]], [[(stmt (if (expr (term (id y))) (body (expr (te
 -- Conditionals with else
 test(statement, [[if(y) {3 } else {5}]], [[(stmt (if (expr (term (id y))) (body (expr (term 3))) (body (expr (term 5)))))]])
 
--- # Expression compilation tests
-
-local compile = vc.compile
-
--- ## Utility functions
-
-function compile_test(opts)
-    local src = opts[1]
-    local asm = opts[2]
-    local globals = opts.globals or { print = 'print', new = 'new' }
-    local check = opts.check or (function() end)
-
-    if opts.pending then
-        print('PENDING: ' .. src)
-        return
-    end
-
-    local actual_asm = {}
-    local function emit(str) table.insert(actual_asm, str) end
-    local sym_idx = 0
-    local function gensym() sym_idx = sym_idx + 1; return 'gen' .. sym_idx end
-    local env = { emit = emit, gensym = gensym, globals = globals }
-
-    compile(src, env)
-
-    if not eq(asm, actual_asm) then
-        print('FAIL: Produced different assembly for [[' .. src .. ']]:')
-        print('AST:\n\t' .. prettify(statement:match(src)))
-        print('Expected:')
-        for _,l in ipairs(asm) do print('\t' .. l) end
-        print('Actual:')
-        for _,l in ipairs(actual_asm) do print('\t' .. l) end
-        return
-    end
-
-    check(env)
-end
-
-function eq(tbl1, tbl2)
-    for i = 1, math.max(#tbl1, #tbl2) do
-        if tbl1[i] ~= tbl2[i] then
-            return false
-        end
-    end
-    return true
-end
-
--- ## Test cases
-
--- Simple addition
-compile_test{[[3+4]], {'push 3', 'push 4', 'add', 'hlt'}}
-
--- More complex addition
-compile_test{[[3+4-2]], {'push 3', 'push 4', 'add', 'push 2', 'sub', 'hlt'}}
-
--- Order of operations
-compile_test{[[3+4*2]], {'push 3', 'push 4', 'push 2', 'mul', 'add', 'hlt'}}
-
--- Numbers in other bases
-compile_test{[[0b111 + 0x10]], {'push 7', 'push 16', 'add', 'hlt'}}
-
--- Nested expressions
-compile_test{[[(3+4)*2]], {'push 3', 'push 4', 'add', 'push 2', 'mul', 'hlt'}}
-
--- Globals in expressions
-compile_test{[[x+3]], {'load24 global_x', 'push 3', 'add', 'hlt'},
-    globals = {x = 'global_x'}
-}
-
--- Address references
-compile_test{[[@{map+3*4}]], {'load24 global_map', 'push 3', 'push 4', 'mul', 'add', 'load24', 'hlt'},
-    globals = {map = 'global_map'}
-}
-
--- Array references
-compile_test{[[actors[i-1] ]], {'load24 global_i', 'push 1', 'sub', 'mul 3', 'add global_actors', 'load24', 'hlt'},
-    globals = {actors = 'global_actors', i = 'global_i'}
-}
-
--- Global declarations
-compile_test{[[var foo]], {'gen1: .db 0'},
-    check = function(env)
-        assert(env.globals.foo == 'gen1')
-    end
-}
-
--- Global declarations with initial values
-compile_test{[[var foo = 3*4]], {'push 3', 'push 4', 'mul', 'store24 gen1', 'hlt', 'gen1: .db 0'},
-    check = function(env)
-        assert(env.globals.foo == 'gen1')
-    end
-}
-
--- Multiple statements
-compile_test{[[var x=3; var y=(4)]], {'push 3', 'store24 gen1', 'push 4', 'store24 gen2', 'hlt', 'gen1: .db 0', 'gen2: .db 0'}}
-
--- Assigns to globals
-compile_test{[[foo = 3*4]], {'push 3', 'push 4', 'mul', 'store24 foo', 'hlt'}, globals = {foo = 'foo'}}
-
--- Assigns to globals with subscripts
-compile_test{[[foo[2] = 3*4]], {'push 3', 'push 4', 'mul', 'push 2', 'mul 3', 'add foo', 'store24', 'hlt'}, globals = {foo = 'foo'}}
+-- Conditionals with else if
+test(statement, [[if(y) {3 } else if (z) {5}else{7}]], [[(stmt (if (expr (term (id y))) (body (expr (term 3))) (if (expr (term (id z))) (body (expr (term 5))) (body (expr (term 7))))))]])

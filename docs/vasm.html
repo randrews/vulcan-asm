@@ -2,7 +2,7 @@
 
 <html>
 <head>
-  <title>vasm.lua</title>
+  <title>../vasm.lua</title>
   <meta http-equiv="content-type" content="text/html; charset=UTF-8">
   <link rel="stylesheet" media="all" href="locco.css" />
 </head>
@@ -13,8 +13,12 @@
   Jump To &hellip;
   <div id="jump_wrapper">
   <div id="jump_page">
-  <a class="source" href="vasm.html">vasm.lua</a>
-  <a class="source" href="vc.html">vc.lua</a>
+  <a class="source" href="cpu.html">../cpu.lua</a>
+  <a class="source" href="display.html">../display.lua</a>
+  <a class="source" href="vasm.html">../vasm.lua</a>
+  <a class="source" href="vasm_test.html">../vasm_test.lua</a>
+  <a class="source" href="vemu.html">../vemu.lua</a>
+  <a class="source" href="vemu_test.html">../vemu_test.lua</a>
     </div>
   </div>
 </div>
@@ -24,7 +28,7 @@
         <tr>
           <th class="docs">
             <h1>
-              vasm.lua
+              ../vasm.lua
             </h1>
           </th>
           <th class="code">
@@ -262,8 +266,9 @@ that as meaning "relative to the first byte of this instruction:"</p>
 </span>        <span class="s">'jmpr'</span>, <span class="s">'jmp'</span>, <span class="s">'call'</span>, <span class="s">'ret'</span>, <span class="s">'brz'</span>, <span class="s">'brnz'</span>, <span class="s">'brgt'</span>, <span class="s">'brlt'</span>, <span class="c">-- Branching and jumping
 </span>        <span class="s">'load24'</span>, <span class="s">'load16'</span>, <span class="s">'load'</span>, <span class="c">-- Loading from memory
 </span>        <span class="s">'store24'</span>, <span class="s">'store16'</span>, <span class="s">'store'</span>, <span class="c">-- Storing to memory
-</span>        <span class="s">'inton'</span>, <span class="s">'intoff'</span>, <span class="s">'setiv'</span>
-    }
+</span>        <span class="s">'inton'</span>, <span class="s">'intoff'</span>, <span class="s">'setiv'</span>, <span class="c">-- Interrupt handling
+</span>        <span class="s">'frame'</span>, <span class="s">'local'</span>, <span class="s">'setlocal'</span> <span class="c">-- Stack frame variables
+</span>    }
 </pre></div>
 </td>
 </tr><tr id="section-14">
@@ -870,7 +875,10 @@ least-significant byte at the lowest address, then the more significant bytes fo
                 store24 = 34,
                 inton = 35,
                 intoff = 36,
-                setiv = 37
+                setiv = 37,
+                frame = 38,
+                [<span class="s">'local'</span>] = 39,
+                setlocal = 40
             }
 
             <span class="k">local</span> instruction = opcode_values[line.opcode] <span class="o">or</span> <span class="nt">error</span>(<span class="s">'Unrecognized opcode on line '</span> .. line.line .. <span class="s">': '</span> .. line.opcode)

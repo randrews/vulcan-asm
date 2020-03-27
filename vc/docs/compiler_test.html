@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>compiler_test.lua</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <link rel="stylesheet" media="all" href="locco.css" />
+</head>
+<body>
+  <div id="container">
+    <div id="background"></div>
+    <div id="jump_to">
+  Jump To &hellip;
+  <div id="jump_wrapper">
+  <div id="jump_page">
+  <a class="source" href="compiler.html">compiler.lua</a>
+  <a class="source" href="compiler_test.html">compiler_test.lua</a>
+  <a class="source" href="parser.html">parser.lua</a>
+  <a class="source" href="parser_test.html">parser_test.lua</a>
+    </div>
+  </div>
+</div>
+
+    <table cellpadding="0" cellspacing="0">
+      <thead>
+        <tr>
+          <th class="docs">
+            <h1>
+              compiler_test.lua
+            </h1>
+          </th>
+          <th class="code">
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+<tr id="section-1">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-1">&#182;</a>
+  </div>
+  
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>compiler = <span class="nt">require</span>(<span class="s">'compiler'</span>)
+parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-2">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-2">&#182;</a>
+  </div>
+  
+<h1>Utility functions</h1>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-3">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-3">&#182;</a>
+  </div>
+  
+<p>Map a function across a table</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">table:map</span>(fn)
+    <span class="k">local</span> t = {}
+    <span class="k">for</span> _, v <span class="k">in</span> <span class="nt">ipairs</span>(self) <span class="k">do</span>
+        table.insert(t, fn(v))
+    <span class="k">end</span>
+    <span class="k">return</span> t
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-4">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-4">&#182;</a>
+  </div>
+  
+<p>Pretty-print an array</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">prettify</span>(t)
+</pre></div>
+</td>
+</tr><tr id="section-5">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-5">&#182;</a>
+  </div>
+  
+<p>It's an empty object or an array</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> t[1] <span class="o">or</span> <span class="o">not</span> <span class="nt">next</span>(t) <span class="k">then</span>
+        <span class="k">local</span> elements = table.map(t, <span class="k">function</span>(el)
+                                       <span class="k">if</span> <span class="nt">type</span>(el) == <span class="s">'table'</span> <span class="k">then</span>
+                                           <span class="k">return</span> prettify(el)
+                                       <span class="k">else</span>
+                                           <span class="k">return</span> string.format(<span class="s">'&#37;s'</span>, el)
+                                       <span class="k">end</span>
+        <span class="k">end</span>)
+
+        <span class="k">return</span> <span class="s">'('</span> .. table.concat(elements, <span class="s">' '</span>) .. <span class="s">')'</span>
+    <span class="k">else</span>
+</pre></div>
+</td>
+</tr><tr id="section-6">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-6">&#182;</a>
+  </div>
+  
+<p>It has a key but that key isn't 1, so it's a hash / object:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">local</span> elements = {}
+        <span class="k">local</span> keys = {}
+
+        <span class="k">for</span> k, _ <span class="k">in</span> <span class="nt">pairs</span>(t) <span class="k">do</span>
+            table.insert(keys, k)
+        <span class="k">end</span>
+
+        table.sort(keys)
+
+        <span class="k">for</span> _, k <span class="k">in</span> <span class="nt">ipairs</span>(keys) <span class="k">do</span>
+            <span class="k">local</span> v = t[k]
+            <span class="k">if</span> <span class="nt">type</span>(v) == <span class="s">'table'</span> <span class="k">then</span>
+                table.insert(elements, k .. <span class="s">'='</span> .. prettify(v))
+            <span class="k">else</span>
+                table.insert(elements, k .. <span class="s">'='</span> .. string.format(<span class="s">'&#37;q'</span>, v))
+            <span class="k">end</span>
+        <span class="k">end</span>
+        <span class="k">return</span> <span class="s">'{'</span> .. table.concat(elements, <span class="s">' '</span>) .. <span class="s">'}'</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-7">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-7">&#182;</a>
+  </div>
+  
+<p>Return whether two arrays are (shallow) equal</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">eq</span>(tbl1, tbl2)
+    <span class="k">for</span> i = 1, math.max(#tbl1, #tbl2) <span class="k">do</span>
+        <span class="k">if</span> tbl1[i] ~= tbl2[i] <span class="k">then</span>
+            <span class="k">return</span> <span class="k">false</span>
+        <span class="k">end</span>
+    <span class="k">end</span>
+    <span class="k">return</span> <span class="k">true</span>
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">test</span>(opts)
+    <span class="k">local</span> src = opts[1]
+    <span class="k">local</span> asm = opts[2]
+    <span class="k">local</span> globals = opts.globals <span class="o">or</span> { <span class="nt">print</span> = <span class="s">'print'</span>, new = <span class="s">'new'</span> }
+    <span class="k">local</span> check = opts.check <span class="o">or</span> (<span class="k">function</span>() <span class="k">end</span>)
+
+    <span class="k">if</span> opts.pending <span class="k">then</span>
+        <span class="nt">print</span>(<span class="s">'PENDING: '</span> .. src)
+        <span class="k">return</span>
+    <span class="k">end</span>
+
+    <span class="k">local</span> actual_asm = {}
+    <span class="k">local</span> <span class="k">function</span> <span class="nf">emit</span>(str) table.insert(actual_asm, str) <span class="k">end</span>
+    <span class="k">local</span> sym_idx = 0
+    <span class="k">local</span> <span class="k">function</span> <span class="nf">gensym</span>() sym_idx = sym_idx + 1; <span class="k">return</span> <span class="s">'gen'</span> .. sym_idx <span class="k">end</span>
+    <span class="k">local</span> env = { emit = emit, gensym = gensym, globals = globals }
+
+    <span class="k">local</span> statements = parser.parse(src)
+    compiler.compile(statements, env)
+
+    <span class="k">if</span> <span class="o">not</span> eq(asm, actual_asm) <span class="k">then</span>
+        <span class="nt">print</span>(<span class="s">'FAIL: Produced different assembly for [['</span> .. src .. <span class="s">']]:'</span>)
+        <span class="nt">print</span>(<span class="s">'AST:\n\t'</span> .. prettify(statements))
+        <span class="nt">print</span>(<span class="s">'Expected:'</span>)
+        <span class="k">for</span> _,l <span class="k">in</span> <span class="nt">ipairs</span>(asm) <span class="k">do</span> <span class="nt">print</span>(<span class="s">'\t'</span> .. l) <span class="k">end</span>
+        <span class="nt">print</span>(<span class="s">'Actual:'</span>)
+        <span class="k">for</span> _,l <span class="k">in</span> <span class="nt">ipairs</span>(actual_asm) <span class="k">do</span> <span class="nt">print</span>(<span class="s">'\t'</span> .. l) <span class="k">end</span>
+        <span class="k">return</span>
+    <span class="k">end</span>
+
+    check(env)
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-8">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-8">&#182;</a>
+  </div>
+  
+<h1>Expression compilation tests</h1>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-9">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-9">&#182;</a>
+  </div>
+  
+<h2>Test cases</h2>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-10">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-10">&#182;</a>
+  </div>
+  
+<p>Simple addition</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[3+4]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'add'</span>, <span class="s">'hlt'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-11">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-11">&#182;</a>
+  </div>
+  
+<p>More complex addition</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[3+4-2]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'add'</span>, <span class="s">'push 2'</span>, <span class="s">'sub'</span>, <span class="s">'hlt'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-12">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-12">&#182;</a>
+  </div>
+  
+<p>Order of operations</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[3+4*2]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'push 2'</span>, <span class="s">'mul'</span>, <span class="s">'add'</span>, <span class="s">'hlt'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-13">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-13">&#182;</a>
+  </div>
+  
+<p>Numbers in other bases</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[0b111 + 0x10]]</span>, {<span class="s">'push 7'</span>, <span class="s">'push 16'</span>, <span class="s">'add'</span>, <span class="s">'hlt'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-14">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-14">&#182;</a>
+  </div>
+  
+<p>Nested expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[(3+4)*2]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'add'</span>, <span class="s">'push 2'</span>, <span class="s">'mul'</span>, <span class="s">'hlt'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-15">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-15">&#182;</a>
+  </div>
+  
+<p>Globals in expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[x+3]]</span>, {<span class="s">'load24 global_x'</span>, <span class="s">'push 3'</span>, <span class="s">'add'</span>, <span class="s">'hlt'</span>},
+    globals = {x = <span class="s">'global_x'</span>}
+}
+</pre></div>
+</td>
+</tr><tr id="section-16">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-16">&#182;</a>
+  </div>
+  
+<p>Address references</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[@{map+3*4}]]</span>, {<span class="s">'load24 global_map'</span>, <span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'mul'</span>, <span class="s">'add'</span>, <span class="s">'load24'</span>, <span class="s">'hlt'</span>},
+    globals = {map = <span class="s">'global_map'</span>}
+}
+</pre></div>
+</td>
+</tr><tr id="section-17">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-17">&#182;</a>
+  </div>
+  
+<p>Array references</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[actors[i-1] ]]</span>, {<span class="s">'load24 global_i'</span>, <span class="s">'push 1'</span>, <span class="s">'sub'</span>, <span class="s">'mul 3'</span>, <span class="s">'add global_actors'</span>, <span class="s">'load24'</span>, <span class="s">'hlt'</span>},
+    globals = {actors = <span class="s">'global_actors'</span>, i = <span class="s">'global_i'</span>}
+}
+</pre></div>
+</td>
+</tr><tr id="section-18">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-18">&#182;</a>
+  </div>
+  
+<p>Global declarations</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[var foo]]</span>, {<span class="s">'gen1: .db 0'</span>},
+    check = <span class="k">function</span>(env)
+        <span class="nt">assert</span>(env.globals.foo == <span class="s">'gen1'</span>)
+    <span class="k">end</span>
+}
+</pre></div>
+</td>
+</tr><tr id="section-19">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-19">&#182;</a>
+  </div>
+  
+<p>Global declarations with initial values</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[var foo = 3*4]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'mul'</span>, <span class="s">'store24 gen1'</span>, <span class="s">'hlt'</span>, <span class="s">'gen1: .db 0'</span>},
+    check = <span class="k">function</span>(env)
+        <span class="nt">assert</span>(env.globals.foo == <span class="s">'gen1'</span>)
+    <span class="k">end</span>
+}
+</pre></div>
+</td>
+</tr><tr id="section-20">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-20">&#182;</a>
+  </div>
+  
+<p>Multiple statements</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[var x=3; var y=(4)]]</span>, {<span class="s">'push 3'</span>, <span class="s">'store24 gen1'</span>, <span class="s">'push 4'</span>, <span class="s">'store24 gen2'</span>, <span class="s">'hlt'</span>, <span class="s">'gen1: .db 0'</span>, <span class="s">'gen2: .db 0'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-21">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-21">&#182;</a>
+  </div>
+  
+<p>Assigns to globals</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[foo = 3*4]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'mul'</span>, <span class="s">'store24 foo'</span>, <span class="s">'hlt'</span>}, globals = {foo = <span class="s">'foo'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-22">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-22">&#182;</a>
+  </div>
+  
+<p>Assigns to globals with subscripts</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[foo[2] = 3*4]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'mul'</span>, <span class="s">'push 2'</span>, <span class="s">'mul 3'</span>, <span class="s">'add foo'</span>, <span class="s">'store24'</span>, <span class="s">'hlt'</span>}, globals = {foo = <span class="s">'foo'</span>}}
+</pre></div>
+</td>
+</tr></tbody>
+    </table>
+  </div>
+</body>
+</html>

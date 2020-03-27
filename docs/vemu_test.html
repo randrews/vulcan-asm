@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>../vemu_test.lua</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <link rel="stylesheet" media="all" href="locco.css" />
+</head>
+<body>
+  <div id="container">
+    <div id="background"></div>
+    <div id="jump_to">
+  Jump To &hellip;
+  <div id="jump_wrapper">
+  <div id="jump_page">
+  <a class="source" href="cpu.html">../cpu.lua</a>
+  <a class="source" href="display.html">../display.lua</a>
+  <a class="source" href="vasm.html">../vasm.lua</a>
+  <a class="source" href="vasm_test.html">../vasm_test.lua</a>
+  <a class="source" href="vemu.html">../vemu.lua</a>
+  <a class="source" href="vemu_test.html">../vemu_test.lua</a>
+    </div>
+  </div>
+</div>
+
+    <table cellpadding="0" cellspacing="0">
+      <thead>
+        <tr>
+          <th class="docs">
+            <h1>
+              ../vemu_test.lua
+            </h1>
+          </th>
+          <th class="code">
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+<tr id="section-1">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-1">&#182;</a>
+  </div>
+  
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="nt">dofile</span>(<span class="s">'vemu.lua'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-2">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-2">&#182;</a>
+  </div>
+  
+<p>Fake an iterator from a string</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">iterator</span>(str)
+    <span class="k">return</span> <span class="k">function</span>()
+        <span class="k">if</span> str == <span class="s">''</span> <span class="k">then</span> <span class="k">return</span> <span class="k">nil</span> <span class="k">end</span>
+        <span class="k">local</span> endl = str:find(<span class="s">'\n'</span>)
+        <span class="k">if</span> <span class="o">not</span> endl <span class="k">then</span> endl = #str+1 <span class="k">end</span>
+        <span class="k">local</span> current_line = str:sub(1, endl-1)
+        str = str:sub(endl + 1)
+        <span class="k">return</span> current_line
+    <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-3">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-3">&#182;</a>
+  </div>
+  
+<p>Initial state</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+<span class="nt">assert</span>(cpu.stack[0] == 0)
+<span class="nt">assert</span>(cpu.stack[2047] == 2047)
+<span class="nt">assert</span>(cpu.stack[2048] == <span class="k">nil</span>)
+<span class="nt">assert</span>(cpu.mem[0] ~= <span class="k">nil</span>)
+<span class="nt">assert</span>(cpu.mem[131071] ~= <span class="k">nil</span>)
+<span class="nt">assert</span>(cpu.mem[131072] == <span class="k">nil</span>)
+<span class="nt">assert</span>(cpu.call == 2047)
+<span class="nt">assert</span>(cpu.data == 2047)
+</pre></div>
+</td>
+</tr><tr id="section-4">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-4">&#182;</a>
+  </div>
+  
+<p>State after pushing data</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:push_data(37)
+cpu:push_data(45)
+<span class="nt">assert</span>(cpu.stack[0] == 37)
+<span class="nt">assert</span>(cpu.stack[1] == 45)
+<span class="nt">assert</span>(cpu.call == 2047)
+<span class="nt">assert</span>(cpu.data == 1)
+</pre></div>
+</td>
+</tr><tr id="section-5">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-5">&#182;</a>
+  </div>
+  
+<p>State after pushing return addresses</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:push_call(37)
+cpu:push_call(45)
+<span class="nt">assert</span>(cpu.stack[2047] == 2047) <span class="c">-- First frame prev
+</span><span class="nt">assert</span>(cpu.stack[2046] == 0) <span class="c">-- First frame ret
+</span><span class="nt">assert</span>(cpu.stack[2045] == 0) <span class="c">-- First frame locals
+</span>
+<span class="nt">assert</span>(cpu.stack[2044] == 2047) <span class="c">-- Second frame prev
+</span><span class="nt">assert</span>(cpu.stack[2043] == 37) <span class="c">-- Second frame ret
+</span><span class="nt">assert</span>(cpu.stack[2042] == 0) <span class="c">-- Second frame locals
+</span>
+<span class="nt">assert</span>(cpu.stack[2041] == 2044) <span class="c">-- Third frame prev
+</span><span class="nt">assert</span>(cpu.stack[2040] == 45) <span class="c">-- Third frame ret
+</span><span class="nt">assert</span>(cpu.stack[2039] == 0) <span class="c">-- Third frame locals
+</span><span class="nt">assert</span>(cpu.call == 2041) <span class="c">-- Pointing at start of second frame
+</span><span class="nt">assert</span>(cpu.data == 2047)
+</pre></div>
+</td>
+</tr><tr id="section-6">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-6">&#182;</a>
+  </div>
+  
+<p>Pushing and then popping data</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:push_data(47)
+cpu:push_data(32)
+<span class="nt">assert</span>(cpu:pop_data() == 32)
+<span class="nt">assert</span>(cpu:pop_data() == 47)
+<span class="nt">assert</span>(cpu.data == 2047)
+</pre></div>
+</td>
+</tr><tr id="section-7">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-7">&#182;</a>
+  </div>
+  
+<p>Reading and writing to memory</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:poke(37, 45)
+<span class="nt">assert</span>(cpu.mem[37] == 45)
+<span class="nt">assert</span>(cpu:peek(37) == 45)
+</pre></div>
+</td>
+</tr><tr id="section-8">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-8">&#182;</a>
+  </div>
+  
+<p>Masking addresses to only the main memory range</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:poke(0xffffff, 47)
+<span class="nt">assert</span>(cpu.mem[0x01ffff] == 47)
+<span class="nt">assert</span>(cpu:peek(0xffffff) == 47)
+<span class="nt">assert</span>(cpu:peek(0x01ffff) == 47)
+</pre></div>
+</td>
+</tr><tr id="section-9">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-9">&#182;</a>
+  </div>
+  
+<p>Resetting the CPU</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu.pc = 1000
+cpu.halted = <span class="k">true</span>
+cpu:reset()
+<span class="nt">assert</span>(cpu.pc == 256)
+<span class="nt">assert</span>(<span class="o">not</span> cpu.halted)
+</pre></div>
+</td>
+</tr><tr id="section-10">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-10">&#182;</a>
+  </div>
+  
+<p>Running simple ASM</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:<span class="nt">load</span>(iterator(<span class="s">[[
+    .org 256
+    push 2
+    add 2
+    hlt
+]]</span>))
+cpu:run()
+<span class="nt">assert</span>(cpu:pop_data() == 4)
+</pre></div>
+</td>
+</tr><tr id="section-11">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-11">&#182;</a>
+  </div>
+  
+<p>Decoding instructions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+<span class="nt">assert</span>(cpu:decode(17) == <span class="s">'swap'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-12">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-12">&#182;</a>
+  </div>
+  
+<p>Fetching instructions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:<span class="nt">load</span>(iterator(<span class="s">[[
+    .org 256
+    push 2
+]]</span>))
+<span class="nt">assert</span>(cpu:fetch() == <span class="s">'push'</span>)
+<span class="nt">assert</span>(cpu.next_pc == 258)
+<span class="nt">assert</span>(cpu:pop_data() == 2)
+</pre></div>
+</td>
+</tr><tr id="section-13">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-13">&#182;</a>
+  </div>
+  
+<p>A call instruction</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu.next_pc = 10
+cpu:push_data(35)
+cpu:_call()
+<span class="nt">assert</span>(cpu:pop_call() == 10)
+<span class="nt">assert</span>(cpu.next_pc == 35)
+</pre></div>
+</td>
+</tr><tr id="section-14">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-14">&#182;</a>
+  </div>
+  
+<p>Stack frame structure</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:<span class="nt">load</span>(iterator(<span class="s">[[
+    .org 256
+    call blah
+blah: push 3
+    hlt
+]]</span>))
+cpu:run()
+<span class="nt">assert</span>(cpu:pop_data() == 3)
+<span class="nt">assert</span>(cpu.call == 2044)
+<span class="nt">assert</span>(cpu.stack[cpu.call] == 2047)
+<span class="nt">assert</span>(cpu.stack[cpu.call-1] == 260)
+<span class="nt">assert</span>(cpu.stack[cpu.call-2] == 0)
+</pre></div>
+</td>
+</tr><tr id="section-15">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-15">&#182;</a>
+  </div>
+  
+<p>Returning from calls</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:<span class="nt">load</span>(iterator(<span class="s">[[
+    .org 256
+    push 3
+    call blah
+    hlt
+blah: mul 2
+    ret
+]]</span>))
+cpu:run()
+<span class="nt">assert</span>(cpu:pop_data() == 6)
+<span class="nt">assert</span>(cpu.call == 2047)
+</pre></div>
+</td>
+</tr><tr id="section-16">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-16">&#182;</a>
+  </div>
+  
+<p>Setting frame size</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:<span class="nt">load</span>(iterator(<span class="s">[[
+    .org 256
+    call blah
+blah: frame 3
+    hlt
+]]</span>))
+cpu:run()
+<span class="nt">assert</span>(cpu.call == 2044)
+<span class="nt">assert</span>(cpu.stack[cpu.call] == 2047)
+<span class="nt">assert</span>(cpu.stack[cpu.call-1] == 260)
+<span class="nt">assert</span>(cpu.stack[cpu.call-2] == 3)
+</pre></div>
+</td>
+</tr><tr id="section-17">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-17">&#182;</a>
+  </div>
+  
+<p>Setting frame locals</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:<span class="nt">load</span>(iterator(<span class="s">[[
+    .org 256
+    call blah
+blah: frame 3
+    push 7
+    setlocal 1
+    push 2
+    setlocal 0
+    hlt
+]]</span>))
+cpu:run()
+<span class="nt">assert</span>(cpu.call == 2044)
+<span class="nt">assert</span>(cpu.stack[cpu.call] == 2047)
+<span class="nt">assert</span>(cpu.stack[cpu.call-1] == 260)
+<span class="nt">assert</span>(cpu.stack[cpu.call-2] == 3)
+<span class="nt">assert</span>(cpu.stack[cpu.call-3] == 2)
+<span class="nt">assert</span>(cpu.stack[cpu.call-4] == 7)
+</pre></div>
+</td>
+</tr><tr id="section-18">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-18">&#182;</a>
+  </div>
+  
+<p>Getting frame locals</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:<span class="nt">load</span>(iterator(<span class="s">[[
+    .org 256
+    call blah
+blah: frame 3
+    push 7
+    setlocal 1
+    push 2
+    setlocal 0
+    local 1
+    mul 2
+    hlt
+]]</span>))
+cpu:run()
+<span class="nt">assert</span>(cpu:pop_data() == 14)
+</pre></div>
+</td>
+</tr><tr id="section-19">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-19">&#182;</a>
+  </div>
+  
+<p>Top frame locals</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:<span class="nt">load</span>(iterator(<span class="s">[[
+    .org 256
+    frame 2
+    push 5
+    setlocal 1
+    push 12
+    local 1
+    hlt
+]]</span>))
+cpu:run()
+<span class="nt">assert</span>(cpu:pop_data() == 5)
+<span class="nt">assert</span>(cpu:pop_data() == 12)
+</pre></div>
+</td>
+</tr><tr id="section-20">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-20">&#182;</a>
+  </div>
+  
+<p>Calls after locals</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:<span class="nt">load</span>(iterator(<span class="s">[[
+    .org 256
+    frame 2
+    push 5
+    setlocal 1
+    call blah
+blah: frame 2
+    push 3
+    setlocal 1
+    hlt
+]]</span>))
+cpu:run()
+<span class="nt">assert</span>(cpu.call == 2042)
+<span class="nt">assert</span>(cpu.stack[2047] == 2047) <span class="c">-- First frame
+</span><span class="nt">assert</span>(cpu.stack[2046] == 0)
+<span class="nt">assert</span>(cpu.stack[2045] == 2)
+<span class="nt">assert</span>(cpu.stack[2044] == 0)
+<span class="nt">assert</span>(cpu.stack[2043] == 5)
+
+<span class="nt">assert</span>(cpu.stack[cpu.call] == 2047) <span class="c">-- Second frame
+</span><span class="nt">assert</span>(cpu.stack[cpu.call-1] == 266)
+<span class="nt">assert</span>(cpu.stack[cpu.call-2] == 2)
+<span class="nt">assert</span>(cpu.stack[cpu.call-3] == 0)
+<span class="nt">assert</span>(cpu.stack[cpu.call-4] == 3)
+</pre></div>
+</td>
+</tr><tr id="section-21">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-21">&#182;</a>
+  </div>
+  
+<p>Out-of-range frame locals</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">local</span> cpu = CPU.new()
+cpu:<span class="nt">load</span>(iterator(<span class="s">[[
+    .org 256
+    frame 3
+    local 7
+    hlt
+]]</span>))
+cpu:run()
+<span class="nt">assert</span>(cpu:pop_data() == 0)
+</pre></div>
+</td>
+</tr></tbody>
+    </table>
+  </div>
+</body>
+</html>
