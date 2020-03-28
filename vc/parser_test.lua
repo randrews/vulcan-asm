@@ -208,6 +208,9 @@ test(statement, [[function foo(a, b) { var x=a*b; x+2 }]], [[(stmt (func foo (ar
 -- Function declarations with return
 test(statement, [[function foo() { return 6 }]], [[(stmt (func foo (body (return (expr (term 6))))))]])
 
+-- Void return
+test(statement, [[function foo() { return }]], [[(stmt (func foo (body (return))))]])
+
 -- Struct declarations
 test(statement, [[struct Coord { x, y }]], [[(stmt (struct Coord (member x) (member y)))]])
 

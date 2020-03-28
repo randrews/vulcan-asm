@@ -792,6 +792,20 @@ test(statement, <span class="s">[[function foo(a, b) { var x=a*b; x+2 }]]</span>
     <a class="pilcrow" href="#section-50">&#182;</a>
   </div>
   
+<p>Void return</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test(statement, <span class="s">[[function foo() { return }]]</span>, <span class="s">[[(stmt (func foo (body (return))))]]</span>)
+</pre></div>
+</td>
+</tr><tr id="section-51">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-51">&#182;</a>
+  </div>
+  
 <p>Struct declarations</p>
 
 
@@ -800,10 +814,10 @@ test(statement, <span class="s">[[function foo(a, b) { var x=a*b; x+2 }]]</span>
   <div class="highlight"><pre>test(statement, <span class="s">[[struct Coord { x, y }]]</span>, <span class="s">[[(stmt (struct Coord (member x) (member y)))]]</span>)
 </pre></div>
 </td>
-</tr><tr id="section-51">
+</tr><tr id="section-52">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-51">&#182;</a>
+    <a class="pilcrow" href="#section-52">&#182;</a>
   </div>
   
 <p>Struct declarations with initial values</p>
@@ -814,10 +828,10 @@ test(statement, <span class="s">[[function foo(a, b) { var x=a*b; x+2 }]]</span>
   <div class="highlight"><pre>test(statement, <span class="s">[[struct Coord { x=0, y = 0 }]]</span>, <span class="s">[[(stmt (struct Coord (member x (init (expr (term 0)))) (member y (init (expr (term 0))))))]]</span>)
 </pre></div>
 </td>
-</tr><tr id="section-52">
+</tr><tr id="section-53">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-52">&#182;</a>
+    <a class="pilcrow" href="#section-53">&#182;</a>
   </div>
   
 <p>Struct declarations with lengths</p>
@@ -828,10 +842,10 @@ test(statement, <span class="s">[[function foo(a, b) { var x=a*b; x+2 }]]</span>
   <div class="highlight"><pre>test(statement, <span class="s">[[struct Person { name(16) }]]</span>, <span class="s">[[(stmt (struct Person (member name (length (expr (term 16))))))]]</span>)
 </pre></div>
 </td>
-</tr><tr id="section-53">
+</tr><tr id="section-54">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-53">&#182;</a>
+    <a class="pilcrow" href="#section-54">&#182;</a>
   </div>
   
 <p>Loops</p>
@@ -842,10 +856,10 @@ test(statement, <span class="s">[[function foo(a, b) { var x=a*b; x+2 }]]</span>
   <div class="highlight"><pre>test(statement, <span class="s">[[loop { doThing() }]]</span>, <span class="s">[[(stmt (loop (body (expr (term (id doThing (params)))))))]]</span>)
 </pre></div>
 </td>
-</tr><tr id="section-54">
+</tr><tr id="section-55">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-54">&#182;</a>
+    <a class="pilcrow" href="#section-55">&#182;</a>
   </div>
   
 <p>Loops with multiple statements</p>
@@ -856,10 +870,10 @@ test(statement, <span class="s">[[function foo(a, b) { var x=a*b; x+2 }]]</span>
   <div class="highlight"><pre>test(statement, <span class="s">[[loop { doThing(); doOtherThing }]]</span>, <span class="s">[[(stmt (loop (body (expr (term (id doThing (params)))) (expr (term (id doOtherThing))))))]]</span>)
 </pre></div>
 </td>
-</tr><tr id="section-55">
+</tr><tr id="section-56">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-55">&#182;</a>
+    <a class="pilcrow" href="#section-56">&#182;</a>
   </div>
   
 <p>Loops with breaks</p>
@@ -870,10 +884,10 @@ test(statement, <span class="s">[[function foo(a, b) { var x=a*b; x+2 }]]</span>
   <div class="highlight"><pre>test(statement, <span class="s">[[loop { doThing(); break }]]</span>, <span class="s">[[(stmt (loop (body (expr (term (id doThing (params)))) (break))))]]</span>)
 </pre></div>
 </td>
-</tr><tr id="section-56">
+</tr><tr id="section-57">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-56">&#182;</a>
+    <a class="pilcrow" href="#section-57">&#182;</a>
   </div>
   
 <p>Conditionals</p>
@@ -884,10 +898,10 @@ test(statement, <span class="s">[[function foo(a, b) { var x=a*b; x+2 }]]</span>
   <div class="highlight"><pre>test(statement, <span class="s">[[if (y) {3}]]</span>, <span class="s">[[(stmt (if (expr (term (id y))) (body (expr (term 3)))))]]</span>)
 </pre></div>
 </td>
-</tr><tr id="section-57">
+</tr><tr id="section-58">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-57">&#182;</a>
+    <a class="pilcrow" href="#section-58">&#182;</a>
   </div>
   
 <p>Conditionals with else</p>
@@ -898,10 +912,10 @@ test(statement, <span class="s">[[function foo(a, b) { var x=a*b; x+2 }]]</span>
   <div class="highlight"><pre>test(statement, <span class="s">[[if(y) {3 } else {5}]]</span>, <span class="s">[[(stmt (if (expr (term (id y))) (body (expr (term 3))) (body (expr (term 5)))))]]</span>)
 </pre></div>
 </td>
-</tr><tr id="section-58">
+</tr><tr id="section-59">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-58">&#182;</a>
+    <a class="pilcrow" href="#section-59">&#182;</a>
   </div>
   
 <p>Conditionals with else if</p>

@@ -150,7 +150,7 @@ function statement_pattern(expr)
                                  expr
                             )^0 ),
 
-        RETURN = lpeg.Ct( lpeg.Cc('return') * space * 'return' * space * expr ),
+        RETURN = lpeg.Ct( lpeg.Cc('return') * space * 'return' * space * expr^-1 ),
         BREAK = lpeg.Ct( lpeg.Cc('break') * space * 'break' * space ),
 
         VAR = lpeg.Ct( lpeg.Cc('var') * space * 'var' * space * identifier * lpeg.V('TYPE')^-1 * lpeg.V('INITIAL')^-1 ),
@@ -164,7 +164,7 @@ function statement_pattern(expr)
                 '(' * space * lpeg.V('ARGLIST')^-1 * space * ')' * space *
                 '{' * space * lpeg.V('BODY') * space * '}'
         ),
-        ARGLIST = lpeg.Ct( lpeg.Cc('args') * identifier * (space * ',' * space * identifier)^0 ),
+        ARGLIST = lpeg.Ct( lpeg.Cc('args') * identifier * (space * ',' * space * identifier)^0 ), -- TODO: struct type args
 
         STRUCT = lpeg.Ct(
             lpeg.Cc('struct') * space *

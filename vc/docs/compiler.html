@@ -53,6 +53,7 @@
     <a class="pilcrow" href="#section-2">&#182;</a>
   </div>
   
+<h2>Compile</h2>
 <p>Compile a table containing a sequence of parsed statements</p>
 
 <ul>
@@ -126,6 +127,7 @@
     <span class="k">end</span>
     instance.emit = <span class="k">function</span>(self, line) emit_to_segment(<span class="s">'text'</span>, line) <span class="k">end</span>
     instance.emit_global = <span class="k">function</span>(self, line) emit_to_segment(<span class="s">'globals'</span>, line) <span class="k">end</span>
+    instance.emit_function = <span class="k">function</span>(self, line) emit_to_segment(<span class="s">'functions'</span>, line) <span class="k">end</span>
 
     <span class="k">return</span> instance
 <span class="k">end</span>
@@ -137,6 +139,7 @@
     <a class="pilcrow" href="#section-6">&#182;</a>
   </div>
   
+<h2>Finalize</h2>
 <p>After all statements have been generated, call this to emit the code (in order)</p>
 
 <ul>
@@ -223,12 +226,12 @@ This will work on any node, so it gets called recursively by most other node typ
   </div>
   
 <p>Some names aren't viable method names; 'new' because it's
-also the constructor, 'if' because it's a keyword</p>
+also the constructor, 'if' and 'return' because they're keywords</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">if</span> name == <span class="s">'if'</span> <span class="o">or</span> name == <span class="s">'new'</span> <span class="k">then</span> name = <span class="s">'_'</span> .. name <span class="k">end</span>
+  <div class="highlight"><pre>    <span class="k">if</span> name == <span class="s">'if'</span> <span class="o">or</span> name == <span class="s">'new'</span> <span class="o">or</span> name == <span class="s">'return'</span> <span class="k">then</span> name = <span class="s">'_'</span> .. name <span class="k">end</span>
     <span class="k">local</span> fn = self[name]
     <span class="k">if</span> fn <span class="k">then</span> <span class="k">return</span> fn(self, node)
     <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Unrecognized node type: '</span> .. name) <span class="k">end</span>
@@ -236,15 +239,67 @@ also the constructor, 'if' because it's a keyword</p>
 
 <span class="k">function</span> <span class="nf">Generator:stmt</span>(stmt)
     self:generate(stmt[2])
-<span class="k">end</span>
-
-<span class="k">function</span> <span class="nf">Generator:var</span>(var)
 </pre></div>
 </td>
 </tr><tr id="section-12">
 <td class="docs">
   <div class="pilwrap">
     <a class="pilcrow" href="#section-12">&#182;</a>
+  </div>
+  
+<p>In order to keep from polluting the stack, if there's an expr-as-statement then
+we pop the value it left behind</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> stmt[2][1] == <span class="s">'expr'</span> <span class="k">then</span>
+        self:emit(<span class="s">'pop'</span>)
+    <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-13">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-13">&#182;</a>
+  </div>
+  
+<h2>Variable declarations:</h2>
+
+<p>This compiles a variable declaration, and puts a spec for that variable into either
+<code>globals</code> or <code>locals</code>. What that spec is depends on what kind of variable it is:</p>
+
+<p>All variables are one word long, and either contain a pointer to something, or a
+simple value. The only times we need to know the type of a variable is if it's an
+instance of a struct (so we know which offsets to use for which members) or if it's
+a function (to know the number of arguments, to ensure we structure the call
+correctly).</p>
+
+<p>The simplest thing that can be a variable spec is just a simple value: these compile
+to a label in the globals segment (for globals), so the spec is just a string saying
+which label it is. For a local, it can be a number for which index local it is.</p>
+
+<p>All other specs are tables, with at minimum a <code>type</code> field and either a <code>label</code> field
+(for globals) or an <code>index</code> field (for locals).</p>
+
+<p>Functions (which don't get declared with <code>var</code> but I'll document them here anyway)
+have a type of 'function', and also an 'arity' field for the number of arguments.
+They are also only globals, no local functions.</p>
+
+<p>Structs have a type of 'struct' and a 'struct' field that contains the name of the
+struct they are.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:var</span>(var)
+</pre></div>
+</td>
+</tr><tr id="section-14">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-14">&#182;</a>
   </div>
   
 <p>Something for functions here</p>
@@ -300,9 +355,31 @@ also the constructor, 'if' because it's a keyword</p>
 
 <span class="k">function</span> <span class="nf">Generator:id</span>(id)
     <span class="k">local</span> name = id[2]
-    <span class="k">if</span> self.globals[name] <span class="k">then</span>
-        <span class="k">if</span> id[3] <span class="o">and</span> id[3][1] == <span class="s">'subscript'</span> <span class="k">then</span>
-            self:generate(id[3][2])
+    <span class="k">local</span> subscript = clause(id, <span class="s">'subscript'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-15">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-15">&#182;</a>
+  </div>
+  
+<p>TODO struct member</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> self.locals <span class="o">and</span> self.locals[name] <span class="k">then</span>
+        self:emit(<span class="s">'local '</span> .. self.locals[name])
+        <span class="k">if</span> subscript <span class="k">then</span>
+            self:generate(subscript)
+            self:emit(<span class="s">'mul 3'</span>)
+            self:emit(<span class="s">'add'</span>)
+            self:emit(<span class="s">'load24'</span>)
+        <span class="k">end</span>
+    <span class="k">elseif</span> self.globals[name] <span class="k">then</span>
+        <span class="k">if</span> subscript <span class="k">then</span>
+            self:generate(subscript)
             self:emit(<span class="s">'mul 3'</span>)
             self:emit(<span class="s">'add '</span> .. self.globals[name])
             self:emit(<span class="s">'load24'</span>)
@@ -316,10 +393,10 @@ also the constructor, 'if' because it's a keyword</p>
     <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-13">
+</tr><tr id="section-16">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-13">&#182;</a>
+    <a class="pilcrow" href="#section-16">&#182;</a>
   </div>
   
 <p>Something for function scopes later</p>
@@ -328,12 +405,16 @@ also the constructor, 'if' because it's a keyword</p>
 </td>
 <td class="code">
   <div class="highlight"><pre><span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator:subscript</span>(sub)
+    self:generate(sub[2])
+<span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-14">
+</tr><tr id="section-17">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-14">&#182;</a>
+    <a class="pilcrow" href="#section-17">&#182;</a>
   </div>
   
 <p>An address reference (in an rvalue, not an lvalue)</p>
@@ -350,10 +431,10 @@ also the constructor, 'if' because it's a keyword</p>
     <span class="k">local</span> _, lvalue, rvalue = table.<span class="nt">unpack</span>(assign)
 </pre></div>
 </td>
-</tr><tr id="section-15">
+</tr><tr id="section-18">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-15">&#182;</a>
+    <a class="pilcrow" href="#section-18">&#182;</a>
   </div>
   
 <p>Go ahead and emit the rvalue, it's now on top of the stack</p>
@@ -364,10 +445,24 @@ also the constructor, 'if' because it's a keyword</p>
   <div class="highlight"><pre>    self:generate(rvalue)
 </pre></div>
 </td>
-</tr><tr id="section-16">
+</tr><tr id="section-19">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-16">&#182;</a>
+    <a class="pilcrow" href="#section-19">&#182;</a>
+  </div>
+  
+<p>So that it leaves whatever the rvalue was on the stack, as a return value</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    self:emit(<span class="s">'dup'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-20">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-20">&#182;</a>
   </div>
   
 <p>Deal with the lvalue</p>
@@ -380,10 +475,10 @@ also the constructor, 'if' because it's a keyword</p>
         <span class="k">local</span> _, name, qualifier = table.<span class="nt">unpack</span>(lvalue)
 </pre></div>
 </td>
-</tr><tr id="section-17">
+</tr><tr id="section-21">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-17">&#182;</a>
+    <a class="pilcrow" href="#section-21">&#182;</a>
   </div>
   
 <p>Something for function scopes</p>
@@ -404,6 +499,151 @@ also the constructor, 'if' because it's a keyword</p>
         <span class="k">end</span>
     <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Unrecognized lvalue: '</span> .. lvalue[1]) <span class="k">end</span>
 <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-22">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-22">&#182;</a>
+  </div>
+  
+<h2>Function declarations:</h2>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:func</span>(func)
+</pre></div>
+</td>
+</tr><tr id="section-23">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-23">&#182;</a>
+  </div>
+  
+<p>This needs to do three things:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> name = func[2]
+    <span class="k">local</span> args = clause(func, <span class="s">'args'</span>)
+    <span class="k">local</span> body = clause(func, <span class="s">'body'</span>)
+
+    <span class="nt">assert</span>(<span class="o">not</span> self.globals[name], <span class="s">'Duplicate declaration for '</span> .. name)
+</pre></div>
+</td>
+</tr><tr id="section-24">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-24">&#182;</a>
+  </div>
+  
+<ul>
+    <li>First, we need to create an entry in globals containing the label
+    and arity of the function.</li>
+</ul>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> label = self:gensym()
+    <span class="k">local</span> arity = #args - 1 <span class="c">-- (the first thing is 'args')
+</span>    self.globals[name] = { <span class="nt">type</span>=<span class="s">'function'</span>, label=label, arity=arity }
+</pre></div>
+</td>
+</tr><tr id="section-25">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-25">&#182;</a>
+  </div>
+  
+<ul>
+    <li>Next, we need to create a local scope and insert entries into it
+    for the parameters</li>
+</ul>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    self.locals = {}
+    <span class="k">for</span> n = 1, arity <span class="k">do</span>
+        self.locals[args[n+1]] = n - 1
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-26">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-26">&#182;</a>
+  </div>
+  
+<ul>
+    <li>Finally, we need to create a new emitter and replace the current
+    one, so that when we compile the body statements the code goes to
+    that emitter.</li>
+</ul>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> old_emit = self.emit
+    self.emit = self.emit_function
+</pre></div>
+</td>
+</tr><tr id="section-27">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-27">&#182;</a>
+  </div>
+  
+<p>Emit a function header:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    self:emit(label .. <span class="s">':'</span>)
+    self:emit(<span class="s">'frame '</span> .. arity)
+</pre></div>
+</td>
+</tr><tr id="section-28">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-28">&#182;</a>
+  </div>
+  
+<p>Store the args into their locals:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">for</span> n=(arity-1), 0, -1 <span class="k">do</span>
+        self:emit(<span class="s">'setlocal '</span> .. n)
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-29">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-29">&#182;</a>
+  </div>
+  
+<p>Generate code for the body</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    self:generate(body)
+
+    self:emit(<span class="s">'ret'</span>)
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator:body</span>(body)
+    <span class="k">for</span> n=2, #body <span class="k">do</span>
+        self:generate(body[n])
+        <span class="k">if</span> body[n][1] == <span class="s">'expr'</span> <span class="k">then</span> self:emit(<span class="s">'pop'</span>) <span class="k">end</span>
+    <span class="k">end</span>
+<span class="k">end</span>
 
 <span class="k">function</span> <span class="nf">Generator:_new</span>(new)
     <span class="nt">error</span>(<span class="s">'TODO'</span>)
@@ -411,6 +651,17 @@ also the constructor, 'if' because it's a keyword</p>
 
 <span class="k">function</span> <span class="nf">Generator:_<span class="k">if</span></span>(_<span class="k">if</span>)
     <span class="nt">error</span>(<span class="s">'TODO'</span>)
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator:_<span class="k">return</span></span>(ret)
+    <span class="nt">assert</span>(self.locals, <span class="s">'Return outside a function'</span>)
+    <span class="k">local</span> expr = clause(ret, <span class="s">'expr'</span>)
+    <span class="k">if</span> expr <span class="k">then</span>
+        self:generate(expr)
+        self:emit(<span class="s">'ret'</span>)
+    <span class="k">else</span>
+        self:emit(<span class="s">'ret 0'</span>)
+    <span class="k">end</span>
 <span class="k">end</span>
 
 <span class="k">function</span> <span class="nf">Generator:string</span>(str)

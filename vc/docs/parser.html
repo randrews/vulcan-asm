@@ -393,7 +393,7 @@ This is used in both statements and exprs, so we'll declare it outside:</p>
                                  expr
                             )^0 ),
 
-        RETURN = lpeg.Ct( lpeg.Cc(<span class="s">'return'</span>) * space * <span class="s">'return'</span> * space * expr ),
+        RETURN = lpeg.Ct( lpeg.Cc(<span class="s">'return'</span>) * space * <span class="s">'return'</span> * space * expr^-1 ),
         BREAK = lpeg.Ct( lpeg.Cc(<span class="s">'break'</span>) * space * <span class="s">'break'</span> * space ),
 
         VAR = lpeg.Ct( lpeg.Cc(<span class="s">'var'</span>) * space * <span class="s">'var'</span> * space * identifier * lpeg.V(<span class="s">'TYPE'</span>)^-1 * lpeg.V(<span class="s">'INITIAL'</span>)^-1 ),
@@ -407,8 +407,8 @@ This is used in both statements and exprs, so we'll declare it outside:</p>
                 <span class="s">'('</span> * space * lpeg.V(<span class="s">'ARGLIST'</span>)^-1 * space * <span class="s">')'</span> * space *
                 <span class="s">'{'</span> * space * lpeg.V(<span class="s">'BODY'</span>) * space * <span class="s">'}'</span>
         ),
-        ARGLIST = lpeg.Ct( lpeg.Cc(<span class="s">'args'</span>) * identifier * (space * <span class="s">','</span> * space * identifier)^0 ),
-
+        ARGLIST = lpeg.Ct( lpeg.Cc(<span class="s">'args'</span>) * identifier * (space * <span class="s">','</span> * space * identifier)^0 ), <span class="c">-- TODO: struct type args
+</span>
         STRUCT = lpeg.Ct(
             lpeg.Cc(<span class="s">'struct'</span>) * space *
                 <span class="s">'struct'</span> * space *

@@ -245,7 +245,7 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>test{<span class="s">[[3+4]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'add'</span>, <span class="s">'hlt'</span>}}
+  <div class="highlight"><pre>test{<span class="s">[[3+4]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'add'</span>, <span class="s">'pop'</span>, <span class="s">'hlt'</span>}}
 </pre></div>
 </td>
 </tr><tr id="section-11">
@@ -259,7 +259,7 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>test{<span class="s">[[3+4-2]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'add'</span>, <span class="s">'push 2'</span>, <span class="s">'sub'</span>, <span class="s">'hlt'</span>}}
+  <div class="highlight"><pre>test{<span class="s">[[3+4-2]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'add'</span>, <span class="s">'push 2'</span>, <span class="s">'sub'</span>, <span class="s">'pop'</span>, <span class="s">'hlt'</span>}}
 </pre></div>
 </td>
 </tr><tr id="section-12">
@@ -273,7 +273,7 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>test{<span class="s">[[3+4*2]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'push 2'</span>, <span class="s">'mul'</span>, <span class="s">'add'</span>, <span class="s">'hlt'</span>}}
+  <div class="highlight"><pre>test{<span class="s">[[3+4*2]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'push 2'</span>, <span class="s">'mul'</span>, <span class="s">'add'</span>, <span class="s">'pop'</span>, <span class="s">'hlt'</span>}}
 </pre></div>
 </td>
 </tr><tr id="section-13">
@@ -287,7 +287,7 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>test{<span class="s">[[0b111 + 0x10]]</span>, {<span class="s">'push 7'</span>, <span class="s">'push 16'</span>, <span class="s">'add'</span>, <span class="s">'hlt'</span>}}
+  <div class="highlight"><pre>test{<span class="s">[[0b111 + 0x10]]</span>, {<span class="s">'push 7'</span>, <span class="s">'push 16'</span>, <span class="s">'add'</span>, <span class="s">'pop'</span>, <span class="s">'hlt'</span>}}
 </pre></div>
 </td>
 </tr><tr id="section-14">
@@ -301,7 +301,7 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>test{<span class="s">[[(3+4)*2]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'add'</span>, <span class="s">'push 2'</span>, <span class="s">'mul'</span>, <span class="s">'hlt'</span>}}
+  <div class="highlight"><pre>test{<span class="s">[[(3+4)*2]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'add'</span>, <span class="s">'push 2'</span>, <span class="s">'mul'</span>, <span class="s">'pop'</span>, <span class="s">'hlt'</span>}}
 </pre></div>
 </td>
 </tr><tr id="section-15">
@@ -315,7 +315,7 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>test{<span class="s">[[x+3]]</span>, {<span class="s">'load24 global_x'</span>, <span class="s">'push 3'</span>, <span class="s">'add'</span>, <span class="s">'hlt'</span>},
+  <div class="highlight"><pre>test{<span class="s">[[x+3]]</span>, {<span class="s">'load24 global_x'</span>, <span class="s">'push 3'</span>, <span class="s">'add'</span>, <span class="s">'pop'</span>, <span class="s">'hlt'</span>},
     globals = {x = <span class="s">'global_x'</span>}
 }
 </pre></div>
@@ -331,7 +331,7 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>test{<span class="s">[[@{map+3*4}]]</span>, {<span class="s">'load24 global_map'</span>, <span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'mul'</span>, <span class="s">'add'</span>, <span class="s">'load24'</span>, <span class="s">'hlt'</span>},
+  <div class="highlight"><pre>test{<span class="s">[[@{map+3*4}]]</span>, {<span class="s">'load24 global_map'</span>, <span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'mul'</span>, <span class="s">'add'</span>, <span class="s">'load24'</span>, <span class="s">'pop'</span>, <span class="s">'hlt'</span>},
     globals = {map = <span class="s">'global_map'</span>}
 }
 </pre></div>
@@ -347,7 +347,7 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>test{<span class="s">[[actors[i-1] ]]</span>, {<span class="s">'load24 global_i'</span>, <span class="s">'push 1'</span>, <span class="s">'sub'</span>, <span class="s">'mul 3'</span>, <span class="s">'add global_actors'</span>, <span class="s">'load24'</span>, <span class="s">'hlt'</span>},
+  <div class="highlight"><pre>test{<span class="s">[[actors[i-1] ]]</span>, {<span class="s">'load24 global_i'</span>, <span class="s">'push 1'</span>, <span class="s">'sub'</span>, <span class="s">'mul 3'</span>, <span class="s">'add global_actors'</span>, <span class="s">'load24'</span>, <span class="s">'pop'</span>, <span class="s">'hlt'</span>},
     globals = {actors = <span class="s">'global_actors'</span>, i = <span class="s">'global_i'</span>}
 }
 </pre></div>
@@ -413,7 +413,7 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>test{<span class="s">[[foo = 3*4]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'mul'</span>, <span class="s">'store24 foo'</span>, <span class="s">'hlt'</span>}, globals = {foo = <span class="s">'foo'</span>}}
+  <div class="highlight"><pre>test{<span class="s">[[foo = 3*4]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'mul'</span>, <span class="s">'dup'</span>, <span class="s">'store24 foo'</span>, <span class="s">'pop'</span>, <span class="s">'hlt'</span>}, globals = {foo = <span class="s">'foo'</span>}}
 </pre></div>
 </td>
 </tr><tr id="section-22">
@@ -427,7 +427,83 @@ parser = <span class="nt">require</span>(<span class="s">'parser'</span>)
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>test{<span class="s">[[foo[2] = 3*4]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'mul'</span>, <span class="s">'push 2'</span>, <span class="s">'mul 3'</span>, <span class="s">'add foo'</span>, <span class="s">'store24'</span>, <span class="s">'hlt'</span>}, globals = {foo = <span class="s">'foo'</span>}}
+  <div class="highlight"><pre>test{<span class="s">[[foo[2] = 3*4]]</span>, {<span class="s">'push 3'</span>, <span class="s">'push 4'</span>, <span class="s">'mul'</span>, <span class="s">'dup'</span>, <span class="s">'push 2'</span>, <span class="s">'mul 3'</span>, <span class="s">'add foo'</span>, <span class="s">'store24'</span>, <span class="s">'pop'</span>, <span class="s">'hlt'</span>}, globals = {foo = <span class="s">'foo'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-23">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-23">&#182;</a>
+  </div>
+  
+<p>Declaring a function</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[function foo(x) { 2 }]]</span>, {<span class="s">'gen1:'</span>, <span class="s">'frame 1'</span>, <span class="s">'setlocal 0'</span>, <span class="s">'push 2'</span>, <span class="s">'pop'</span>, <span class="s">'ret'</span>},
+    check = <span class="k">function</span>(env)
+        <span class="nt">assert</span>(env.globals.foo)
+        <span class="nt">assert</span>(env.globals.foo.arity == 1)
+        <span class="nt">assert</span>(env.globals.foo.label == <span class="s">'gen1'</span>)
+    <span class="k">end</span>
+}
+</pre></div>
+</td>
+</tr><tr id="section-24">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-24">&#182;</a>
+  </div>
+  
+<p>Referring to locals</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[function sq(x) { x*x }]]</span>, {<span class="s">'gen1:'</span>, <span class="s">'frame 1'</span>, <span class="s">'setlocal 0'</span>, <span class="s">'local 0'</span>, <span class="s">'local 0'</span>, <span class="s">'mul'</span>, <span class="s">'pop'</span>, <span class="s">'ret'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-25">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-25">&#182;</a>
+  </div>
+  
+<p>Referring to locals with a subscript</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[function reddit(x) { x[42] }]]</span>, {<span class="s">'gen1:'</span>, <span class="s">'frame 1'</span>, <span class="s">'setlocal 0'</span>, <span class="s">'local 0'</span>, <span class="s">'push 42'</span>, <span class="s">'mul 3'</span>, <span class="s">'add'</span>, <span class="s">'load24'</span>, <span class="s">'pop'</span>, <span class="s">'ret'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-26">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-26">&#182;</a>
+  </div>
+  
+<p>Returning values</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[function sq(x) { return x*x }]]</span>, {<span class="s">'gen1:'</span>, <span class="s">'frame 1'</span>, <span class="s">'setlocal 0'</span>, <span class="s">'local 0'</span>, <span class="s">'local 0'</span>, <span class="s">'mul'</span>, <span class="s">'ret'</span>, <span class="s">'ret'</span>}}
+</pre></div>
+</td>
+</tr><tr id="section-27">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-27">&#182;</a>
+  </div>
+  
+<p>Returning null</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>test{<span class="s">[[function sq(x) { x*x; return }]]</span>, {<span class="s">'gen1:'</span>, <span class="s">'frame 1'</span>, <span class="s">'setlocal 0'</span>, <span class="s">'local 0'</span>, <span class="s">'local 0'</span>, <span class="s">'mul'</span>, <span class="s">'pop'</span>, <span class="s">'ret 0'</span>, <span class="s">'ret'</span>}}
 </pre></div>
 </td>
 </tr></tbody>

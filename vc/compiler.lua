@@ -1,5 +1,6 @@
 local Generator = {}
 
+-- ## Compile
 -- Compile a table containing a sequence of parsed statements
 --
 -- - emit is a function that takes a string and emits that to the final asm
@@ -34,10 +35,12 @@ function Generator.new(globals, gensym)
     end
     instance.emit = function(self, line) emit_to_segment('text', line) end
     instance.emit_global = function(self, line) emit_to_segment('globals', line) end
+    instance.emit_function = function(self, line) emit_to_segment('functions', line) end
 
     return instance
 end
 
+-- ## Finalize
 -- After all statements have been generated, call this to emit the code (in order)
 --
 -- - emit is a function that takes a string and writes it to an assembly file
@@ -65,8 +68,8 @@ end
 function Generator:generate(node)
     local name = node[1]
     -- Some names aren't viable method names; 'new' because it's
-    -- also the constructor, 'if' because it's a keyword
-    if name == 'if' or name == 'new' then name = '_' .. name end
+    -- also the constructor, 'if' and 'return' because they're keywords
+    if name == 'if' or name == 'new' or name == 'return' then name = '_' .. name end
     local fn = self[name]
     if fn then return fn(self, node)
     else error('Unrecognized node type: ' .. name) end
@@ -74,8 +77,37 @@ end
 
 function Generator:stmt(stmt)
     self:generate(stmt[2])
+    -- In order to keep from polluting the stack, if there's an expr-as-statement then
+    -- we pop the value it left behind
+    if stmt[2][1] == 'expr' then
+        self:emit('pop')
+    end
 end
 
+-- ## Variable declarations:
+--
+-- This compiles a variable declaration, and puts a spec for that variable into either
+-- `globals` or `locals`. What that spec is depends on what kind of variable it is:
+--
+-- All variables are one word long, and either contain a pointer to something, or a
+-- simple value. The only times we need to know the type of a variable is if it's an
+-- instance of a struct (so we know which offsets to use for which members) or if it's
+-- a function (to know the number of arguments, to ensure we structure the call
+-- correctly).
+--
+-- The simplest thing that can be a variable spec is just a simple value: these compile
+-- to a label in the globals segment (for globals), so the spec is just a string saying
+-- which label it is. For a local, it can be a number for which index local it is.
+--
+-- All other specs are tables, with at minimum a `type` field and either a `label` field
+-- (for globals) or an `index` field (for locals).
+--
+-- Functions (which don't get declared with `var` but I'll document them here anyway)
+-- have a type of 'function', and also an 'arity' field for the number of arguments.
+-- They are also only globals, no local functions.
+--
+-- Structs have a type of 'struct' and a 'struct' field that contains the name of the
+-- struct they are.
 function Generator:var(var)
     -- Something for functions here
     local name = var[2]
@@ -126,9 +158,19 @@ end
 
 function Generator:id(id)
     local name = id[2]
-    if self.globals[name] then
-        if id[3] and id[3][1] == 'subscript' then
-            self:generate(id[3][2])
+    local subscript = clause(id, 'subscript')
+    -- TODO struct member
+    if self.locals and self.locals[name] then
+        self:emit('local ' .. self.locals[name])
+        if subscript then
+            self:generate(subscript)
+            self:emit('mul 3')
+            self:emit('add')
+            self:emit('load24')
+        end
+    elseif self.globals[name] then
+        if subscript then
+            self:generate(subscript)
             self:emit('mul 3')
             self:emit('add ' .. self.globals[name])
             self:emit('load24')
@@ -143,6 +185,10 @@ function Generator:id(id)
     -- Something for function scopes later
 end
 
+function Generator:subscript(sub)
+    self:generate(sub[2])
+end
+
 -- An address reference (in an rvalue, not an lvalue)
 function Generator:address(addr)
     self:generate(addr[2])
@@ -154,6 +200,9 @@ function Generator:assign(assign)
 
     -- Go ahead and emit the rvalue, it's now on top of the stack
     self:generate(rvalue)
+
+    -- So that it leaves whatever the rvalue was on the stack, as a return value
+    self:emit('dup')
 
     -- Deal with the lvalue
     if lvalue[1] == 'address' then
@@ -174,12 +223,73 @@ function Generator:assign(assign)
     else error('Unrecognized lvalue: ' .. lvalue[1]) end
 end
 
+-- ## Function declarations:
+function Generator:func(func)
+    -- This needs to do three things:
+    local name = func[2]
+    local args = clause(func, 'args')
+    local body = clause(func, 'body')
+
+    assert(not self.globals[name], 'Duplicate declaration for ' .. name)
+
+    -- - First, we need to create an entry in globals containing the label
+    --   and arity of the function.
+    local label = self:gensym()
+    local arity = #args - 1 -- (the first thing is 'args')
+    self.globals[name] = { type='function', label=label, arity=arity }
+
+    -- - Next, we need to create a local scope and insert entries into it
+    --   for the parameters
+    self.locals = {}
+    for n = 1, arity do
+        self.locals[args[n+1]] = n - 1
+    end
+
+    -- - Finally, we need to create a new emitter and replace the current
+    --   one, so that when we compile the body statements the code goes to
+    --   that emitter.
+    local old_emit = self.emit
+    self.emit = self.emit_function
+
+    -- Emit a function header:
+    self:emit(label .. ':')
+    self:emit('frame ' .. arity)
+
+    -- Store the args into their locals:
+    for n=(arity-1), 0, -1 do
+        self:emit('setlocal ' .. n)
+    end
+
+    -- Generate code for the body
+    self:generate(body)
+
+    self:emit('ret')
+end
+
+function Generator:body(body)
+    for n=2, #body do
+        self:generate(body[n])
+        if body[n][1] == 'expr' then self:emit('pop') end
+    end
+end
+
 function Generator:_new(new)
     error('TODO')
 end
 
 function Generator:_if(_if)
     error('TODO')
+end
+
+function Generator:_return(ret)
+    assert(self.locals, 'Return outside a function')
+    local expr = clause(ret, 'expr')
+    if expr then
+        self:generate(expr)
+        self:emit('ret')
+    else
+        self:emit('ret 0')
+    end
 end
 
 function Generator:string(str)

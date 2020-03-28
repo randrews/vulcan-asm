@@ -95,32 +95,32 @@ end
 -- ## Test cases
 
 -- Simple addition
-test{[[3+4]], {'push 3', 'push 4', 'add', 'hlt'}}
+test{[[3+4]], {'push 3', 'push 4', 'add', 'pop', 'hlt'}}
 
 -- More complex addition
-test{[[3+4-2]], {'push 3', 'push 4', 'add', 'push 2', 'sub', 'hlt'}}
+test{[[3+4-2]], {'push 3', 'push 4', 'add', 'push 2', 'sub', 'pop', 'hlt'}}
 
 -- Order of operations
-test{[[3+4*2]], {'push 3', 'push 4', 'push 2', 'mul', 'add', 'hlt'}}
+test{[[3+4*2]], {'push 3', 'push 4', 'push 2', 'mul', 'add', 'pop', 'hlt'}}
 
 -- Numbers in other bases
-test{[[0b111 + 0x10]], {'push 7', 'push 16', 'add', 'hlt'}}
+test{[[0b111 + 0x10]], {'push 7', 'push 16', 'add', 'pop', 'hlt'}}
 
 -- Nested expressions
-test{[[(3+4)*2]], {'push 3', 'push 4', 'add', 'push 2', 'mul', 'hlt'}}
+test{[[(3+4)*2]], {'push 3', 'push 4', 'add', 'push 2', 'mul', 'pop', 'hlt'}}
 
 -- Globals in expressions
-test{[[x+3]], {'load24 global_x', 'push 3', 'add', 'hlt'},
+test{[[x+3]], {'load24 global_x', 'push 3', 'add', 'pop', 'hlt'},
     globals = {x = 'global_x'}
 }
 
 -- Address references
-test{[[@{map+3*4}]], {'load24 global_map', 'push 3', 'push 4', 'mul', 'add', 'load24', 'hlt'},
+test{[[@{map+3*4}]], {'load24 global_map', 'push 3', 'push 4', 'mul', 'add', 'load24', 'pop', 'hlt'},
     globals = {map = 'global_map'}
 }
 
 -- Array references
-test{[[actors[i-1] ]], {'load24 global_i', 'push 1', 'sub', 'mul 3', 'add global_actors', 'load24', 'hlt'},
+test{[[actors[i-1] ]], {'load24 global_i', 'push 1', 'sub', 'mul 3', 'add global_actors', 'load24', 'pop', 'hlt'},
     globals = {actors = 'global_actors', i = 'global_i'}
 }
 
@@ -142,7 +142,28 @@ test{[[var foo = 3*4]], {'push 3', 'push 4', 'mul', 'store24 gen1', 'hlt', 'gen1
 test{[[var x=3; var y=(4)]], {'push 3', 'store24 gen1', 'push 4', 'store24 gen2', 'hlt', 'gen1: .db 0', 'gen2: .db 0'}}
 
 -- Assigns to globals
-test{[[foo = 3*4]], {'push 3', 'push 4', 'mul', 'store24 foo', 'hlt'}, globals = {foo = 'foo'}}
+test{[[foo = 3*4]], {'push 3', 'push 4', 'mul', 'dup', 'store24 foo', 'pop', 'hlt'}, globals = {foo = 'foo'}}
 
 -- Assigns to globals with subscripts
-test{[[foo[2] = 3*4]], {'push 3', 'push 4', 'mul', 'push 2', 'mul 3', 'add foo', 'store24', 'hlt'}, globals = {foo = 'foo'}}
+test{[[foo[2] = 3*4]], {'push 3', 'push 4', 'mul', 'dup', 'push 2', 'mul 3', 'add foo', 'store24', 'pop', 'hlt'}, globals = {foo = 'foo'}}
+
+-- Declaring a function
+test{[[function foo(x) { 2 }]], {'gen1:', 'frame 1', 'setlocal 0', 'push 2', 'pop', 'ret'},
+    check = function(env)
+        assert(env.globals.foo)
+        assert(env.globals.foo.arity == 1)
+        assert(env.globals.foo.label == 'gen1')
+    end
+}
+
+-- Referring to locals
+test{[[function sq(x) { x*x }]], {'gen1:', 'frame 1', 'setlocal 0', 'local 0', 'local 0', 'mul', 'pop', 'ret'}}
+
+-- Referring to locals with a subscript
+test{[[function reddit(x) { x[42] }]], {'gen1:', 'frame 1', 'setlocal 0', 'local 0', 'push 42', 'mul 3', 'add', 'load24', 'pop', 'ret'}}
+
+-- Returning values
+test{[[function sq(x) { return x*x }]], {'gen1:', 'frame 1', 'setlocal 0', 'local 0', 'local 0', 'mul', 'ret', 'ret'}}
+
+-- Returning null
+test{[[function sq(x) { x*x; return }]], {'gen1:', 'frame 1', 'setlocal 0', 'local 0', 'local 0', 'mul', 'pop', 'ret 0', 'ret'}}
