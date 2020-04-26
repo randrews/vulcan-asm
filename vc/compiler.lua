@@ -66,22 +66,16 @@ end
 -- Generate code (sending to whatever the active segment is) for the passed-in node.
 -- This will work on any node, so it gets called recursively by most other node types.
 function Generator:generate(node)
-    local name = node[1]
-    -- Some names aren't viable method names; 'new' because it's
-    -- also the constructor, 'if' and 'return' because they're keywords
-    if name == 'if' or name == 'new' or name == 'return' then name = '_' .. name end
-    local fn = self[name]
-    if fn then return fn(self, node)
-    else error('Unrecognized node type: ' .. name) end
-end
-
-function Generator:stmt(stmt)
-    self:generate(stmt[2])
-    -- In order to keep from polluting the stack, if there's an expr-as-statement then
-    -- we pop the value it left behind
-    if stmt[2][1] == 'expr' then
-        self:emit('pop')
-    end
+    if type(node) == 'table' then
+        local name = node[1]
+        -- Some node names aren't valid method names, let's translate them
+        local method_name = method_for(name)
+        local fn = self[method_name]
+        if fn then return fn(self, node)
+        else error('Unrecognized node type: ' .. name) end
+    elseif type(node) == 'number' then
+        self:emit('push ' .. node)
+    else error('Unrecognized node type [' .. node .. ']') end
 end
 
 -- ## Variable declarations:
@@ -128,32 +122,24 @@ function Generator:var(var)
     end
 end
 
-function Generator:expr(expr)
-    for index = 2, #expr, 2 do
-        local term = expr[index]
-        self:generate(term, env)
-        if index > 2 then
-            local op = expr[index-1]
-            if op == '+' then self:emit('add')
-            elseif op == '-' then self:emit('sub') end
-        end
+function operator(name, opcode)
+    return function(self, expr)
+        self:generate(expr[2])
+        self:generate(expr[3])
+        self:emit(opcode)
     end
 end
 
-function Generator:term(term)
-    for index = 2, #term, 2 do
-        local fact = term[index]
+Generator.add = operator('add', 'add')
+Generator.sub = operator('sub', 'sub')
+Generator.mul = operator('mul', 'mul')
+Generator.div = operator('div', 'div')
+Generator.mod = operator('mod', 'mod')
 
-        if type(fact) == 'number' then self:emit('push ' .. fact)
-        elseif type(fact) == 'table' then self:generate(fact) end
-
-        if index > 2 then
-            local op = term[index-1]
-            if op == '*' then self:emit('mul')
-            elseif op == '/' then self:emit('div')
-            elseif op == '%' then self:emit('mod') end
-        end
-    end
+-- This isn't all exprs, it's just exprs-as-statements
+function Generator:expr(expr)
+    self:generate(expr[2])
+    self:emit('pop')
 end
 
 function Generator:id(id)
@@ -268,8 +254,13 @@ end
 
 function Generator:body(body)
     for n=2, #body do
-        self:generate(body[n])
-        if body[n][1] == 'expr' then self:emit('pop') end
+        local stmt = body[n]
+        self:generate(stmt)
+        -- Most body statements leave something on the stack that needs to be cleaned up,
+        -- but some don't, like ret
+        if not (type(stmt) == 'table' and stmt[1] == 'return') then
+            self:emit('pop')
+        end
     end
 end
 
@@ -283,7 +274,7 @@ end
 
 function Generator:_return(ret)
     assert(self.locals, 'Return outside a function')
-    local expr = clause(ret, 'expr')
+    local expr = ret[2]
     if expr then
         self:generate(expr)
         self:emit('ret')
@@ -294,6 +285,32 @@ end
 
 function Generator:string(str)
     error('TODO')
+end
+
+function method_for(name)
+    -- Some names aren't viable method names; 'new' because it's
+    -- also the constructor, 'if' and 'return' because they're keywords
+    if name == 'if' or name == 'new' or name == 'return' or name == 'not' then return '_' .. name end
+
+    -- Some are operators:
+    local operators = {
+        ['+'] = 'add',
+        ['-'] = 'sub',
+        ['*'] = 'mul',
+        ['/'] = 'div',
+        ['%'] = 'mod',
+        ['>'] = 'gt',
+        ['<'] = 'lt',
+        ['<='] = 'le',
+        ['>='] = 'ge',
+        ['=='] = 'eq',
+        ['!='] = 'ne',
+        ['&&'] = '_and',
+        ['||'] = '_or'
+    }
+
+    if operators[name] then return operators[name] end
+    return name
 end
 
 function clause(node, name)

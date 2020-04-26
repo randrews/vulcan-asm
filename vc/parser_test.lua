@@ -29,8 +29,9 @@ end
 
 -- Pretty-print an array
 function prettify(t)
-    -- It's an empty object or an array
-    if t[1] or not next(t) then
+    if type(t) ~= 'table' then -- It's a number or something
+        return tostring(t)
+    elseif t[1] or not next(t) then -- It's an empty object or an array
         local elements = table.map(t, function(el)
                                        if type(el) == 'table' then
                                            return prettify(el)
@@ -86,154 +87,163 @@ function test(pattern, line, ast)
 end
 
 -- Hex number
-test(expr, [[0x10]], [[(expr (term 16))]])
+test(expr, [[0x10]], [[16]])
 
 -- Binary number
-test(expr, [[0b1010]], [[(expr (term 10))]])
+test(expr, [[0b1010]], [[10]])
 
 -- Decimal number
-test(expr, [[23]], [[(expr (term 23))]])
+test(expr, [[23]], [[23]])
 
 -- Decimal zero
-test(expr, [[0]], [[(expr (term 0))]])
+test(expr, [[0]], [[0]])
 
 -- Negative decimal
-test(expr, [[-35]], [[(expr (term -35))]])
+test(expr, [[-35]], [[(neg 35)]])
 
 -- Strings
-test(expr, [["hello"]], [[(expr (term (string (h e l l o))))]])
+test(expr, [["hello"]], [[(string (h e l l o))]])
 
 -- Strings with escapes
-test(expr, [["hello\""]], [[(expr (term (string (h e l l o \"))))]])
+test(expr, [["hello\""]], [[(string (h e l l o \"))]])
 
 -- Expressions
-test(expr, [[43+17]], [[(expr (term 43) + (term 17))]])
+test(expr, [[43+17]], [[(+ 43 17)]])
 
 -- Expressions with negatives
-test(expr, [[43/-17]], [[(expr (term 43 / -17))]])
+test(expr, [[43/-17]], [[(/ 43 (neg 17))]])
 
 -- Multiple terms
-test(expr, [[43+17 - 3]], [[(expr (term 43) + (term 17) - (term 3))]])
+test(expr, [[43+17 - 3]], [[(+ 43 (- 17 3))]])
 
 -- Multiplication
-test(expr, [[2*14-3]], [[(expr (term 2 * 14) - (term 3))]])
+test(expr, [[2*14-3]], [[(- (* 2 14) 3)]])
 
 -- Sub-expressions
-test(expr, [[2*(14-3)]], [[(expr (term 2 * (expr (term 14) - (term 3))))]])
+test(expr, [[2*(14-3)]], [[(* 2 (- 14 3))]])
+
+-- Boolean expressions
+test(expr, [[x > 4]], [[(> (id x) 4)]])
+
+-- More boolean expressions
+test(expr, [[x > 4 || x < 0]], [[(|| (> (id x) 4) (< (id x) 0))]])
+
+-- Even more boolean expressions
+test(expr, [[(x != 3) && !y ]], [[(&& (!= (id x) 3) (not (id y)))]])
 
 -- Identifiers in expressions
-test(expr, [[start + 2]], [[(expr (term (id start)) + (term 2))]])
+test(expr, [[start + 2]], [[(+ (id start) 2)]])
 
 -- Array references in expressions
-test(expr, [[foo[3] ]], [[(expr (term (id foo (subscript (expr (term 3))))))]])
+test(expr, [[foo[3] ]], [[(id foo (subscript 3))]])
 
 -- Addresses in expressions
-test(expr, [[blah + @{x *4}]], [[(expr (term (id blah)) + (term (address (expr (term (id x) * 4)))))]])
+test(expr, [[blah + @{x *4}]], [[(+ (id blah) (address (* (id x) 4)))]])
 
 -- Param-less function calls
-test(expr, [[blah()]], [[(expr (term (id blah (params))))]])
+test(expr, [[blah()]], [[(id blah (params))]])
 
 -- Unary function calls
-test(expr, [[blah(3)]], [[(expr (term (id blah (params (expr (term 3))))))]])
+test(expr, [[blah(3)]], [[(id blah (params 3))]])
 
 -- Unary function calls with exprs
-test(expr, [[blah(x+4)]], [[(expr (term (id blah (params (expr (term (id x)) + (term 4))))))]])
+test(expr, [[blah(x+4)]], [[(id blah (params (+ (id x) 4)))]])
 
 -- Binary function calls
-test(expr, [[blah(a, b)]], [[(expr (term (id blah (params (expr (term (id a))) (expr (term (id b)))))))]])
+test(expr, [[blah(a, b)]], [[(id blah (params (id a) (id b)))]])
 
 -- Ternary function calls
-test(expr, [[blah(a,b,c)]], [[(expr (term (id blah (params (expr (term (id a))) (expr (term (id b))) (expr (term (id c)))))))]])
+test(expr, [[blah(a,b,c)]], [[(id blah (params (id a) (id b) (id c)))]])
 
 -- Assignments
-test(expr, [[x = 3]], [[(expr (term (assign (id x) (expr (term 3)))))]])
+test(expr, [[x = 3]], [[(assign (id x) 3)]])
 
 -- Assignments to array
-test(expr, [[x[2]=3]], [[(expr (term (assign (id x (subscript (expr (term 2)))) (expr (term 3)))))]])
+test(expr, [[x[2]=3]], [[(assign (id x (subscript 2)) 3)]])
 
 -- Assignments to memory
-test(expr, [[@{ 1500 } = 3]], [[(expr (term (assign (address (expr (term 1500))) (expr (term 3)))))]])
+test(expr, [[@{ 1500 } = 3]], [[(assign (address 1500) 3)]])
 
 -- Assignments in complex expressions
-test(expr, [[3 + (x = 4) * 2]], [[(expr (term 3) + (term (expr (term (assign (id x) (expr (term 4))))) * 2))]])
+test(expr, [[3 + (x = 4) * 2]], [[(+ 3 (* (assign (id x) 4) 2))]])
 
 -- Ternary conditionals
-test(expr, [[x = (y ? 3 : 5)]], [[(expr (term (assign (id x) (expr (term (if (expr (term (id y))) (expr (term 3)) (expr (term 5))))))))]])
+test(expr, [[x = (y ? 3 : 5)]], [[(assign (id x) (if (id y) 3 5))]])
 
 -- Member references
-test(expr, [[blah.foo]], [[(expr (term (id blah (member foo))))]])
+test(expr, [[blah.foo]], [[(id blah (member foo))]])
 
 -- Member array references
-test(expr, [[blah.foo[3] ]], [[(expr (term (id blah (member foo (subscript (expr (term 3)))))))]])
+test(expr, [[blah.foo[3] ]], [[(id blah (member foo (subscript 3)))]])
 
 -- Member lvalues
-test(expr, [[blah.foo = 7]], [[(expr (term (assign (id blah (member foo)) (expr (term 7)))))]])
+test(expr, [[blah.foo = 7]], [[(assign (id blah (member foo)) 7)]])
 
 -- Member array lvalues
-test(expr, [[blah.foo[3] = 7]], [[(expr (term (assign (id blah (member foo (subscript (expr (term 3))))) (expr (term 7)))))]])
+test(expr, [[blah.foo[3] = 7]], [[(assign (id blah (member foo (subscript 3))) 7)]])
 
 -- Assignments from new
-test(expr, [[x = new Player]], [[(expr (term (assign (id x) (expr (term (new Player))))))]])
+test(expr, [[x = new Player]], [[(assign (id x) (new Player))]])
 
 -- # Statement parsing tests
 
 statement = parser.statement
 
 -- Expressions
-test(statement, [[3]], [[(stmt (expr (term 3)))]])
-test(statement, [[if(x) {3} else {y=4; foo(7)}]], [[(stmt (if (expr (term (id x))) (body (expr (term 3))) (body (expr (term (assign (id y) (expr (term 4))))) (expr (term (id foo (params (expr (term 7)))))))))]])
+test(statement, [[3]], [[(expr 3)]])
+test(statement, [[if(x) {3} else {y=4; foo(7)}]], [[(if (id x) (body 3) (body (assign (id y) 4) (id foo (params 7))))]])
 
 -- Variable declarations
-test(statement, [[var x]], [[(stmt (var x))]])
+test(statement, [[var x]], [[(var x)]])
 
 -- Variable declarations with initial value
-test(statement, [[var x = 7]], [[(stmt (var x (init (expr (term 7)))))]])
+test(statement, [[var x = 7]], [[(var x (init 7))]])
 
 -- Variable declarations with type
-test(statement, [[var x:Weapon]], [[(stmt (var x (type Weapon)))]])
+test(statement, [[var x:Weapon]], [[(var x (type Weapon))]])
 
 -- Variable declarations with type and initial value
-test(statement, [[var x:Weapon = new Weapon]], [[(stmt (var x (type Weapon) (init (expr (term (new Weapon))))))]])
+test(statement, [[var x:Weapon = new Weapon]], [[(var x (type Weapon) (init (new Weapon)))]])
 
 -- Function declarations
-test(statement, [[function foo() { }]], [[(stmt (func foo (body)))]])
+test(statement, [[function foo() { }]], [[(func foo (body))]])
 
 -- Function declarations with args
-test(statement, [[function foo(a, b) { }]], [[(stmt (func foo (args a b) (body)))]])
+test(statement, [[function foo(a, b) { }]], [[(func foo (args a b) (body))]])
 
 -- Function declarations with args and body
-test(statement, [[function foo(a, b) { a+b*2; }]], [[(stmt (func foo (args a b) (body (expr (term (id a)) + (term (id b) * 2)))))]])
-test(statement, [[function foo(a, b) { var x=a*b; x+2 }]], [[(stmt (func foo (args a b) (body (var x (init (expr (term (id a) * (id b))))) (expr (term (id x)) + (term 2)))))]])
+test(statement, [[function foo(a, b) { a+b*2; }]], [[(func foo (args a b) (body (+ (id a) (* (id b) 2))))]])
+test(statement, [[function foo(a, b) { var x=a*b; x+2 }]], [[(func foo (args a b) (body (var x (init (* (id a) (id b)))) (+ (id x) 2)))]])
 
 -- Function declarations with return
-test(statement, [[function foo() { return 6 }]], [[(stmt (func foo (body (return (expr (term 6))))))]])
+test(statement, [[function foo() { return 6 }]], [[(func foo (body (return 6)))]])
 
 -- Void return
-test(statement, [[function foo() { return }]], [[(stmt (func foo (body (return))))]])
+test(statement, [[function foo() { return }]], [[(func foo (body (return)))]])
 
 -- Struct declarations
-test(statement, [[struct Coord { x, y }]], [[(stmt (struct Coord (member x) (member y)))]])
+test(statement, [[struct Coord { x, y }]], [[(struct Coord (member x) (member y))]])
 
 -- Struct declarations with initial values
-test(statement, [[struct Coord { x=0, y = 0 }]], [[(stmt (struct Coord (member x (init (expr (term 0)))) (member y (init (expr (term 0))))))]])
+test(statement, [[struct Coord { x=0, y = 0 }]], [[(struct Coord (member x (init 0)) (member y (init 0)))]])
 
 -- Struct declarations with lengths
-test(statement, [[struct Person { name(16) }]], [[(stmt (struct Person (member name (length (expr (term 16))))))]])
+test(statement, [[struct Person { name(16) }]], [[(struct Person (member name (length 16)))]])
 
 -- Loops
-test(statement, [[loop { doThing() }]], [[(stmt (loop (body (expr (term (id doThing (params)))))))]])
+test(statement, [[loop { doThing() }]], [[(loop (body (id doThing (params))))]])
 
 -- Loops with multiple statements
-test(statement, [[loop { doThing(); doOtherThing }]], [[(stmt (loop (body (expr (term (id doThing (params)))) (expr (term (id doOtherThing))))))]])
+test(statement, [[loop { doThing(); doOtherThing }]], [[(loop (body (id doThing (params)) (id doOtherThing)))]])
 
 -- Loops with breaks
-test(statement, [[loop { doThing(); break }]], [[(stmt (loop (body (expr (term (id doThing (params)))) (break))))]])
+test(statement, [[loop { doThing(); break }]], [[(loop (body (id doThing (params)) (break)))]])
 
 -- Conditionals
-test(statement, [[if (y) {3}]], [[(stmt (if (expr (term (id y))) (body (expr (term 3)))))]])
+test(statement, [[if (y) {3}]], [[(if (id y) (body 3))]])
 
 -- Conditionals with else
-test(statement, [[if(y) {3 } else {5}]], [[(stmt (if (expr (term (id y))) (body (expr (term 3))) (body (expr (term 5)))))]])
+test(statement, [[if(y) {3 } else {5}]], [[(if (id y) (body 3) (body 5))]])
 
 -- Conditionals with else if
-test(statement, [[if(y) {3 } else if (z) {5}else{7}]], [[(stmt (if (expr (term (id y))) (body (expr (term 3))) (if (expr (term (id z))) (body (expr (term 5))) (body (expr (term 7))))))]])
+test(statement, [[if(y) {3 } else if (z) {5}else{7}]], [[(if (id y) (body 3) (if (id z) (body 5) (body 7)))]])

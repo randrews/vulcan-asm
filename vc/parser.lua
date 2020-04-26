@@ -76,7 +76,7 @@ local identifier = (function()
 function expr_pattern()
     -- A number can be expressed in decimal, binary, or hex
     local number = (function()
-            local dec_number = (lpeg.S('-')^-1 * lpeg.R('19') * lpeg.R('09')^0) / tonumber
+            local dec_number = (lpeg.R('19') * lpeg.R('09')^0) / tonumber
             local hex_number = lpeg.P('0x') * lpeg.C(lpeg.R('09','af','AF')^1) / function(s) return tonumber(s, 16) end
             local bin_number = lpeg.P('0b') * lpeg.C(lpeg.S('01')^1) / function(s) return tonumber(s, 2) end
             local dec_zero = lpeg.P('0') / tonumber
@@ -87,44 +87,98 @@ function expr_pattern()
             local escape = lpeg.C(lpeg.P('\\') * lpeg.S('trn0"\\'))
             return lpeg.Ct(lpeg.Cc('string') * lpeg.P('"') * lpeg.Ct((lpeg.C(lpeg.P(1)-lpeg.S('"\\')) + escape)^1) * '"') end)()
 
-    -- An expression is a mathematical expression with parens or the standard five operators, with the atoms being:
-    --
-    -- - numbers
-    -- - identifiers
-    -- - strings
-    -- - array references
-    -- - struct references
-    -- - function calls
-    -- - memory references
-    -- - assignments
-    -- - conditionals
-    return lpeg.P{
-        'EXPR';
-        EXPR = lpeg.Ct( lpeg.Cc('expr') * space * (lpeg.V('TERM') * (lpeg.C( lpeg.S('+-') ) * lpeg.V('TERM'))^0) * lpeg.S(';')^-1 ),
-        TERM = lpeg.Ct( lpeg.Cc('term') * space * lpeg.V('FACT') * (lpeg.C( lpeg.S('/*%') ) * lpeg.V('FACT'))^0 ),
-        FACT = space * (
-            '(' * lpeg.V('EXPR') * ')' +
-                lpeg.V('NEW') +
-                lpeg.V('ASSIGN') +
-                number +
-                lpeg.V('SHORTCOND') +
-                lpeg.V('NAME') +
-                lpeg.V('ADDRESS') +
-                string_pattern) * space,
-
-        NAME = lpeg.Ct( lpeg.Cc('id') * identifier * (lpeg.V('SUBSCRIPT') + lpeg.V('PARAMS') + lpeg.V('MEMBER'))^-1 ),
-        SUBSCRIPT = lpeg.Ct( lpeg.Cc('subscript') * space * '[' * lpeg.V('EXPR') * ']' ),
-        PARAMS = lpeg.Ct( lpeg.Cc('params') * space * (('(' * space * ')') + ('(' * lpeg.V('EXPR') * (',' * lpeg.V('EXPR'))^0 * ')' )) ),
-        MEMBER = lpeg.Ct( lpeg.Cc('member') * space * '.' * identifier * lpeg.V('SUBSCRIPT')^-1 ),
-
-        ADDRESS = lpeg.Ct( lpeg.Cc('address') * '@{' * lpeg.V('EXPR') * '}' ),
-
-        ASSIGN = lpeg.Ct( lpeg.Cc('assign') * lpeg.V('LVALUE') * space * '=' * space * lpeg.V('EXPR') ),
-        LVALUE = lpeg.Ct( (lpeg.Cc('id') * identifier * (lpeg.V('SUBSCRIPT') + lpeg.V('MEMBER'))^-1) ) + lpeg.V('ADDRESS'),
-        NEW = lpeg.Ct( lpeg.Cc('new') * space * 'new' * space * identifier ),
-
-        SHORTCOND = lpeg.Ct( lpeg.Cc('if') * '(' * space * lpeg.V('EXPR') * space * '?' * space * lpeg.V('EXPR') * space * ':' * space * lpeg.V('EXPR') * space * ')' ),
+    -- The operators for infix expressions, grouped by precedence: low precedence first.
+    -- Every one of these is a left-associative binary infix operator
+    local operators = {
+        {'||', '&&', '^'},
+        {'==', '<', '>', '<=', '>=', '!='},
+        {'+', '-'},
+        {'/', '*', '%'}
     }
+
+    -- Build nodes of infix expressions, into nested prefix expressions
+    local function infix(...)
+        local captures = {...}
+        if captures[2] then
+            local lhs = table.remove(captures, 1)
+            local op = table.remove(captures, 1)
+            local rhs = infix(table.unpack(captures))
+            return { op, lhs, rhs }
+        else
+            return captures[1]
+        end
+    end
+
+    -- Builder for unary-operator nodes
+    local function unary(op, atom)
+        if op == '-' then op = 'neg'
+        elseif op == '!' then op = 'not' end
+        return { op, atom }
+    end
+
+    -- Building a grammar for expressions
+    local expr_grammar = {'EXPR'}
+
+    -- Go through the operators and build nonterminals for each precedence level, referring to the higher
+    -- ones. The final level refers to a nonterminal we'll call ATOM
+    for precedence, ops in ipairs(operators) do
+        local pat = lpeg.P(ops[1])
+        for n = 2, #ops do pat = pat + lpeg.P(ops[n]) end
+        local next_tier = 'TIER' .. (precedence + 1)
+        if precedence == #operators then next_tier = 'ATOM' end
+        expr_grammar['TIER' .. precedence] = (space * lpeg.V(next_tier) * (lpeg.C(pat) * lpeg.V(next_tier))^0) / infix
+    end
+
+    -- The basic expression calls into the lowest-precedence infix operators and will consume an optional
+    -- terminating semicolon so we can stick more than one on a line
+    expr_grammar.EXPR = space * lpeg.V('TIER1') * lpeg.S(';')^-1
+
+    -- Expressions use operators and build up parse trees out of atoms. These are all the things an atom can be:
+    --
+    -- - another expression in parentheses
+    -- - another atom behind a unary operator
+    -- - `new` calls
+    -- - assignments
+    -- - numbers
+    -- - ternary conditionals
+    -- - identifiers
+    -- - address references
+    -- - strings
+    expr_grammar.ATOM = space * (
+        '(' * lpeg.V('EXPR') * ')' +
+            (lpeg.C(lpeg.S('-!')) * lpeg.V('ATOM')) / unary +
+            lpeg.V('NEW') +
+            lpeg.V('ASSIGN') +
+            number +
+            lpeg.V('SHORTCOND') +
+            lpeg.V('NAME') +
+            lpeg.V('ADDRESS') +
+            string_pattern) * space
+
+    -- Names are identifiers, variable names. They can have optional things behind them:
+    --
+    -- - array subscripts
+    -- - parameter lists (turns this into a function call)
+    -- - member references (if it's a struct)
+    expr_grammar.NAME = lpeg.Ct( lpeg.Cc('id') * identifier * (lpeg.V('SUBSCRIPT') + lpeg.V('PARAMS') + lpeg.V('MEMBER'))^-1 )
+    expr_grammar.SUBSCRIPT = lpeg.Ct( lpeg.Cc('subscript') * space * '[' * lpeg.V('EXPR') * ']' )
+    expr_grammar.PARAMS = lpeg.Ct( lpeg.Cc('params') * space * (('(' * space * ')') + ('(' * lpeg.V('EXPR') * (',' * lpeg.V('EXPR'))^0 * ')' )) )
+    expr_grammar.MEMBER = lpeg.Ct( lpeg.Cc('member') * space * '.' * identifier * lpeg.V('SUBSCRIPT')^-1 )
+
+    -- Address references to deal with raw memory addresses
+    expr_grammar.ADDRESS = lpeg.Ct( lpeg.Cc('address') * '@{' * lpeg.V('EXPR') * '}' )
+
+    -- Assignments have an lvalue, which is a subset of what a name can be, or an address; and an rvalue, which is an expr
+    expr_grammar.ASSIGN = lpeg.Ct( lpeg.Cc('assign') * lpeg.V('LVALUE') * space * '=' * space * lpeg.V('EXPR') )
+    expr_grammar.LVALUE = lpeg.Ct( (lpeg.Cc('id') * identifier * (lpeg.V('SUBSCRIPT') + lpeg.V('MEMBER'))^-1) ) + lpeg.V('ADDRESS')
+
+    -- A `new` expression to allocate a new struct instance on the heap
+    expr_grammar.NEW = lpeg.Ct( lpeg.Cc('new') * space * 'new' * space * identifier )
+
+    -- A ternary conditional
+    expr_grammar.SHORTCOND = lpeg.Ct( lpeg.Cc('if') * '(' * space * lpeg.V('EXPR') * space * '?' * space * lpeg.V('EXPR') * space * ':' * space * lpeg.V('EXPR') * space * ')' )
+
+    return lpeg.P(expr_grammar)
 end
 
 local expr = expr_pattern()
@@ -132,14 +186,12 @@ local expr = expr_pattern()
 function statement_pattern(expr)
     return lpeg.P{
         'STMT';
-        STMT = lpeg.Ct( lpeg.Cc('stmt') *
-                            (lpeg.V('FUNC') +
-                                 lpeg.V('STRUCT') +
-                                 lpeg.V('VAR') +
-                                 lpeg.V('LOOP') +
-                                 lpeg.V('COND') +
-                                 expr)
-        ),
+        STMT = (lpeg.V('FUNC') +
+                    lpeg.V('STRUCT') +
+                    lpeg.V('VAR') +
+                    lpeg.V('LOOP') +
+                    lpeg.V('COND') +
+                    lpeg.Ct( lpeg.Cc('expr') * expr )),
 
         BODY = lpeg.Ct( lpeg.Cc('body') *
                             (lpeg.V('VAR') +

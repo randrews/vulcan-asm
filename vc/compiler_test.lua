@@ -98,7 +98,7 @@ end
 test{[[3+4]], {'push 3', 'push 4', 'add', 'pop', 'hlt'}}
 
 -- More complex addition
-test{[[3+4-2]], {'push 3', 'push 4', 'add', 'push 2', 'sub', 'pop', 'hlt'}}
+test{[[3+4-2]], {'push 3', 'push 4', 'push 2', 'sub', 'add', 'pop', 'hlt'}}
 
 -- Order of operations
 test{[[3+4*2]], {'push 3', 'push 4', 'push 2', 'mul', 'add', 'pop', 'hlt'}}
