@@ -167,3 +167,24 @@ test{[[function sq(x) { return x*x }]], {'gen1:', 'frame 1', 'setlocal 0', 'loca
 
 -- Returning null
 test{[[function sq(x) { x*x; return }]], {'gen1:', 'frame 1', 'setlocal 0', 'local 0', 'local 0', 'mul', 'pop', 'ret 0', 'ret'}}
+
+-- Ternary conditionals
+test{[[var x=3; var y=(x > 0 ? 5 : -5)]], {
+        'push 3',
+        'store24 gen1',
+        'load24 gen1',
+        'push 0',
+        'gt',
+        'brz gen3',
+        'push 5',
+        'jmp gen4',
+        'gen3:',
+        'push 5',
+        'not',
+        'add 1',
+        'gen4:',
+        'store24 gen2',
+        'hlt',
+        'gen1: .db 0',
+        'gen2: .db 0'
+}}

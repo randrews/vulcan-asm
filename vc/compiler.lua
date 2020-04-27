@@ -122,19 +122,37 @@ function Generator:var(var)
     end
 end
 
-function operator(name, opcode)
+function operator(...)
+    local opcodes = {...}
     return function(self, expr)
         self:generate(expr[2])
         self:generate(expr[3])
-        self:emit(opcode)
+        for _, opcode in ipairs(opcodes) do
+            self:emit(opcode)
+        end
     end
 end
 
-Generator.add = operator('add', 'add')
-Generator.sub = operator('sub', 'sub')
-Generator.mul = operator('mul', 'mul')
-Generator.div = operator('div', 'div')
-Generator.mod = operator('mod', 'mod')
+Generator.add = operator('add')
+Generator.sub = operator('sub')
+Generator.mul = operator('mul')
+Generator.div = operator('div')
+Generator.mod = operator('mod')
+Generator.gt = operator('gt')
+Generator.lt = operator('lt')
+Generator.ge = operator('lt', 'lnot')
+Generator.le = operator('gt', 'lnot')
+Generator.ne = operator('sub')
+Generator.eq = operator('sub', 'lnot')
+Generator._and = operator('and')
+Generator._or = operator('or')
+Generator.xor = operator('xor')
+
+function Generator:neg(expr)
+    self:generate(expr[2])
+    self:emit('not')
+    self:emit('add 1')
+end
 
 -- This isn't all exprs, it's just exprs-as-statements
 function Generator:expr(expr)
@@ -268,8 +286,29 @@ function Generator:_new(new)
     error('TODO')
 end
 
-function Generator:_if(_if)
-    error('TODO')
+function Generator:_if(node)
+    -- First, we need two labels, one for the else branch and one for the end:
+    local else_lbl = self:gensym()
+    local end_lbl = self:gensym()
+
+    -- Evaluate the condition:
+    self:generate(node[2])
+
+    -- If the condition is zero, jmp to the else:
+    self:emit('brz ' .. else_lbl)
+
+    -- If we're here the condition is nonzero, so evaluate the true side...
+    self:generate(node[3])
+
+    -- And jump to the end:
+    self:emit('jmp ' .. end_lbl)
+
+    -- The else branch:
+    self:emit(else_lbl .. ':')
+    self:generate(node[4])
+
+    -- The end label:
+    self:emit(end_lbl .. ':')
 end
 
 function Generator:_return(ret)

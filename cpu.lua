@@ -1,4 +1,5 @@
 local VASM = require('vasm')
+local opcodes = require('opcodes')
 
 CPU = {}
 
@@ -107,48 +108,13 @@ function CPU:print_stack()
 end
 
 function CPU:decode(opcode)
-    if opcode == 0 then return 'push'
-    elseif opcode == 1 then return 'add'
-    elseif opcode == 2 then return 'sub'
-    elseif opcode == 3 then return 'mul'
-    elseif opcode == 4 then return 'div'
-    elseif opcode == 5 then return 'mod'
-    elseif opcode == 6 then return 'rand'
-    elseif opcode == 7 then return '_and' -- Renamed from and
-    elseif opcode == 8 then return '_or' -- renamed from or
-    elseif opcode == 9 then return 'xor'
-    elseif opcode == 10 then return '_not' -- Renamed from not
-    elseif opcode == 11 then return 'lshift'
-    elseif opcode == 12 then return 'rshift'
-    elseif opcode == 13 then return 'arshift'
-    elseif opcode == 14 then return 'pop'
-    elseif opcode == 15 then return 'dup'
-    elseif opcode == 16 then return '_2dup' -- Renamed from 2dup
-    elseif opcode == 17 then return 'swap'
-    elseif opcode == 18 then return 'pick'
-    elseif opcode == 19 then return 'height'
-    elseif opcode == 20 then return 'jmp'
-    elseif opcode == 21 then return 'jmpr'
-    elseif opcode == 22 then return '_call' -- Renamed from call
-    elseif opcode == 23 then return 'ret'
-    elseif opcode == 24 then return 'brz'
-    elseif opcode == 25 then return 'brnz'
-    elseif opcode == 26 then return 'brgt'
-    elseif opcode == 27 then return 'brlt'
-    elseif opcode == 28 then return 'hlt'
-    elseif opcode == 29 then return '_load' -- Renamed from load
-    elseif opcode == 30 then return 'load16'
-    elseif opcode == 31 then return 'load24'
-    elseif opcode == 32 then return 'store'
-    elseif opcode == 33 then return 'store16'
-    elseif opcode == 34 then return 'store24'
-    elseif opcode == 35 then return 'inton'
-    elseif opcode == 36 then return 'intoff'
-    elseif opcode == 37 then return 'setiv'
-    elseif opcode == 38 then return 'frame'
-    elseif opcode == 39 then return '_local' -- Renamed from local
-    elseif opcode == 40 then return 'setlocal'
-    else error('Unrecognized opcode ' .. opcode) end
+    local name = opcodes.mnemonic_for(opcode)
+    if not name then error('Unrecognized opcode ' .. opcode) end
+    if (name == 'and' or name == 'or' or name == 'not' or name == '2dup'
+        or name == 'call' or name == 'load' or name == 'local') then
+        return '_' .. name
+    end
+    return name
 end
 
 function CPU:fetch()
@@ -274,6 +240,15 @@ function CPU:_not()
     self:push_data(~self:pop_data())
 end
 
+function CPU:lnot()
+    local val = self:pop_data()
+    if val == 0 then
+        self:push_data(1)
+    else
+        self:push_data(0)
+    end
+end
+
 function CPU:lshift()
     local places = self:pop_data()
     self:push_data(self:pop_data() << places)
@@ -329,18 +304,32 @@ function CPU:brnz()
     end
 end
 
-function CPU:brgt()
-    local offset = self:pop_data()
-    if self:pop_data() & 0x800000 == 0 then
-        self.next_pc = self.pc + offset
-    end
+function CPU:gt()
+    local b = self:pop_data()
+    local a = self:pop_data()
+    if a > b then self:push_data(1)
+    else self:push_data(0) end
 end
 
-function CPU:brlt()
-    local offset = self:pop_data()
-    if self:pop_data() & 0x800000 ~= 0 then
-        self.next_pc = self.pc + offset
-    end
+function CPU:lt()
+    local b = self:pop_data()
+    local a = self:pop_data()
+    if a < b then self:push_data(1)
+    else self:push_data(0) end
+end
+
+function CPU:agt()
+    local b = to_signed(self:pop_data())
+    local a = to_signed(self:pop_data())
+    if a > b then self:push_data(1)
+    else self:push_data(0) end
+end
+
+function CPU:alt()
+    local b = to_signed(self:pop_data())
+    local a = to_signed(self:pop_data())
+    if a < b then self:push_data(1)
+    else self:push_data(0) end
 end
 
 -- Memory access
@@ -374,8 +363,10 @@ function CPU:store16()
     local val = self:pop_data()
     self.mem[addr] = val & 0xff
     self.mem[addr+1] = (val >> 8) & 0xff
-    self.display:refresh_address(addr)
-    self.display:refresh_address(addr+1)
+    if self.display then
+        self.display:refresh_address(addr)
+        self.display:refresh_address(addr+1)
+    end
 end
 
 function CPU:store()
@@ -416,6 +407,17 @@ function CPU:_local()
         self:push_data(self.stack[self.call - 3 - id])
     else -- Default to pushing 0
         self:push_data(0)
+    end
+end
+
+-- Convert a 24-bit unsigned value to a signed Lua number
+function to_signed(word)
+    word = word & 0xffffff
+    if word & 0x800000 then
+        word = word ~ 0xffffff + 1
+        return -1 * word
+    else
+        return word
     end
 end
 

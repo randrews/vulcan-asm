@@ -92,7 +92,7 @@ assert(cpu:pop_data() == 4)
 
 -- Decoding instructions
 local cpu = CPU.new()
-assert(cpu:decode(17) == 'swap')
+assert(cpu:decode(22) == 'swap')
 
 -- Fetching instructions
 local cpu = CPU.new()
@@ -243,4 +243,62 @@ cpu:load(iterator([[
     hlt
 ]]))
 cpu:run()
+assert(cpu:pop_data() == 0)
+
+-- Comparing values
+local cpu = CPU.new()
+cpu:load(iterator([[
+    .org 256
+    push 10
+    gt 20
+    push 20
+    gt 5
+    push 10
+    lt 20
+    push 10
+    lt 5
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 0) -- 10 < 5 ?
+assert(cpu:pop_data() ~= 0) -- 10 < 20 ?
+assert(cpu:pop_data() ~= 0) -- 20 > 5 ?
+assert(cpu:pop_data() == 0) -- 10 > 20 ?
+
+-- Comparing values arithmetically
+local cpu = CPU.new()
+cpu:load(iterator([[
+    .org 256
+    push 10
+    mul 0xffffff
+    agt 20
+    push 20
+    push 5
+    mul 0xffffff
+    agt
+    push 10
+    mul 0xffffff
+    alt 20
+    push 10
+    push 5
+    mul 0xffffff
+    alt
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 0) -- 10 < 5 ?
+assert(cpu:pop_data() ~= 0) -- -10 < 20 ?
+assert(cpu:pop_data() ~= 0) -- 20 > -5 ?
+assert(cpu:pop_data() == 0) -- -10 > 20 ?
+
+-- Logical not
+local cpu = CPU.new()
+cpu:load(iterator([[
+    .org 256
+    lnot 10
+    lnot 0
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() ~= 0)
 assert(cpu:pop_data() == 0)

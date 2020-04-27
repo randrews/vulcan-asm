@@ -6,6 +6,7 @@
 -- ### Dependencies
 -- To parse Vulcan assembly, we'll need a parser library, so, LPeg:
 lpeg = require('lpeg')
+opcodes = require('opcodes')
 
 -- # Utility functions
 
@@ -71,23 +72,17 @@ function statement_pattern()
     local relative_label = lpeg.C(lpeg.P('@') * label_char * (label_char + lpeg.R('09'))^0)
 
     -- ## Opcodes
-    -- An opcode is any one of several possible strings:
-    local opcodes = {
-        'push', 'nop', 'hlt', 'pop', -- Basic instructions
-        'dup', '2dup', 'swap', 'pick', 'height', -- Stack instructions
-        'add', 'sub', 'mul', 'div', 'mod', 'rand', -- Arithmetic instructions
-        'and', 'or', 'xor', 'not', 'lshift', 'rshift', 'arshift', -- Logic instructions
-        'jmpr', 'jmp', 'call', 'ret', 'brz', 'brnz', 'brgt', 'brlt', -- Branching and jumping
-        'load24', 'load16', 'load', -- Loading from memory
-        'store24', 'store16', 'store', -- Storing to memory
-        'inton', 'intoff', 'setiv', -- Interrupt handling
-        'frame', 'local', 'setlocal' -- Stack frame variables
-    }
-
+    -- An opcode is any one of several possible strings.
     -- Combine the opcodes into one pattern:
+
+    -- First, we need to match the longer opcodes first, because none of these matches are greedy:
+    local sorted_mnemonics = { table.unpack(opcodes.mnemonic_list) }
+    table.sort(sorted_mnemonics, function(a, b) return #a > #b end)
+
+    -- Reduce the sorted opcodes to one pattern:
     local opcode = lpeg.C(
         table.reduce(
-            table.map(opcodes, lpeg.P),
+            table.map(sorted_mnemonics, lpeg.P),
             function(a, b)
                 return a+b
             end
@@ -449,52 +444,7 @@ function generate_code(lines, start_addr, end_addr)
                 mem[line.address - start_addr + 2] = (line.argument >> 16) & 0xff
             end
         elseif line.opcode then
-            local opcode_values = {
-                push = 0,
-                nop = 0,
-                add = 1,
-                sub = 2,
-                mul = 3,
-                div = 4,
-                mod = 5,
-                rand = 6,
-                ['and'] = 7,
-                ['or'] = 8,
-                xor = 9,
-                ['not'] = 10,
-                lshift = 11,
-                rshift = 12,
-                arshift = 13,
-                pop = 14,
-                dup = 15,
-                ['2dup'] = 16,
-                swap = 17,
-                pick = 18,
-                height = 19,
-                jmp = 20,
-                jmpr = 21,
-                call = 22,
-                ret = 23,
-                brz = 24,
-                brnz = 25,
-                brgt = 26,
-                brlt = 27,
-                hlt = 28,
-                load = 29,
-                load16 = 30,
-                load24 = 31,
-                store = 32,
-                store16 = 33,
-                store24 = 34,
-                inton = 35,
-                intoff = 36,
-                setiv = 37,
-                frame = 38,
-                ['local'] = 39,
-                setlocal = 40
-            }
-
-            local instruction = opcode_values[line.opcode] or error('Unrecognized opcode on line ' .. line.line .. ': ' .. line.opcode)
+            local instruction = opcodes.opcode_for(line.opcode) or error('Unrecognized opcode on line ' .. line.line .. ': ' .. line.opcode)
 
             instruction = (instruction << 2) + (line.length - 1)
             mem[line.address - start_addr] = instruction
