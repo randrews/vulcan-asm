@@ -175,16 +175,33 @@ test{[[var x=3; var y=(x > 0 ? 5 : -5)]], {
         'load24 gen1',
         'push 0',
         'gt',
-        'brz gen3',
+        'brz gen4',
         'push 5',
-        'jmp gen4',
-        'gen3:',
+        'jmp gen3',
+        'gen4:',
         'push 5',
         'not',
         'add 1',
-        'gen4:',
+        'gen3:',
         'store24 gen2',
         'hlt',
         'gen1: .db 0',
         'gen2: .db 0'
+}}
+
+-- If statements
+test{[[var x=3; if (x > 0) {x = 7}]], {
+        'push 3',
+        'store24 gen1',
+        'load24 gen1',
+        'push 0',
+        'gt',
+        'brz gen2',
+        'push 7',
+        'dup',
+        'store24 gen1',
+        'pop',
+        'gen2:',
+        'hlt',
+        'gen1: .db 0',
 }}

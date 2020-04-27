@@ -142,8 +142,8 @@ Generator.gt = operator('gt')
 Generator.lt = operator('lt')
 Generator.ge = operator('lt', 'lnot')
 Generator.le = operator('gt', 'lnot')
-Generator.ne = operator('sub')
-Generator.eq = operator('sub', 'lnot')
+Generator.ne = operator('xor')
+Generator.eq = operator('xor', 'lnot')
 Generator._and = operator('and')
 Generator._or = operator('or')
 Generator.xor = operator('xor')
@@ -287,25 +287,36 @@ function Generator:_new(new)
 end
 
 function Generator:_if(node)
-    -- First, we need two labels, one for the else branch and one for the end:
-    local else_lbl = self:gensym()
+    -- First, we need a label for the end:
     local end_lbl = self:gensym()
+
+    -- and one for the else branch if it exists:
+    local else_lbl
+    if node[4] then else_lbl = self:gensym() end
 
     -- Evaluate the condition:
     self:generate(node[2])
 
-    -- If the condition is zero, jmp to the else:
-    self:emit('brz ' .. else_lbl)
+    -- If the condition is zero, jmp past the body.
+    -- If there's an else, jmp to its label:
+    if node[4] then
+        self:emit('brz ' .. else_lbl)
+    else
+        self:emit('brz ' .. end_lbl)
+    end
 
     -- If we're here the condition is nonzero, so evaluate the true side...
     self:generate(node[3])
 
-    -- And jump to the end:
-    self:emit('jmp ' .. end_lbl)
+    -- If there was an else, we now need to skip past it:
+    if node[4] then
+        -- And jump to the end:
+        self:emit('jmp ' .. end_lbl)
 
-    -- The else branch:
-    self:emit(else_lbl .. ':')
-    self:generate(node[4])
+        -- The else branch:
+        self:emit(else_lbl .. ':')
+        self:generate(node[4])
+    end
 
     -- The end label:
     self:emit(end_lbl .. ':')
