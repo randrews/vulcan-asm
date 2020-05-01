@@ -237,10 +237,6 @@ function CPU:xor()
 end
 
 function CPU:_not()
-    self:push_data(~self:pop_data())
-end
-
-function CPU:lnot()
     local val = self:pop_data()
     if val == 0 then
         self:push_data(1)
@@ -293,13 +289,6 @@ end
 function CPU:brz()
     local offset = self:pop_data()
     if self:pop_data() == 0 then
-        self.next_pc = self.pc + offset
-    end
-end
-
-function CPU:brnz()
-    local offset = self:pop_data()
-    if self:pop_data() ~= 0 then
         self.next_pc = self.pc + offset
     end
 end

@@ -92,7 +92,7 @@ assert(cpu:pop_data() == 4)
 
 -- Decoding instructions
 local cpu = CPU.new()
-assert(cpu:decode(22) == 'swap')
+assert(cpu:decode(21) == 'swap')
 
 -- Fetching instructions
 local cpu = CPU.new()
@@ -295,8 +295,8 @@ assert(cpu:pop_data() == 0) -- -10 > 20 ?
 local cpu = CPU.new()
 cpu:load(iterator([[
     .org 256
-    lnot 10
-    lnot 0
+    not 10
+    not 0
     hlt
 ]]))
 cpu:run()

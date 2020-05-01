@@ -140,18 +140,23 @@ Generator.div = operator('div')
 Generator.mod = operator('mod')
 Generator.gt = operator('gt')
 Generator.lt = operator('lt')
-Generator.ge = operator('lt', 'lnot')
-Generator.le = operator('gt', 'lnot')
+Generator.ge = operator('lt', 'not')
+Generator.le = operator('gt', 'not')
 Generator.ne = operator('xor')
-Generator.eq = operator('xor', 'lnot')
+Generator.eq = operator('xor', 'not')
 Generator._and = operator('and')
 Generator._or = operator('or')
 Generator.xor = operator('xor')
 
 function Generator:neg(expr)
     self:generate(expr[2])
-    self:emit('not')
+    self:emit('xor 0xff')
     self:emit('add 1')
+end
+
+function Generator:_not(expr)
+    self:generate(expr[2])
+    self:emit('not')
 end
 
 -- This isn't all exprs, it's just exprs-as-statements
@@ -300,9 +305,9 @@ function Generator:_if(node)
     -- If the condition is zero, jmp past the body.
     -- If there's an else, jmp to its label:
     if node[4] then
-        self:emit('brz ' .. else_lbl)
+        self:emit('brz @' .. else_lbl)
     else
-        self:emit('brz ' .. end_lbl)
+        self:emit('brz @' .. end_lbl)
     end
 
     -- If we're here the condition is nonzero, so evaluate the true side...
@@ -311,7 +316,7 @@ function Generator:_if(node)
     -- If there was an else, we now need to skip past it:
     if node[4] then
         -- And jump to the end:
-        self:emit('jmp ' .. end_lbl)
+        self:emit('jmpr @' .. end_lbl)
 
         -- The else branch:
         self:emit(else_lbl .. ':')

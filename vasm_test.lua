@@ -134,7 +134,7 @@ test([[add 2*(14-3)]], [[("opcode" "add" "argument" ("expr" ("term" 2 "*" ("expr
 test([[jmp start + 2]], [[("opcode" "jmp" "argument" ("expr" ("term" "start") "+" ("term" 2)))]])
 
 -- Relative labels in expressions
-test([[brnz @loop]], [[("opcode" "brnz" "argument" ("expr" ("term" "@loop")))]])
+test([[brz @loop]], [[("opcode" "brz" "argument" ("expr" ("term" "@loop")))]])
 
 -- Comments
 test([[hlt ; whatever]], [[("opcode" "hlt")]])
@@ -361,7 +361,7 @@ test_measure([[push 0xaa1023]], [[(4)]])
 test_measure([[push banana+12]], [[(4)]])
 
 -- Relative label args
-test_measure([[brnz @loop]], [[(4)]])
+test_measure([[brz @loop]], [[(4)]])
 
 -- # Fourth pass tests
 
@@ -481,7 +481,7 @@ mul blah*2]], [[(17 34)]] )
 -- Referring to relative labels
 test_calculate([[
 loop: sub 1
-brnz @loop
+brz @loop
 ]], [[(1 -2)]])
 
 -- # Full assembler tests
@@ -534,7 +534,7 @@ add 0x10 ]], {0x01, 0x10, 0x05, 0x10})
 -- Instructions with negative arguments
 test_assemble([[
 loop: sub 1
-brnz @loop]], {0x09, 0x01, 0x7b, 0xfe, 0xff, 0xff})
+brz @loop]], {0x09, 0x01, 0x73, 0xfe, 0xff, 0xff})
 
 -- Instructions with arguments and a .org
 test_assemble([[
@@ -572,8 +572,8 @@ start: dup
        add 0x1000
        store 0
        sub 1
-       brz start]],
-    {0x01, 0x0a, 0x50, 0x06, 0x00, 0x10, 0x95, 0x00, 0x09, 0x01, 0x77, 0x02, 0x01, 0x00})
+       brz @start]],
+    {0x01, 0x0a, 0x4c, 0x06, 0x00, 0x10, 0x85, 0x00, 0x09, 0x01, 0x73, 0xf8, 0xff, 0xff})
 
 -- .db directives
 test_assemble([[
