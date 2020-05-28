@@ -79,6 +79,16 @@ cpu:reset()
 assert(cpu.pc == 256)
 assert(not cpu.halted)
 
+-- Running a simple binary
+local cpu = CPU.new()
+cpu:poke(256, 0x01)
+cpu:poke(257, 0x02)
+cpu:poke(258, 0x05)
+cpu:poke(259, 0x02)
+cpu:poke(260, 33 << 2)
+cpu:run()
+assert(cpu:pop_data() == 4)
+
 -- Running simple ASM
 local cpu = CPU.new()
 cpu:load(iterator([[

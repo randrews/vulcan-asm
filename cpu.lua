@@ -7,14 +7,12 @@ function CPU.new(display)
     local instance = setmetatable({}, { __index = CPU })
 
     instance.stack = {}
-    for n = 0, (2048 - 1) do
+    for n = 0, 2048 - 1 do
         instance.stack[n] = 0
     end
 
-    instance.stack[2047] = 2047 -- First stack frame points at itself
-
     instance.mem = {}
-    for n = 0, 131071 do
+    for n = 0, (128 * 1024) - 1 do
         instance.mem[n] = math.floor(math.random() * 256)
     end
 
@@ -36,6 +34,7 @@ function CPU:reset()
     self.data = 2048 - 1 -- Stack index of top of data stack
     self.halted = false -- Flag to stop execution
     self.next_pc = nil -- Set after each fetch, opcodes can change it
+    self.stack[2048 - 1] = 2048 - 1 -- First stack frame points at itself
 
     return self
 end
@@ -56,7 +55,7 @@ end
 
 -- A stack frame consists of:
 --
--- - The address of the previous stack frame, or 0
+-- - The address of the previous stack frame
 -- - The return address
 -- - The number of locals in this stack frame
 -- - A sequence of local variables (optional)
