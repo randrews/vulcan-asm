@@ -14,9 +14,7 @@
   <div id="jump_wrapper">
   <div id="jump_page">
   <a class="source" href="compiler.html">compiler.lua</a>
-  <a class="source" href="compiler_test.html">compiler_test.lua</a>
   <a class="source" href="parser.html">parser.lua</a>
-  <a class="source" href="parser_test.html">parser_test.lua</a>
     </div>
   </div>
 </div>
@@ -295,7 +293,7 @@ This is used in both statements and exprs, so we'll declare it outside:</p>
 </td>
 <td class="code">
   <div class="highlight"><pre>    <span class="k">local</span> number = (<span class="k">function</span>()
-            <span class="k">local</span> dec_number = (lpeg.S(<span class="s">'-'</span>)^-1 * lpeg.R(<span class="s">'19'</span>) * lpeg.R(<span class="s">'09'</span>)^0) / <span class="nt">tonumber</span>
+            <span class="k">local</span> dec_number = (lpeg.R(<span class="s">'19'</span>) * lpeg.R(<span class="s">'09'</span>)^0) / <span class="nt">tonumber</span>
             <span class="k">local</span> hex_number = lpeg.P(<span class="s">'0x'</span>) * lpeg.C(lpeg.R(<span class="s">'09'</span>,<span class="s">'af'</span>,<span class="s">'AF'</span>)^1) / <span class="k">function</span>(s) <span class="k">return</span> <span class="nt">tonumber</span>(s, 16) <span class="k">end</span>
             <span class="k">local</span> bin_number = lpeg.P(<span class="s">'0b'</span>) * lpeg.C(lpeg.S(<span class="s">'01'</span>)^1) / <span class="k">function</span>(s) <span class="k">return</span> <span class="nt">tonumber</span>(s, 2) <span class="k">end</span>
             <span class="k">local</span> dec_zero = lpeg.P(<span class="s">'0'</span>) / <span class="nt">tonumber</span>
@@ -324,50 +322,227 @@ This is used in both statements and exprs, so we'll declare it outside:</p>
     <a class="pilcrow" href="#section-17">&#182;</a>
   </div>
   
-<p>An expression is a mathematical expression with parens or the standard five operators, with the atoms being:</p>
+<p>The operators for infix expressions, grouped by precedence: low precedence first.
+Every one of these is a left-associative binary infix operator</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> operators = {
+        {<span class="s">'||'</span>, <span class="s">'&amp;&amp;'</span>, <span class="s">'^'</span>},
+        {<span class="s">'=='</span>, <span class="s">'&lt;'</span>, <span class="s">'&gt;'</span>, <span class="s">'&lt;='</span>, <span class="s">'&gt;='</span>, <span class="s">'!='</span>},
+        {<span class="s">'+'</span>, <span class="s">'-'</span>},
+        {<span class="s">'/'</span>, <span class="s">'*'</span>, <span class="s">'&#37;'</span>}
+    }
+</pre></div>
+</td>
+</tr><tr id="section-18">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-18">&#182;</a>
+  </div>
+  
+<p>Build nodes of infix expressions, into nested prefix expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> <span class="k">function</span> <span class="nf">infix</span>(...)
+        <span class="k">local</span> captures = {...}
+        <span class="k">if</span> captures[2] <span class="k">then</span>
+            <span class="k">local</span> lhs = table.remove(captures, 1)
+            <span class="k">local</span> op = table.remove(captures, 1)
+            <span class="k">local</span> rhs = infix(table.<span class="nt">unpack</span>(captures))
+            <span class="k">return</span> { op, lhs, rhs }
+        <span class="k">else</span>
+            <span class="k">return</span> captures[1]
+        <span class="k">end</span>
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-19">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-19">&#182;</a>
+  </div>
+  
+<p>Builder for unary-operator nodes</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> <span class="k">function</span> <span class="nf">unary</span>(op, atom)
+        <span class="k">if</span> op == <span class="s">'-'</span> <span class="k">then</span> op = <span class="s">'neg'</span>
+        <span class="k">elseif</span> op == <span class="s">'!'</span> <span class="k">then</span> op = <span class="s">'not'</span> <span class="k">end</span>
+        <span class="k">return</span> { op, atom }
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-20">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-20">&#182;</a>
+  </div>
+  
+<p>Building a grammar for expressions</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> expr_grammar = {<span class="s">'EXPR'</span>}
+</pre></div>
+</td>
+</tr><tr id="section-21">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-21">&#182;</a>
+  </div>
+  
+<p>Go through the operators and build nonterminals for each precedence level, referring to the higher
+ones. The final level refers to a nonterminal we'll call ATOM</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">for</span> precedence, ops <span class="k">in</span> <span class="nt">ipairs</span>(operators) <span class="k">do</span>
+        <span class="k">local</span> pat = lpeg.P(ops[1])
+        <span class="k">for</span> n = 2, #ops <span class="k">do</span> pat = pat + lpeg.P(ops[n]) <span class="k">end</span>
+        <span class="k">local</span> next_tier = <span class="s">'TIER'</span> .. (precedence + 1)
+        <span class="k">if</span> precedence == #operators <span class="k">then</span> next_tier = <span class="s">'ATOM'</span> <span class="k">end</span>
+        expr_grammar[<span class="s">'TIER'</span> .. precedence] = (space * lpeg.V(next_tier) * (lpeg.C(pat) * lpeg.V(next_tier))^0) / infix
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-22">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-22">&#182;</a>
+  </div>
+  
+<p>The basic expression calls into the lowest-precedence infix operators and will consume an optional
+terminating semicolon so we can stick more than one on a line</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    expr_grammar.EXPR = space * lpeg.V(<span class="s">'TIER1'</span>) * lpeg.S(<span class="s">';'</span>)^-1
+</pre></div>
+</td>
+</tr><tr id="section-23">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-23">&#182;</a>
+  </div>
+  
+<p>Expressions use operators and build up parse trees out of atoms. These are all the things an atom can be:</p>
 
 <ul>
-    <li>numbers</li>
-    <li>identifiers</li>
-    <li>strings</li>
-    <li>array references</li>
-    <li>struct references</li>
-    <li>function calls</li>
-    <li>memory references</li>
+    <li>another expression in parentheses</li>
+    <li>another atom behind a unary operator</li>
+    <li><code>new</code> calls</li>
     <li>assignments</li>
-    <li>conditionals</li>
+    <li>numbers</li>
+    <li>ternary conditionals</li>
+    <li>identifiers</li>
+    <li>address references</li>
+    <li>strings</li>
 </ul>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">return</span> lpeg.P{
-        <span class="s">'EXPR'</span>;
-        EXPR = lpeg.Ct( lpeg.Cc(<span class="s">'expr'</span>) * space * (lpeg.V(<span class="s">'TERM'</span>) * (lpeg.C( lpeg.S(<span class="s">'+-'</span>) ) * lpeg.V(<span class="s">'TERM'</span>))^0) * lpeg.S(<span class="s">';'</span>)^-1 ),
-        TERM = lpeg.Ct( lpeg.Cc(<span class="s">'term'</span>) * space * lpeg.V(<span class="s">'FACT'</span>) * (lpeg.C( lpeg.S(<span class="s">'/*&#37;'</span>) ) * lpeg.V(<span class="s">'FACT'</span>))^0 ),
-        FACT = space * (
-            <span class="s">'('</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">')'</span> +
-                lpeg.V(<span class="s">'NEW'</span>) +
-                lpeg.V(<span class="s">'ASSIGN'</span>) +
-                number +
-                lpeg.V(<span class="s">'SHORTCOND'</span>) +
-                lpeg.V(<span class="s">'NAME'</span>) +
-                lpeg.V(<span class="s">'ADDRESS'</span>) +
-                string_pattern) * space,
+  <div class="highlight"><pre>    expr_grammar.ATOM = space * (
+        <span class="s">'('</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">')'</span> +
+            (lpeg.C(lpeg.S(<span class="s">'-!'</span>)) * lpeg.V(<span class="s">'ATOM'</span>)) / unary +
+            lpeg.V(<span class="s">'NEW'</span>) +
+            lpeg.V(<span class="s">'ASSIGN'</span>) +
+            number +
+            lpeg.V(<span class="s">'SHORTCOND'</span>) +
+            lpeg.V(<span class="s">'NAME'</span>) +
+            lpeg.V(<span class="s">'ADDRESS'</span>) +
+            string_pattern) * space
+</pre></div>
+</td>
+</tr><tr id="section-24">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-24">&#182;</a>
+  </div>
+  
+<p>Names are identifiers, variable names. They can have optional things behind them:</p>
 
-        NAME = lpeg.Ct( lpeg.Cc(<span class="s">'id'</span>) * identifier * (lpeg.V(<span class="s">'SUBSCRIPT'</span>) + lpeg.V(<span class="s">'PARAMS'</span>) + lpeg.V(<span class="s">'MEMBER'</span>))^-1 ),
-        SUBSCRIPT = lpeg.Ct( lpeg.Cc(<span class="s">'subscript'</span>) * space * <span class="s">'['</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">']'</span> ),
-        PARAMS = lpeg.Ct( lpeg.Cc(<span class="s">'params'</span>) * space * ((<span class="s">'('</span> * space * <span class="s">')'</span>) + (<span class="s">'('</span> * lpeg.V(<span class="s">'EXPR'</span>) * (<span class="s">','</span> * lpeg.V(<span class="s">'EXPR'</span>))^0 * <span class="s">')'</span> )) ),
-        MEMBER = lpeg.Ct( lpeg.Cc(<span class="s">'member'</span>) * space * <span class="s">'.'</span> * identifier * lpeg.V(<span class="s">'SUBSCRIPT'</span>)^-1 ),
+<ul>
+    <li>array subscripts</li>
+    <li>parameter lists (turns this into a function call)</li>
+    <li>member references (if it's a struct)</li>
+</ul>
 
-        ADDRESS = lpeg.Ct( lpeg.Cc(<span class="s">'address'</span>) * <span class="s">'@{'</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">'}'</span> ),
 
-        ASSIGN = lpeg.Ct( lpeg.Cc(<span class="s">'assign'</span>) * lpeg.V(<span class="s">'LVALUE'</span>) * space * <span class="s">'='</span> * space * lpeg.V(<span class="s">'EXPR'</span>) ),
-        LVALUE = lpeg.Ct( (lpeg.Cc(<span class="s">'id'</span>) * identifier * (lpeg.V(<span class="s">'SUBSCRIPT'</span>) + lpeg.V(<span class="s">'MEMBER'</span>))^-1) ) + lpeg.V(<span class="s">'ADDRESS'</span>),
-        NEW = lpeg.Ct( lpeg.Cc(<span class="s">'new'</span>) * space * <span class="s">'new'</span> * space * identifier ),
+</td>
+<td class="code">
+  <div class="highlight"><pre>    expr_grammar.NAME = lpeg.Ct( lpeg.Cc(<span class="s">'id'</span>) * identifier * (lpeg.V(<span class="s">'SUBSCRIPT'</span>) + lpeg.V(<span class="s">'PARAMS'</span>) + lpeg.V(<span class="s">'MEMBER'</span>))^-1 )
+    expr_grammar.SUBSCRIPT = lpeg.Ct( lpeg.Cc(<span class="s">'subscript'</span>) * space * <span class="s">'['</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">']'</span> )
+    expr_grammar.PARAMS = lpeg.Ct( lpeg.Cc(<span class="s">'params'</span>) * space * ((<span class="s">'('</span> * space * <span class="s">')'</span>) + (<span class="s">'('</span> * lpeg.V(<span class="s">'EXPR'</span>) * (<span class="s">','</span> * lpeg.V(<span class="s">'EXPR'</span>))^0 * <span class="s">')'</span> )) )
+    expr_grammar.MEMBER = lpeg.Ct( lpeg.Cc(<span class="s">'member'</span>) * space * <span class="s">'.'</span> * identifier * lpeg.V(<span class="s">'SUBSCRIPT'</span>)^-1 )
+</pre></div>
+</td>
+</tr><tr id="section-25">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-25">&#182;</a>
+  </div>
+  
+<p>Address references to deal with raw memory addresses</p>
 
-        SHORTCOND = lpeg.Ct( lpeg.Cc(<span class="s">'if'</span>) * <span class="s">'('</span> * space * lpeg.V(<span class="s">'EXPR'</span>) * space * <span class="s">'?'</span> * space * lpeg.V(<span class="s">'EXPR'</span>) * space * <span class="s">':'</span> * space * lpeg.V(<span class="s">'EXPR'</span>) * space * <span class="s">')'</span> ),
-    }
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    expr_grammar.ADDRESS = lpeg.Ct( lpeg.Cc(<span class="s">'address'</span>) * <span class="s">'@{'</span> * lpeg.V(<span class="s">'EXPR'</span>) * <span class="s">'}'</span> )
+</pre></div>
+</td>
+</tr><tr id="section-26">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-26">&#182;</a>
+  </div>
+  
+<p>Assignments have an lvalue, which is a subset of what a name can be, or an address; and an rvalue, which is an expr</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    expr_grammar.ASSIGN = lpeg.Ct( lpeg.Cc(<span class="s">'assign'</span>) * lpeg.V(<span class="s">'LVALUE'</span>) * space * <span class="s">'='</span> * space * lpeg.V(<span class="s">'EXPR'</span>) )
+    expr_grammar.LVALUE = lpeg.Ct( (lpeg.Cc(<span class="s">'id'</span>) * identifier * (lpeg.V(<span class="s">'SUBSCRIPT'</span>) + lpeg.V(<span class="s">'MEMBER'</span>))^-1) ) + lpeg.V(<span class="s">'ADDRESS'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-27">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-27">&#182;</a>
+  </div>
+  
+<p>A <code>new</code> expression to allocate a new struct instance on the heap</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    expr_grammar.NEW = lpeg.Ct( lpeg.Cc(<span class="s">'new'</span>) * space * <span class="s">'new'</span> * space * identifier )
+</pre></div>
+</td>
+</tr><tr id="section-28">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-28">&#182;</a>
+  </div>
+  
+<p>A ternary conditional</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    expr_grammar.SHORTCOND = lpeg.Ct( lpeg.Cc(<span class="s">'if'</span>) * <span class="s">'('</span> * space * lpeg.V(<span class="s">'EXPR'</span>) * space * <span class="s">'?'</span> * space * lpeg.V(<span class="s">'EXPR'</span>) * space * <span class="s">':'</span> * space * lpeg.V(<span class="s">'EXPR'</span>) * space * <span class="s">')'</span> )
+
+    <span class="k">return</span> lpeg.P(expr_grammar)
 <span class="k">end</span>
 
 <span class="k">local</span> expr = expr_pattern()
@@ -375,14 +550,12 @@ This is used in both statements and exprs, so we'll declare it outside:</p>
 <span class="k">function</span> <span class="nf">statement_pattern</span>(expr)
     <span class="k">return</span> lpeg.P{
         <span class="s">'STMT'</span>;
-        STMT = lpeg.Ct( lpeg.Cc(<span class="s">'stmt'</span>) *
-                            (lpeg.V(<span class="s">'FUNC'</span>) +
-                                 lpeg.V(<span class="s">'STRUCT'</span>) +
-                                 lpeg.V(<span class="s">'VAR'</span>) +
-                                 lpeg.V(<span class="s">'LOOP'</span>) +
-                                 lpeg.V(<span class="s">'COND'</span>) +
-                                 expr)
-        ),
+        STMT = (lpeg.V(<span class="s">'FUNC'</span>) +
+                    lpeg.V(<span class="s">'STRUCT'</span>) +
+                    lpeg.V(<span class="s">'VAR'</span>) +
+                    lpeg.V(<span class="s">'LOOP'</span>) +
+                    lpeg.V(<span class="s">'COND'</span>) +
+                    lpeg.Ct( lpeg.Cc(<span class="s">'expr'</span>) * expr )),
 
         BODY = lpeg.Ct( lpeg.Cc(<span class="s">'body'</span>) *
                             (lpeg.V(<span class="s">'VAR'</span>) +
@@ -439,10 +612,10 @@ This is used in both statements and exprs, so we'll declare it outside:</p>
 <span class="k">local</span> statement = statement_pattern(expr)
 </pre></div>
 </td>
-</tr><tr id="section-18">
+</tr><tr id="section-29">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-18">&#182;</a>
+    <a class="pilcrow" href="#section-29">&#182;</a>
   </div>
   
 <p>We assume src is a list of statements. We parse them (assuming at least one statement) and

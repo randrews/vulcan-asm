@@ -14,9 +14,7 @@
   <div id="jump_wrapper">
   <div id="jump_page">
   <a class="source" href="compiler.html">compiler.lua</a>
-  <a class="source" href="compiler_test.html">compiler_test.lua</a>
   <a class="source" href="parser.html">parser.lua</a>
-  <a class="source" href="parser_test.html">parser_test.lua</a>
     </div>
   </div>
 </div>
@@ -98,14 +96,6 @@
 <td class="code">
   <div class="highlight"><pre>    gen:finalize(emit)
 <span class="k">end</span>
-
-<span class="k">function</span> <span class="nf">Generator.new</span>(globals, gensym)
-    <span class="k">local</span> instance = {
-        gensym = gensym,
-        globals = globals,
-        segments = {text = {}, functions = {}, globals = {}}
-    }
-    <span class="nt">setmetatable</span>(instance, {__index=Generator})
 </pre></div>
 </td>
 </tr><tr id="section-5">
@@ -114,10 +104,34 @@
     <a class="pilcrow" href="#section-5">&#182;</a>
   </div>
   
-<p>We have three segments in the program:
-- Text, which gets emitted first and is all the expressions in the global context, followed by an implicit hlt
-- Functions, emitted second and are all the functions
-- Globals, emitted last and containing the labels and .db's for global variables (all initialized to 0, the initializers run where the declaration was, in text)</p>
+<h2>Generator class</h2>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator.new</span>(globals, gensym)
+    <span class="k">local</span> instance = {
+        gensym = gensym,
+        globals = globals,
+        segments = {text = {}, functions = {}, globals = {}}
+    }
+    <span class="nt">setmetatable</span>(instance, {__index=Generator})
+</pre></div>
+</td>
+</tr><tr id="section-6">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-6">&#182;</a>
+  </div>
+  
+<p>We have three segments in the program:</p>
+
+<ul>
+    <li>Text, which gets emitted first and is all the expressions in the global context, followed by an implicit hlt</li>
+    <li>Functions, emitted second and are all the functions</li>
+    <li>Globals, emitted last and containing the labels and .db's for global variables (all initialized to 0, the initializers
+    run where the declaration was, in text)</li>
+</ul>
 
 
 </td>
@@ -133,10 +147,10 @@
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-6">
+</tr><tr id="section-7">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-6">&#182;</a>
+    <a class="pilcrow" href="#section-7">&#182;</a>
   </div>
   
 <h2>Finalize</h2>
@@ -152,10 +166,10 @@
   <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:finalize</span>(emit)
 </pre></div>
 </td>
-</tr><tr id="section-7">
+</tr><tr id="section-8">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-7">&#182;</a>
+    <a class="pilcrow" href="#section-8">&#182;</a>
   </div>
   
 <p>Helper for emitting an entire segment to the final output at once</p>
@@ -168,10 +182,10 @@
     <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-8">
+</tr><tr id="section-9">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-8">&#182;</a>
+    <a class="pilcrow" href="#section-9">&#182;</a>
   </div>
   
 <p>Emit all of the text followed by a hlt</p>
@@ -185,14 +199,13 @@
     <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-9">
+</tr><tr id="section-10">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-9">&#182;</a>
+    <a class="pilcrow" href="#section-10">&#182;</a>
   </div>
   
-<p>If there are any functions or globals, emit those too.
-They don't need hlts because functions will automatically return
+<p>If there are any functions or globals, emit those too. They don't need hlts because functions will automatically return
 and globals never get jumped to.</p>
 
 
@@ -203,42 +216,22 @@ and globals never get jumped to.</p>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-10">
-<td class="docs">
-  <div class="pilwrap">
-    <a class="pilcrow" href="#section-10">&#182;</a>
-  </div>
-  
-<p>Generate code (sending to whatever the active segment is) for the passed-in node.
-This will work on any node, so it gets called recursively by most other node types.</p>
-
-
-</td>
-<td class="code">
-  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:generate</span>(node)
-    <span class="k">local</span> name = node[1]
-</pre></div>
-</td>
 </tr><tr id="section-11">
 <td class="docs">
   <div class="pilwrap">
     <a class="pilcrow" href="#section-11">&#182;</a>
   </div>
   
-<p>Some names aren't viable method names; 'new' because it's
-also the constructor, 'if' and 'return' because they're keywords</p>
+<h2>Generate</h2>
+<p>Generate code (sending to whatever the active segment is) for the passed-in node. This will work on any node, so it gets called
+recursively by most other node types.</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">if</span> name == <span class="s">'if'</span> <span class="o">or</span> name == <span class="s">'new'</span> <span class="o">or</span> name == <span class="s">'return'</span> <span class="k">then</span> name = <span class="s">'_'</span> .. name <span class="k">end</span>
-    <span class="k">local</span> fn = self[name]
-    <span class="k">if</span> fn <span class="k">then</span> <span class="k">return</span> fn(self, node)
-    <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Unrecognized node type: '</span> .. name) <span class="k">end</span>
-<span class="k">end</span>
-
-<span class="k">function</span> <span class="nf">Generator:stmt</span>(stmt)
-    self:generate(stmt[2])
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:generate</span>(node)
+    <span class="k">if</span> <span class="nt">type</span>(node) == <span class="s">'table'</span> <span class="k">then</span>
+        <span class="k">local</span> name = node[1]
 </pre></div>
 </td>
 </tr><tr id="section-12">
@@ -247,15 +240,18 @@ also the constructor, 'if' and 'return' because they're keywords</p>
     <a class="pilcrow" href="#section-12">&#182;</a>
   </div>
   
-<p>In order to keep from polluting the stack, if there's an expr-as-statement then
-we pop the value it left behind</p>
+<p>Some node names aren't valid method names, let's translate them</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">if</span> stmt[2][1] == <span class="s">'expr'</span> <span class="k">then</span>
-        self:emit(<span class="s">'pop'</span>)
-    <span class="k">end</span>
+  <div class="highlight"><pre>        <span class="k">local</span> method_name = method_for(name)
+        <span class="k">local</span> fn = self[method_name]
+        <span class="k">if</span> fn <span class="k">then</span> <span class="k">return</span> fn(self, node)
+        <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Unrecognized node type: '</span> .. name) <span class="k">end</span>
+    <span class="k">elseif</span> <span class="nt">type</span>(node) == <span class="s">'number'</span> <span class="k">then</span>
+        self:emit(<span class="s">'push '</span> .. node)
+    <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Unrecognized node type ['</span> .. node .. <span class="s">']'</span>) <span class="k">end</span>
 <span class="k">end</span>
 </pre></div>
 </td>
@@ -267,33 +263,30 @@ we pop the value it left behind</p>
   
 <h2>Variable declarations:</h2>
 
-<p>This compiles a variable declaration, and puts a spec for that variable into either
-<code>globals</code> or <code>locals</code>. What that spec is depends on what kind of variable it is:</p>
+<p>This compiles a variable declaration, and puts a spec for that variable into either <code>globals</code> or <code>locals</code>. What that spec is
+depends on what kind of variable it is:</p>
 
-<p>All variables are one word long, and either contain a pointer to something, or a
-simple value. The only times we need to know the type of a variable is if it's an
-instance of a struct (so we know which offsets to use for which members) or if it's
-a function (to know the number of arguments, to ensure we structure the call
-correctly).</p>
+<p>All variables are one word long, and either contain a pointer to something, or a simple value. The only times we need to know
+the type of a variable is if it's an instance of a struct (so we know which offsets to use for which members) or if it's a
+function (to know the number of arguments, to ensure we structure the call correctly).</p>
 
-<p>The simplest thing that can be a variable spec is just a simple value: these compile
-to a label in the globals segment (for globals), so the spec is just a string saying
-which label it is. For a local, it can be a number for which index local it is.</p>
+<p>The simplest thing that can be a variable spec is just a simple value: these compile to a label in the globals segment (for
+globals), so the spec is just a string saying which label it is. For a local, it can be a number for which index local it is.</p>
 
-<p>All other specs are tables, with at minimum a <code>type</code> field and either a <code>label</code> field
-(for globals) or an <code>index</code> field (for locals).</p>
+<p>All other specs are tables, with at minimum a <code>type</code> field and either a <code>label</code> field (for globals) or an <code>index</code> field (for
+locals).</p>
 
-<p>Functions (which don't get declared with <code>var</code> but I'll document them here anyway)
-have a type of 'function', and also an 'arity' field for the number of arguments.
-They are also only globals, no local functions.</p>
+<p>Functions (which don't get declared with <code>var</code> but I'll document them here anyway) have a type of 'function', and also an
+'arity' field for the number of arguments and a 'framesize' field for the total frame size (including locals). They are also
+only globals, no local functions.</p>
 
-<p>Structs have a type of 'struct' and a 'struct' field that contains the name of the
-struct they are.</p>
+<p>Structs have a type of 'struct' and a 'struct' field that contains the name of the struct they are.</p>
 
 
 </td>
 <td class="code">
   <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:var</span>(var)
+    <span class="k">local</span> name = var[2]
 </pre></div>
 </td>
 </tr><tr id="section-14">
@@ -302,60 +295,12 @@ struct they are.</p>
     <a class="pilcrow" href="#section-14">&#182;</a>
   </div>
   
-<p>Something for functions here</p>
+<p>If we're in a function currently then we're declaring a local variable:</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">local</span> name = var[2]
-    <span class="k">local</span> label = self.gensym(name)
-    self.globals[name] = label
-    self:emit_global(label .. <span class="s">': .db 0'</span>)
-
-    <span class="k">local</span> typename = clause(var, <span class="s">'type'</span>)
-    <span class="k">local</span> initial = clause(var, <span class="s">'init'</span>)
-
-    <span class="k">if</span> initial <span class="k">then</span>
-        self:generate(initial[2])
-        self:emit(<span class="s">'store24 '</span> .. label)
-    <span class="k">end</span>
-
-    <span class="k">if</span> typename <span class="k">then</span>
-        <span class="nt">error</span>(<span class="s">'TODO'</span>)
-    <span class="k">end</span>
-<span class="k">end</span>
-
-<span class="k">function</span> <span class="nf">Generator:expr</span>(expr)
-    <span class="k">for</span> index = 2, #expr, 2 <span class="k">do</span>
-        <span class="k">local</span> term = expr[index]
-        self:generate(term, env)
-        <span class="k">if</span> index &gt; 2 <span class="k">then</span>
-            <span class="k">local</span> op = expr[index-1]
-            <span class="k">if</span> op == <span class="s">'+'</span> <span class="k">then</span> self:emit(<span class="s">'add'</span>)
-            <span class="k">elseif</span> op == <span class="s">'-'</span> <span class="k">then</span> self:emit(<span class="s">'sub'</span>) <span class="k">end</span>
-        <span class="k">end</span>
-    <span class="k">end</span>
-<span class="k">end</span>
-
-<span class="k">function</span> <span class="nf">Generator:term</span>(term)
-    <span class="k">for</span> index = 2, #term, 2 <span class="k">do</span>
-        <span class="k">local</span> fact = term[index]
-
-        <span class="k">if</span> <span class="nt">type</span>(fact) == <span class="s">'number'</span> <span class="k">then</span> self:emit(<span class="s">'push '</span> .. fact)
-        <span class="k">elseif</span> <span class="nt">type</span>(fact) == <span class="s">'table'</span> <span class="k">then</span> self:generate(fact) <span class="k">end</span>
-
-        <span class="k">if</span> index &gt; 2 <span class="k">then</span>
-            <span class="k">local</span> op = term[index-1]
-            <span class="k">if</span> op == <span class="s">'*'</span> <span class="k">then</span> self:emit(<span class="s">'mul'</span>)
-            <span class="k">elseif</span> op == <span class="s">'/'</span> <span class="k">then</span> self:emit(<span class="s">'div'</span>)
-            <span class="k">elseif</span> op == <span class="s">'&#37;'</span> <span class="k">then</span> self:emit(<span class="s">'mod'</span>) <span class="k">end</span>
-        <span class="k">end</span>
-    <span class="k">end</span>
-<span class="k">end</span>
-
-<span class="k">function</span> <span class="nf">Generator:id</span>(id)
-    <span class="k">local</span> name = id[2]
-    <span class="k">local</span> subscript = clause(id, <span class="s">'subscript'</span>)
+  <div class="highlight"><pre>    <span class="k">if</span> self.current_function <span class="nf"><span class="k">then</span></span>
 </pre></div>
 </td>
 </tr><tr id="section-15">
@@ -364,33 +309,12 @@ struct they are.</p>
     <a class="pilcrow" href="#section-15">&#182;</a>
   </div>
   
-<p>TODO struct member</p>
+<p>First make sure it's not a double-declaration</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>    <span class="k">if</span> self.locals <span class="o">and</span> self.locals[name] <span class="k">then</span>
-        self:emit(<span class="s">'local '</span> .. self.locals[name])
-        <span class="k">if</span> subscript <span class="k">then</span>
-            self:generate(subscript)
-            self:emit(<span class="s">'mul 3'</span>)
-            self:emit(<span class="s">'add'</span>)
-            self:emit(<span class="s">'load24'</span>)
-        <span class="k">end</span>
-    <span class="k">elseif</span> self.globals[name] <span class="k">then</span>
-        <span class="k">if</span> subscript <span class="k">then</span>
-            self:generate(subscript)
-            self:emit(<span class="s">'mul 3'</span>)
-            self:emit(<span class="s">'add '</span> .. self.globals[name])
-            self:emit(<span class="s">'load24'</span>)
-        <span class="k">elseif</span> id[3] <span class="o">and</span> id[3] == <span class="s">'params'</span> <span class="k">then</span> <span class="nt">error</span>(<span class="s">'TODO'</span>)
-        <span class="k">elseif</span> id[3] <span class="o">and</span> id[3] == <span class="s">'member'</span> <span class="k">then</span> <span class="nt">error</span>(<span class="s">'TODO'</span>)
-        <span class="k">elseif</span> <span class="o">not</span> id[3] <span class="k">then</span>
-            self:emit(<span class="s">'load24 '</span> .. self.globals[name])
-        <span class="k">end</span>
-    <span class="k">else</span>
-        <span class="nt">error</span>(<span class="s">'Unrecognized identifier: '</span> .. name)
-    <span class="k">end</span>
+  <div class="highlight"><pre>        <span class="nt">assert</span>(<span class="o">not</span> self.locals[name], <span class="s">'Duplicate declaration for '</span> .. name)
 </pre></div>
 </td>
 </tr><tr id="section-16">
@@ -399,22 +323,381 @@ struct they are.</p>
     <a class="pilcrow" href="#section-16">&#182;</a>
   </div>
   
-<p>Something for function scopes later</p>
+<p>Then increase our frame size to have a place to hold it</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre><span class="k">end</span>
-
-<span class="k">function</span> <span class="nf">Generator:subscript</span>(sub)
-    self:generate(sub[2])
-<span class="k">end</span>
+  <div class="highlight"><pre>        self.locals[name] = self.current_function.framesize
+        self.current_function.framesize = self.current_function.framesize + 1
+        self:emit(<span class="s">'frame '</span> .. self.current_function.framesize)
+    <span class="k">else</span>
 </pre></div>
 </td>
 </tr><tr id="section-17">
 <td class="docs">
   <div class="pilwrap">
     <a class="pilcrow" href="#section-17">&#182;</a>
+  </div>
+  
+<p>We must not be in a function, this is a global. First ensure it's not a duplicate:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="nt">assert</span>(<span class="o">not</span> self.globals[name], <span class="s">'Duplicate declaration for '</span> .. name)
+</pre></div>
+</td>
+</tr><tr id="section-18">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-18">&#182;</a>
+  </div>
+  
+<p>Generate a label for it and emit it:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">local</span> label = self.gensym(name)
+        self.globals[name] = label
+        self:emit_global(label .. <span class="s">': .db 0'</span>)
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-19">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-19">&#182;</a>
+  </div>
+  
+<p>There can be a couple clauses on a var, a type name and an initial value</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> typename = clause(var, <span class="s">'type'</span>)
+    <span class="k">local</span> initial = clause(var, <span class="s">'init'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-20">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-20">&#182;</a>
+  </div>
+  
+<p>We want to put an initial value on here:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> initial <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-21">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-21">&#182;</a>
+  </div>
+  
+<p>After computing the initial value, either setlocal or store24 it, depending:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        self:generate(initial[2])
+        <span class="k">if</span> self.current_function <span class="nf"><span class="k">then</span></span>
+            self:emit(<span class="s">'setlocal '</span> .. self.locals[name])
+        <span class="k">else</span>
+            self:emit(<span class="s">'store24 '</span> .. self.globals[name])
+        <span class="k">end</span>
+    <span class="k">end</span>
+
+    <span class="k">if</span> typename <span class="k">then</span>
+        <span class="nt">error</span>(<span class="s">'TODO'</span>)
+    <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-22">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-22">&#182;</a>
+  </div>
+  
+<h2>Operators</h2>
+<p>A lot of the basic operators will have identical code: generate the operands on the two sides, then emit an opcode to combine them
+somehow. So we'll make a function to generate that boilerplate since it's all the same</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">operator</span>(...)
+    <span class="k">local</span> opcodes = {...}
+    <span class="k">return</span> <span class="k">function</span>(self, expr)
+        self:generate(expr[2])
+        self:generate(expr[3])
+        <span class="k">for</span> _, opcode <span class="k">in</span> <span class="nt">ipairs</span>(opcodes) <span class="k">do</span>
+            self:emit(opcode)
+        <span class="k">end</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+
+Generator.add = operator(<span class="s">'add'</span>)
+Generator.sub = operator(<span class="s">'sub'</span>)
+Generator.mul = operator(<span class="s">'mul'</span>)
+Generator.div = operator(<span class="s">'div'</span>)
+Generator.mod = operator(<span class="s">'mod'</span>)
+Generator.gt = operator(<span class="s">'gt'</span>)
+Generator.lt = operator(<span class="s">'lt'</span>)
+Generator.ge = operator(<span class="s">'lt'</span>, <span class="s">'not'</span>)
+Generator.le = operator(<span class="s">'gt'</span>, <span class="s">'not'</span>)
+Generator.ne = operator(<span class="s">'xor'</span>)
+Generator.eq = operator(<span class="s">'xor'</span>, <span class="s">'not'</span>)
+Generator._<span class="o">and</span> = operator(<span class="s">'and'</span>)
+Generator._<span class="o">or</span> = operator(<span class="s">'or'</span>)
+Generator.xor = operator(<span class="s">'xor'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-23">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-23">&#182;</a>
+  </div>
+  
+<p>Two operators are different however, because they're unary operators. Unary minus we'll handle by flipping all the bits and adding
+one (treating the number as twos complement):</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:neg</span>(expr)
+    self:generate(expr[2])
+    self:emit(<span class="s">'xor 0xffffff'</span>)
+    self:emit(<span class="s">'add 1'</span>)
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-24">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-24">&#182;</a>
+  </div>
+  
+<p>Logical not is an opcode, so we'll just generate its one arg and emit the opcode</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:_<span class="o">not</span></span>(expr)
+    self:generate(expr[2])
+    self:emit(<span class="s">'not'</span>)
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-25">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-25">&#182;</a>
+  </div>
+  
+<p>Exprs-as-statements will leave junk on the stack when we evaluate them. This node type will only fire on exprs-as-statements, so
+we'll use it as a place to put a pop.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:expr</span>(expr)
+    self:generate(expr[2])
+    self:emit(<span class="s">'pop'</span>)
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-26">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-26">&#182;</a>
+  </div>
+  
+<h2>Identifier reference</h2>
+<p>When we see an id, we need to look up its current value and push it. That's done differently based on whether we're in a function
+or not, and whether it's a local or not:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:id</span>(id)
+    <span class="k">local</span> name = id[2]
+    <span class="k">local</span> subscript = clause(id, <span class="s">'subscript'</span>)
+    <span class="k">local</span> params = clause(id, <span class="s">'params'</span>)
+    <span class="k">local</span> member = clause(id, <span class="s">'member'</span>) <span class="c">-- TODO struct member
+</span>
+    <span class="k">if</span> self.locals <span class="o">and</span> self.locals[name] <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-27">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-27">&#182;</a>
+  </div>
+  
+<p>If we're in a function and have a local scope, and the name is in that local scope (whether it's also in globals or not),
+then we have its local index and we can grab it.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        self:emit(<span class="s">'local '</span> .. self.locals[name])
+        <span class="k">if</span> subscript <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-28">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-28">&#182;</a>
+  </div>
+  
+<p>If there's an array subscript then the local is a pointer to the array on the heap, so, add the subscript and load24
+the result:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            self:generate(subscript)
+            self:emit(<span class="s">'mul 3'</span>)
+            self:emit(<span class="s">'add'</span>)
+            self:emit(<span class="s">'load24'</span>)
+        <span class="k">end</span>
+    <span class="k">elseif</span> self.globals[name] <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-29">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-29">&#182;</a>
+  </div>
+  
+<p>If there's no local scope or the scope doesn't contain what we want then we'll look in globals and find it there.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">if</span> subscript <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-30">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-30">&#182;</a>
+  </div>
+  
+<p>If it's an array reference then what's in globals is a pointer to an array, so we'll add the subscript and load24:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            self:generate(subscript)
+            self:emit(<span class="s">'mul 3'</span>)
+            self:emit(<span class="s">'add '</span> .. self.globals[name])
+            self:emit(<span class="s">'load24'</span>)
+        <span class="k">elseif</span> params <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-31">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-31">&#182;</a>
+  </div>
+  
+<p>If there are params, then this must actually be a function call. First a couple sanity checks, make sure it's
+actually a function:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">if</span> <span class="nt">type</span>(self.globals[name]) ~= <span class="s">'table'</span> <span class="o">or</span> self.globals[name].<span class="nt">type</span> ~= <span class="s">'function'</span> <span class="k">then</span>
+                <span class="nt">error</span>(<span class="s">'"'</span> .. name .. <span class="s">'" is not a function'</span>)
+            <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-32">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-32">&#182;</a>
+  </div>
+  
+<p>Then make sure we passed the right number of args:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">if</span> self.globals[name].arity ~= #params - 1 <span class="k">then</span>
+                <span class="nt">error</span>(<span class="s">'"'</span> .. name .. <span class="s">'" expected '</span> .. self.globals[name].arity .. <span class="s">' arg(s), received '</span> .. (#params - 1))
+            <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-33">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-33">&#182;</a>
+  </div>
+  
+<p>This seems like a valid call, so, generate all the args and then emit a call. The receiving side will <code>setlocal</code> them
+in reverse order, so, just doing them in the order they appear here is correct.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            self:generate(params)
+            self:emit(<span class="s">'call '</span> .. self.globals[name].label)
+        <span class="k">elseif</span> member <span class="k">then</span> <span class="nt">error</span>(<span class="s">'TODO'</span>)
+        <span class="k">else</span>
+</pre></div>
+</td>
+</tr><tr id="section-34">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-34">&#182;</a>
+  </div>
+  
+<p>Otherwise this is just a normal reference to a normal global, so, we can <code>load24</code> it:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            self:emit(<span class="s">'load24 '</span> .. self.globals[name])
+        <span class="k">end</span>
+    <span class="k">else</span>
+</pre></div>
+</td>
+</tr><tr id="section-35">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-35">&#182;</a>
+  </div>
+  
+<p>If it's not in locals and it's not in globals, then it doesn't exist in this scope whatever it is, so, we'll error:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="nt">error</span>(<span class="s">'Unrecognized identifier: '</span> .. name)
+    <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator:subscript</span>(sub)
+    self:generate(sub[2])
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">Generator:params</span>(params)
+    <span class="k">for</span> i = 2, #params <span class="k">do</span> self:generate(params[i]) <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-36">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-36">&#182;</a>
   </div>
   
 <p>An address reference (in an rvalue, not an lvalue)</p>
@@ -426,15 +709,29 @@ struct they are.</p>
     self:generate(addr[2])
     self:emit(<span class="s">'load24'</span>)
 <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-37">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-37">&#182;</a>
+  </div>
+  
+<h2>Assignments</h2>
+<p>An assignment statement, consisting of an lvalue and an rvalue. This is where all the lvalue logic comes from, the rvalue
+logic lives in <code>id</code> mostly.</p>
 
-<span class="k">function</span> <span class="nf">Generator:assign</span>(assign)
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:assign</span>(assign)
     <span class="k">local</span> _, lvalue, rvalue = table.<span class="nt">unpack</span>(assign)
 </pre></div>
 </td>
-</tr><tr id="section-18">
+</tr><tr id="section-38">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-18">&#182;</a>
+    <a class="pilcrow" href="#section-38">&#182;</a>
   </div>
   
 <p>Go ahead and emit the rvalue, it's now on top of the stack</p>
@@ -445,10 +742,10 @@ struct they are.</p>
   <div class="highlight"><pre>    self:generate(rvalue)
 </pre></div>
 </td>
-</tr><tr id="section-19">
+</tr><tr id="section-39">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-19">&#182;</a>
+    <a class="pilcrow" href="#section-39">&#182;</a>
   </div>
   
 <p>So that it leaves whatever the rvalue was on the stack, as a return value</p>
@@ -459,10 +756,10 @@ struct they are.</p>
   <div class="highlight"><pre>    self:emit(<span class="s">'dup'</span>)
 </pre></div>
 </td>
-</tr><tr id="section-20">
+</tr><tr id="section-40">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-20">&#182;</a>
+    <a class="pilcrow" href="#section-40">&#182;</a>
   </div>
   
 <p>Deal with the lvalue</p>
@@ -471,40 +768,152 @@ struct they are.</p>
 </td>
 <td class="code">
   <div class="highlight"><pre>    <span class="k">if</span> lvalue[1] == <span class="s">'address'</span> <span class="k">then</span>
+        <span class="nt">error</span>(<span class="s">'TODO'</span>)
     <span class="k">elseif</span> lvalue[1] == <span class="s">'id'</span> <span class="k">then</span>
         <span class="k">local</span> _, name, qualifier = table.<span class="nt">unpack</span>(lvalue)
+        <span class="k">if</span> self.locals <span class="o">and</span> self.locals[name] <span class="k">then</span>
 </pre></div>
 </td>
-</tr><tr id="section-21">
+</tr><tr id="section-41">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-21">&#182;</a>
+    <a class="pilcrow" href="#section-41">&#182;</a>
   </div>
   
-<p>Something for function scopes</p>
+<p>The lvalue exists as a local so that shadows the global if there is one. But it still might be a local array or something:</p>
 
 
 </td>
 <td class="code">
-  <div class="highlight"><pre>        <span class="nt">assert</span>(self.globals[name], <span class="s">'Unrecognized name: '</span> .. name)
-        <span class="k">if</span> qualifier <span class="k">then</span> <span class="c">-- It's either a subscript or a member
-</span>            <span class="k">if</span> qualifier[1] == <span class="s">'subscript'</span> <span class="k">then</span>
-                self:generate(qualifier[2], env)
-                self:emit(<span class="s">'mul 3'</span>)
-                self:emit(<span class="s">'add '</span> .. self.globals[name])
-                self:emit(<span class="s">'store24'</span>)
-            <span class="k">else</span> <span class="nt">error</span>(<span class="s">'TODO'</span>) <span class="k">end</span>
+  <div class="highlight"><pre>            <span class="k">if</span> qualifier <span class="k">then</span>
+                <span class="k">if</span> qualifier[1] == <span class="s">'subscript'</span> <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-42">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-42">&#182;</a>
+  </div>
+  
+<p>This lvalue is a local array. First we generate the subscript, then load the base address from the frame and add
+the offset:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                    self:generate(qualifier[2], env)
+                    self:emit(<span class="s">'mul 3'</span>)
+                    self:emit(<span class="s">'local '</span> .. self.locals[name])
+                    self:emit(<span class="s">'add'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-43">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-43">&#182;</a>
+  </div>
+  
+<p>Finally do the assignment itself, which is still a <code>store24</code> because the array itself is on the heap:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                    self:emit(<span class="s">'store24'</span>)
+                <span class="k">elseif</span> qualifier[1] == <span class="s">'member'</span> <span class="k">then</span>
+                    <span class="nt">error</span>(<span class="s">'TODO'</span>)
+                <span class="k">end</span>
+            <span class="k">else</span>
+</pre></div>
+</td>
+</tr><tr id="section-44">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-44">&#182;</a>
+  </div>
+  
+<p>It's just a normal local, so, <code>setlocal</code> it</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                self:emit(<span class="s">'setlocal '</span> .. self.locals[name])
+            <span class="k">end</span>
+        <span class="k">elseif</span> self.globals[name] <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-45">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-45">&#182;</a>
+  </div>
+  
+<p>This is a global, not a local. We'll first check if it's an array or struct:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">if</span> qualifier <span class="k">then</span>
+                <span class="k">if</span> qualifier[1] == <span class="s">'subscript'</span> <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-46">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-46">&#182;</a>
+  </div>
+  
+<p>This is an array, so generate the subscript and add the offset to what's in globals:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                    self:generate(qualifier[2], env)
+                    self:emit(<span class="s">'mul 3'</span>)
+                    self:emit(<span class="s">'add '</span> .. self.globals[name])
+                    self:emit(<span class="s">'store24'</span>)
+                <span class="k">elseif</span> qualifier[1] == <span class="s">'member'</span> <span class="k">then</span>
+                    <span class="nt">error</span>(<span class="s">'TODO'</span>)
+                <span class="k">end</span>
+            <span class="k">else</span>
+</pre></div>
+</td>
+</tr><tr id="section-47">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-47">&#182;</a>
+  </div>
+  
+<p>Just a normal global, so, <code>store24</code> it:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                self:emit(<span class="s">'store24 '</span> .. self.globals[name])
+            <span class="k">end</span>
         <span class="k">else</span>
-            self:emit(<span class="s">'store24 '</span> .. self.globals[name])
+</pre></div>
+</td>
+</tr><tr id="section-48">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-48">&#182;</a>
+  </div>
+  
+<p>It doesn't appear in locals <em>or</em> globals so it's not a valid lvalue</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="nt">error</span>(<span class="s">'Unrecognized name: '</span> .. name)
         <span class="k">end</span>
     <span class="k">else</span> <span class="nt">error</span>(<span class="s">'Unrecognized lvalue: '</span> .. lvalue[1]) <span class="k">end</span>
 <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-22">
+</tr><tr id="section-49">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-22">&#182;</a>
+    <a class="pilcrow" href="#section-49">&#182;</a>
   </div>
   
 <h2>Function declarations:</h2>
@@ -515,10 +924,10 @@ struct they are.</p>
   <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:func</span>(func)
 </pre></div>
 </td>
-</tr><tr id="section-23">
+</tr><tr id="section-50">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-23">&#182;</a>
+    <a class="pilcrow" href="#section-50">&#182;</a>
   </div>
   
 <p>This needs to do three things:</p>
@@ -533,15 +942,16 @@ struct they are.</p>
     <span class="nt">assert</span>(<span class="o">not</span> self.globals[name], <span class="s">'Duplicate declaration for '</span> .. name)
 </pre></div>
 </td>
-</tr><tr id="section-24">
+</tr><tr id="section-51">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-24">&#182;</a>
+    <a class="pilcrow" href="#section-51">&#182;</a>
   </div>
   
 <ul>
     <li>First, we need to create an entry in globals containing the label
-    and arity of the function.</li>
+    and arity of the function, as well as a frame size (which will
+    increase as we declare local vars in the function)</li>
 </ul>
 
 
@@ -549,13 +959,14 @@ struct they are.</p>
 <td class="code">
   <div class="highlight"><pre>    <span class="k">local</span> label = self:gensym()
     <span class="k">local</span> arity = #args - 1 <span class="c">-- (the first thing is 'args')
-</span>    self.globals[name] = { <span class="nt">type</span>=<span class="s">'function'</span>, label=label, arity=arity }
+</span>    self.globals[name] = { <span class="nt">type</span>=<span class="s">'function'</span>, label=label, arity=arity, framesize=arity }
+    self.current_function = self.globals[name]
 </pre></div>
 </td>
-</tr><tr id="section-25">
+</tr><tr id="section-52">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-25">&#182;</a>
+    <a class="pilcrow" href="#section-52">&#182;</a>
   </div>
   
 <ul>
@@ -572,10 +983,10 @@ struct they are.</p>
     <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-26">
+</tr><tr id="section-53">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-26">&#182;</a>
+    <a class="pilcrow" href="#section-53">&#182;</a>
   </div>
   
 <ul>
@@ -591,10 +1002,10 @@ struct they are.</p>
     self.emit = self.emit_function
 </pre></div>
 </td>
-</tr><tr id="section-27">
+</tr><tr id="section-54">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-27">&#182;</a>
+    <a class="pilcrow" href="#section-54">&#182;</a>
   </div>
   
 <p>Emit a function header:</p>
@@ -606,10 +1017,10 @@ struct they are.</p>
     self:emit(<span class="s">'frame '</span> .. arity)
 </pre></div>
 </td>
-</tr><tr id="section-28">
+</tr><tr id="section-55">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-28">&#182;</a>
+    <a class="pilcrow" href="#section-55">&#182;</a>
   </div>
   
 <p>Store the args into their locals:</p>
@@ -622,10 +1033,10 @@ struct they are.</p>
     <span class="k">end</span>
 </pre></div>
 </td>
-</tr><tr id="section-29">
+</tr><tr id="section-56">
 <td class="docs">
   <div class="pilwrap">
-    <a class="pilcrow" href="#section-29">&#182;</a>
+    <a class="pilcrow" href="#section-56">&#182;</a>
   </div>
   
 <p>Generate code for the body</p>
@@ -636,39 +1047,305 @@ struct they are.</p>
   <div class="highlight"><pre>    self:generate(body)
 
     self:emit(<span class="s">'ret'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-57">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-57">&#182;</a>
+  </div>
+  
+<p>Replace the old emitter, clear out the current local scope</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    self.emit = old_emit
+    self.locals = <span class="k">nil</span>
+    self.current_function = <span class="k">nil</span>
 <span class="k">end</span>
 
 <span class="k">function</span> <span class="nf">Generator:body</span>(body)
     <span class="k">for</span> n=2, #body <span class="k">do</span>
-        self:generate(body[n])
-        <span class="k">if</span> body[n][1] == <span class="s">'expr'</span> <span class="k">then</span> self:emit(<span class="s">'pop'</span>) <span class="k">end</span>
+        <span class="k">local</span> stmt = body[n]
+        self:generate(stmt)
+</pre></div>
+</td>
+</tr><tr id="section-58">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-58">&#182;</a>
+  </div>
+  
+<p>Most body statements leave something on the stack that needs to be cleaned up,
+but some don't, like ret or var</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">if</span> <span class="o">not</span> (<span class="nt">type</span>(stmt) == <span class="s">'table'</span> <span class="o">and</span> (stmt[1] == <span class="s">'return'</span> <span class="o">or</span> stmt[1] == <span class="s">'var'</span>)) <span class="k">then</span>
+            self:emit(<span class="s">'pop'</span>)
+        <span class="k">end</span>
     <span class="k">end</span>
 <span class="k">end</span>
 
 <span class="k">function</span> <span class="nf">Generator:_new</span>(new)
     <span class="nt">error</span>(<span class="s">'TODO'</span>)
 <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-59">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-59">&#182;</a>
+  </div>
+  
+<h2>Conditionals</h2>
 
-<span class="k">function</span> <span class="nf">Generator:_<span class="k">if</span></span>(_<span class="k">if</span>)
-    <span class="nt">error</span>(<span class="s">'TODO'</span>)
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">Generator:_<span class="k">if</span></span>(node)
+</pre></div>
+</td>
+</tr><tr id="section-60">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-60">&#182;</a>
+  </div>
+  
+<p>First, we need a label for the end:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> end_lbl = self:gensym()
+</pre></div>
+</td>
+</tr><tr id="section-61">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-61">&#182;</a>
+  </div>
+  
+<p>and one for the else branch if it exists:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> else_lbl
+    <span class="k">if</span> node[4] <span class="k">then</span> else_lbl = self:gensym() <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-62">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-62">&#182;</a>
+  </div>
+  
+<p>Evaluate the condition:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    self:generate(node[2])
+</pre></div>
+</td>
+</tr><tr id="section-63">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-63">&#182;</a>
+  </div>
+  
+<p>If the condition is zero, jmp past the body.
+If there's an else, jmp to its label:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> node[4] <span class="k">then</span>
+        self:emit(<span class="s">'brz @'</span> .. else_lbl)
+    <span class="k">else</span>
+        self:emit(<span class="s">'brz @'</span> .. end_lbl)
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-64">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-64">&#182;</a>
+  </div>
+  
+<p>If we're here the condition is nonzero, so evaluate the true side...</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    self:generate(node[3])
+</pre></div>
+</td>
+</tr><tr id="section-65">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-65">&#182;</a>
+  </div>
+  
+<p>If there was an else, we now need to skip past it:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> node[4] <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-66">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-66">&#182;</a>
+  </div>
+  
+<p>And jump to the end:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        self:emit(<span class="s">'jmpr @'</span> .. end_lbl)
+</pre></div>
+</td>
+</tr><tr id="section-67">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-67">&#182;</a>
+  </div>
+  
+<p>The else branch:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        self:emit(else_lbl .. <span class="s">':'</span>)
+        self:generate(node[4])
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-68">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-68">&#182;</a>
+  </div>
+  
+<p>The end label:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    self:emit(end_lbl .. <span class="s">':'</span>)
 <span class="k">end</span>
 
 <span class="k">function</span> <span class="nf">Generator:_<span class="k">return</span></span>(ret)
     <span class="nt">assert</span>(self.locals, <span class="s">'Return outside a function'</span>)
-    <span class="k">local</span> expr = clause(ret, <span class="s">'expr'</span>)
+    <span class="k">local</span> expr = ret[2]
     <span class="k">if</span> expr <span class="k">then</span>
         self:generate(expr)
         self:emit(<span class="s">'ret'</span>)
     <span class="k">else</span>
-        self:emit(<span class="s">'ret 0'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-69">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-69">&#182;</a>
+  </div>
+  
+<p>Functions need to leave <em>something</em> on the stack because function calls as statements will have a default <code>pop</code>, so, we
+push a zero for lack of anything better to do.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        self:emit(<span class="s">'ret 0'</span>)
     <span class="k">end</span>
 <span class="k">end</span>
 
 <span class="k">function</span> <span class="nf">Generator:string</span>(str)
     <span class="nt">error</span>(<span class="s">'TODO'</span>)
 <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-70">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-70">&#182;</a>
+  </div>
+  
+<h2>Utility functions</h2>
+<p>Given the name of a node, return the method name in this class that generates it.</p>
 
-<span class="k">function</span> <span class="nf">clause</span>(node, name)
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">method_for</span>(name)
+</pre></div>
+</td>
+</tr><tr id="section-71">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-71">&#182;</a>
+  </div>
+  
+<p>Some names aren't viable method names; 'new' because it's
+also the constructor, 'if' and 'return' because they're keywords</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">if</span> name == <span class="s">'if'</span> <span class="o">or</span> name == <span class="s">'new'</span> <span class="o">or</span> name == <span class="s">'return'</span> <span class="o">or</span> name == <span class="s">'not'</span> <span class="k">then</span> <span class="k">return</span> <span class="s">'_'</span> .. name <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-72">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-72">&#182;</a>
+  </div>
+  
+<p>Some are operators:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> operators = {
+        [<span class="s">'+'</span>] = <span class="s">'add'</span>,
+        [<span class="s">'-'</span>] = <span class="s">'sub'</span>,
+        [<span class="s">'*'</span>] = <span class="s">'mul'</span>,
+        [<span class="s">'/'</span>] = <span class="s">'div'</span>,
+        [<span class="s">'&#37;'</span>] = <span class="s">'mod'</span>,
+        [<span class="s">'&gt;'</span>] = <span class="s">'gt'</span>,
+        [<span class="s">'&lt;'</span>] = <span class="s">'lt'</span>,
+        [<span class="s">'&lt;='</span>] = <span class="s">'le'</span>,
+        [<span class="s">'&gt;='</span>] = <span class="s">'ge'</span>,
+        [<span class="s">'=='</span>] = <span class="s">'eq'</span>,
+        [<span class="s">'!='</span>] = <span class="s">'ne'</span>,
+        [<span class="s">'&amp;&amp;'</span>] = <span class="s">'_and'</span>,
+        [<span class="s">'||'</span>] = <span class="s">'_or'</span>
+    }
+
+    <span class="k">if</span> operators[name] <span class="k">then</span> <span class="k">return</span> operators[name] <span class="k">end</span>
+    <span class="k">return</span> name
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-73">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-73">&#182;</a>
+  </div>
+  
+<p>Find the child node of this node that is of the given type.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">clause</span>(node, name)
     <span class="k">for</span> _, child <span class="k">in</span> <span class="nt">ipairs</span>(node) <span class="k">do</span>
         <span class="k">if</span> <span class="nt">type</span>(child) == <span class="s">'table'</span> <span class="o">and</span> child[1] == name <span class="k">then</span>
             <span class="k">return</span> child

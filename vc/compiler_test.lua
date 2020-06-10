@@ -1,3 +1,4 @@
+dbg = require('debugger')
 compiler = require('compiler')
 parser = require('parser')
 
@@ -62,7 +63,7 @@ function test(opts)
     local src = opts[1]
     local asm = opts[2]
     local globals = opts.globals or { print = 'print', new = 'new' }
-    local check = opts.check or (function() end)
+    local check = opts.check
 
     if opts.pending then
         print('PENDING: ' .. src)
@@ -75,9 +76,15 @@ function test(opts)
     local function gensym() sym_idx = sym_idx + 1; return 'gen' .. sym_idx end
 
     local statements = parser.parse(src)
-    compiler.compile(statements, emit, globals, gensym)
+    
+    local success = true, err
+    if check then
+        success, err = pcall(compiler.compile, statements, emit, globals, gensym)
+    else
+        compiler.compile(statements, emit, globals, gensym)
+    end
 
-    if not eq(asm, actual_asm) then
+    if success and not eq(asm, actual_asm) then
         print('FAIL: Produced different assembly for [[' .. src .. ']]:')
         print('AST:\n\t' .. prettify(statements))
         print('Expected:')
@@ -87,7 +94,7 @@ function test(opts)
         return
     end
 
-    check{ emit = emit, gensym = gensym, globals = globals }
+    if check then check{ emit = emit, gensym = gensym, globals = globals, error = err } end
 end
 
 -- # Expression compilation tests
@@ -180,7 +187,7 @@ test{[[var x=3; var y=(x > 0 ? 5 : -5)]], {
         'jmpr @gen3',
         'gen4:',
         'push 5',
-        'xor 0xff',
+        'xor 0xffffff',
         'add 1',
         'gen3:',
         'store24 gen2',
@@ -215,4 +222,112 @@ test{[[var x=3; !x]], {
         'pop',
         'hlt',
         'gen1: .db 0',
+}}
+
+-- If with else
+test{[[var x=3; if (x % 2 == 1) {x = 7} else {x = 6}]], {
+        'push 3',
+        'store24 gen1',
+        'load24 gen1',
+        'push 2',
+        'mod',
+        'push 1',
+        'xor',
+        'not',
+        'brz @gen3',
+        'push 7',
+        'dup',
+        'store24 gen1',
+        'pop',
+        'jmpr @gen2',
+        'gen3:',
+        'push 6',
+        'dup',
+        'store24 gen1',
+        'pop',
+        'gen2:',
+        'hlt',
+        'gen1: .db 0'
+}}
+
+-- Function calls
+test{[[function sq(x) { return x*x } var x = sq(4) ]], {
+        'push 4',
+        'call gen1',
+        'store24 gen2',
+        'hlt',
+        'gen1:',
+        'frame 1',
+        'setlocal 0',
+        'local 0',
+        'local 0',
+        'mul',
+        'ret',
+        'ret',
+        'gen2: .db 0'
+}}
+
+-- Binary function calls
+test{[[function sub(a, b) { return a - b } var x = sub(4, 3) ]], {
+        'push 4',
+        'push 3',
+        'call gen1',
+        'store24 gen2',
+        'hlt',
+        'gen1:',
+        'frame 2',
+        'setlocal 1',
+        'setlocal 0',
+        'local 0',
+        'local 1',
+        'sub',
+        'ret',
+        'ret',
+        'gen2: .db 0'
+}}
+
+-- Calling things that aren't functions
+test{[[var x = 3; x() ]], nil,
+    check = function(env)
+        assert(env.error:match('"x" is not a function'))
+    end
+}
+
+-- Calling things with the wrong arity
+test{[[function x(a) { } x() ]], nil,
+    check = function(env)
+        assert(env.error:match('"x" expected 1 arg%(s%), received 0'))
+    end
+}
+
+-- Function-scoped variables
+test{[[function f(x) { var a = 5; return x*a }]], {
+        'gen1:',
+        'frame 1',
+        'setlocal 0',
+        'frame 2',
+        'push 5',
+        'setlocal 1',
+        'local 0',
+        'local 1',
+        'mul',
+        'ret',
+        'ret'
+}}
+
+-- Assignments to function-scoped variables
+test{[[function f(x) { var a = x * 2; return a + 1 }]], {
+        'gen1:',
+        'frame 1',
+        'setlocal 0',
+        'frame 2',
+        'local 0',
+        'push 2',
+        'mul',
+        'setlocal 1',
+        'local 1',
+        'push 1',
+        'add',
+        'ret',
+        'ret'
 }}
