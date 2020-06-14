@@ -331,3 +331,28 @@ test{[[function f(x) { var a = x * 2; return a + 1 }]], {
         'ret',
         'ret'
 }}
+
+-- Assignments to address references
+test{[[@{1200} = 0xaa]], {
+        'push 170',
+        'dup',
+        'push 1200',
+        'store8',
+        'pop',
+        'hlt'}
+}
+
+-- Assignments to address expressions
+test{[[var x = 5; @{1200 + x} = 0xaa]], {
+        'push 5',
+        'store24 gen1',
+        'push 170',
+        'dup',
+        'push 1200',
+        'load24 gen1',
+        'add',
+        'store8',
+        'pop',
+        'hlt',
+        'gen1: .db 0'}
+}

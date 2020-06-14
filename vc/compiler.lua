@@ -273,7 +273,8 @@ function Generator:assign(assign)
 
     -- Deal with the lvalue
     if lvalue[1] == 'address' then
-        error('TODO')
+        self:generate(lvalue[2], env)
+        self:emit('store8')
     elseif lvalue[1] == 'id' then
         local _, name, qualifier = table.unpack(lvalue)
         if self.locals and self.locals[name] then
