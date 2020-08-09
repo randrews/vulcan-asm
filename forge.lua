@@ -3,6 +3,20 @@ lpeg = require('lpeg')
 -- # Forge Compiler
 -- Being a compiler for Forge, a high-level language for the Vulcan computer.
 
+-- ## Utilities
+
+function table.new() return  end
+function table:index(needle)
+    for i, v in ipairs(self) do
+        if v == needle then return i end
+    end
+end
+function table:rfind(pred)
+    for i = #self, 1, -1 do
+        if pred(self[i]) then return self[i] end
+    end
+end
+
 -- ## Parser
 
 -- This iterates over the tokens and line numbers in a file.
@@ -73,9 +87,12 @@ function compile(lines, final_emit)
         ['@'] = { asm = 'load24' }, ['!'] = { asm = 'store24' }
     }
 
+    -- The dictionary of locals; all locals are just mapping a name to a stack-frame-index
+    local local_dictionary = {}
+
     -- Some things can't be used as word names:
     local reserved = {
-        [':'] = true, [';'] = true, ['('] = true, [')'] = true
+        [':'] = true, [';'] = true, ['('] = true, [')'] = true, ['if'] = true, ['else'] = true, ['then'] = true
     }
 
     local sym_id = 0
@@ -84,31 +101,217 @@ function compile(lines, final_emit)
         return '_gen_' .. sym_id
     end
 
-    local mode = 'normal'
+    local mode = nil
     local old_mode = nil
-    for token, line_num in read(lines) do
-        if token == '(' then
-            old_mode, mode = mode, 'comment'
-        elseif mode == 'comment' then
+    local comment_start_line = nil
+    local current_frame_size = 0
+
+    -- A stack of currently-open control structures. Each contains, at the least, a `type`
+    -- and a `line` field
+    local controls = setmetatable({}, {__index = table})
+    local function top_control(...)
+        local types = {...}
+        if #types > 0 then
+            return controls:rfind(function(ctrl) return table.index(types, ctrl.type) end)
+        else return controls[#controls] or {} end
+    end
+
+    -- A table of functions that get called for every token depending on
+    -- the mode. If the corresponding function returns true, then it was
+    -- able to handle the token; otherwise, pass it through to the default
+    -- behavior.
+    local modes = {
+        comment = function(token)
+            -- Region comments go until a close paren
             if token == ')' then mode = old_mode end
-        elseif mode == 'word-name' then
+            return true
+        end,
+
+        -- We're already handling this before the mode check
+        line_comment = function() return true end,
+
+        word_name = function(token, line_num)
+            -- Ensure it's a valid name
             assert(type(token) ~= 'number' and not reserved[token],
                    'Invalid name \"' .. token .. '\" for new word on line ' .. line_num)
+            -- Put it in the dictionary and change our mode and segment
             dictionary[token] = { label = gensym() }
-            current_segment = 'words'
-            mode = 'word-definition'
+            mode, current_segment = 'word_definition', 'words'
+            -- Emit a label for the entry point of this function
             emit(dictionary[token].label .. ':')
-        elseif mode == 'word-definition' and token == ';' then
-            emit('\tret')
-            mode, current_segment = 'normal', 'global'
-        else
-            if type(token) == 'number' then emit('\tnop\t' .. token)
-            elseif token == ':' then mode = 'word-name'
+            return true
+        end,
+
+        word_definition = function(token, line_num)
+            if token == ':' then error('Already defining a word on line ' .. line_num)
+            elseif token == 'if' then
+                controls:insert{ type = 'if', line = line_num, after = gensym() }
+                emit('\tbrz\t@' .. controls[#controls].after)
+                return true
+            elseif token == 'else' then
+                assert(top_control().type == 'if',
+                       '`else` outside `if` on line ' .. line_num)
+                assert(not top_control().has_else,
+                       'Extra `else` on line ' .. line_num)
+                local top = top_control()
+                local old_after = top.after
+                top.after, top.has_else = gensym(), true
+                emit('\tjr\t@' .. top_control().after)
+                emit(old_after .. ':')
+                return true
+            elseif token == 'then' then
+                assert(top_control().type == 'if',
+                       '`then` outside `if` on line ' .. line_num)
+                emit(top_control().after .. ':')
+                controls:remove(#controls)
+                return true
+            elseif token == 'begin' then
+                controls:insert{ type = 'begin', line = line_num, start = gensym(), after = gensym() }
+                emit(top_control().start .. ':')
+                return true
+            elseif token == 'break' then
+                assert(top_control('begin', 'for'),
+                       '`break` outside loop on line ' .. line_num)
+                emit('\tjr\t@' .. top_control('begin', 'for').after)
+                return true
+            elseif token == 'while' then
+                assert(top_control().type == 'begin',
+                       '`while` outside loop on line ' .. line_num)
+                emit('\tbrz\t@' .. top_control().after)
+                return true
+            elseif token == 'again' then
+                assert(top_control().type == 'begin',
+                       '`again` outside `begin` on line ' .. line_num)
+                emit('\tjr\t@' .. top_control().start)
+                emit(top_control().after .. ':')
+                controls:remove(#controls)
+                return true
+            elseif token == 'local' then
+                mode, old_mode = 'local_name', mode
+                return true
+            elseif token == ':@' then
+                emit('\tlocal')
+                return true
+            elseif token == ':!' then
+                emit('\tsetlocal')
+                return true
+            elseif token == 'for' then
+                mode, old_mode = 'for_name', mode
+                return true
+            elseif token == 'loop' then
+                assert(top_control().type == 'for',
+                       '`loop` outside `for` on line ' .. line_num)
+                -- Increment the counter and jump back to start
+                emit('\tlocal\t' .. local_dictionary[top_control().counter])
+                emit('\tadd\t1')
+                emit('\tsetlocal\t' .. local_dictionary[top_control().counter])
+                emit('\tjr\t@' .. top_control().start)
+                -- The after label
+                emit(top_control().after .. ':')
+                -- Remove the counter variable
+                local_dictionary[top_control().counter] = nil
+                -- Shrink the stack size back (it might matter)
+                current_frame_size = current_frame_size - 2
+                emit('\tframe\t' .. current_frame_size)
+                controls:remove(#controls)
+                return true
+            elseif token == ';' then
+                -- First check we're not leaving any open blocks
+                if #controls > 0 then
+                    error('Unclosed `' .. controls[1].type .. '` on line ' .. controls[1].line)
+                end
+                -- To end a word, emit a return and reset our mode and segment
+                emit('\tret')
+                mode, current_segment = nil, 'global'
+                return true
+            end
+        end,
+
+        variable_name = function(token, line_num)
+            -- Ensure it's a valid name
+            assert(type(token) ~= 'number' and not reserved[token],
+                   'Invalid name \"' .. token .. '\" for variable on line ' .. line_num)
+            -- Put it in the dictionary and change our mode and segment
+            dictionary[token] = { variable = gensym() }
+            -- Emit a label and .db for the variable
+            emit(dictionary[token].variable .. ':\t.db 0', 'variables')
+            mode = old_mode
+            return true
+        end,
+
+        local_name = function(token, line_num)
+            -- Ensure it's a valid name
+            assert(type(token) ~= 'number' and not reserved[token],
+                   'Invalid name \"' .. token .. '\" for local on line ' .. line_num)
+            -- Ensure it's unused
+            assert(not local_dictionary[token],
+                   'Reused name \"' .. token .. '\" for local on line ' .. line_num)
+            -- Put it in the dictionary and change our frame size and mode
+            local_dictionary[token], current_frame_size, mode = current_frame_size, current_frame_size + 1, old_mode
+            emit('\tframe\t' .. current_frame_size)
+            return true
+        end,
+
+        for_name = function(token, line_num)
+            -- Ensure it's a valid name
+            assert(type(token) ~= 'number' and not reserved[token],
+                   'Invalid name \"' .. token .. '\" for local on line ' .. line_num)
+            -- Ensure it's unused
+            assert(not local_dictionary[token],
+                   'Reused name \"' .. token .. '\" for local on line ' .. line_num)
+            -- Put it in the dictionary and change our frame size
+            -- Incrementing by two to store the upper limit also
+            local_dictionary[token], current_frame_size, mode = current_frame_size, current_frame_size + 2, old_mode
+            emit('\tframe\t' .. current_frame_size)
+            -- Push a control
+            controls:insert{ type = 'for', line = line_num, start = gensym(), after = gensym(), limit = current_frame_size - 1, counter = token }
+            -- Set counter to the start value and limit to the end value
+            emit('\tsetlocal\t' .. local_dictionary[token])
+            emit('\tsetlocal\t' .. top_control().limit)
+            -- Start of loop label
+            emit(top_control().start .. ':')
+            -- Check if the counter == limit, brz to after:
+            emit('\tlocal\t' .. local_dictionary[token])
+            emit('\tlocal\t' .. top_control().limit)
+            emit('\tsub')
+            emit('\tbrz\t@' .. top_control().after)
+            return true
+        end
+    }
+
+    for token, line_num in read(lines) do
+        -- Comment stuff: detect comment opening tokens, and change the mode
+        if token == '\\' then
+            comment_start_line, old_mode, mode = line_num, mode, 'line_comment'
+        elseif token == '(' then
+            old_mode, mode = mode, 'comment'
+        end
+
+        -- Also detect the end of a line-comment
+        if mode == 'line_comment' and line_num ~= comment_start_line then
+            mode = old_mode
+        end
+
+        -- Mode stuff: everything else we do depends on our mode. We'll check
+        -- the table of mode handlers for our current mode and see if it can
+        -- handle this token. If not, then the default behavior fires
+        if not modes[mode] or not modes[mode](token, line_num) then
+            if type(token) == 'number' then
+                emit('\tnop\t' .. token)
+            elseif token == ':' then
+                mode = 'word_name'
+                local_dictionary, current_frame_size = {}, 0
+            elseif token == 'variable' then
+                old_mode, mode = mode, 'variable_name'
+            elseif local_dictionary[token] then
+                emit('\tnop\t' .. local_dictionary[token])
             else
                 local def = dictionary[token]
-                assert(def, 'Undefined word \"' .. token .. '\" on line ' .. line_num)
+                assert(def,
+                       'Undefined word \"' .. token .. '\" on line ' .. line_num)
                 if def.asm then emit('\t' .. def.asm)
-                elseif def.label then emit('\t' .. 'call ' .. def.label) end
+                elseif def.label then emit('\t' .. 'call\t' .. def.label)
+                elseif def.variable then emit('\tnop\t' .. def.variable) end
             end
         end        
     end

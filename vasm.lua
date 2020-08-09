@@ -382,8 +382,6 @@ end
 -- This will take the array of lines and map of symbols, and iterate through each line.
 -- If the line has an argument, evaluate it based on the symbol table, and change it to
 -- a number.
---
--- This can, of course, throw an error if 
 function calculate_args(lines, symbols)
     for _, line in ipairs(lines) do
         if line.argument then

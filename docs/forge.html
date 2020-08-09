@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>forge.lua</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <link rel="stylesheet" media="all" href="locco.css" />
+</head>
+<body>
+  <div id="container">
+    <div id="background"></div>
+    
+    <table cellpadding="0" cellspacing="0">
+      <thead>
+        <tr>
+          <th class="docs">
+            <h1>
+              forge.lua
+            </h1>
+          </th>
+          <th class="code">
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+<tr id="section-1">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-1">&#182;</a>
+  </div>
+  
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>lpeg = <span class="nt">require</span>(<span class="s">'lpeg'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-2">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-2">&#182;</a>
+  </div>
+  
+<h1>Forge Compiler</h1>
+<p>Being a compiler for Forge, a high-level language for the Vulcan computer.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-3">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-3">&#182;</a>
+  </div>
+  
+<h2>Utilities</h2>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+<span class="k">function</span> <span class="nf">table.new</span>() <span class="k">return</span>  <span class="k">end</span>
+<span class="k">function</span> <span class="nf">table:index</span>(needle)
+    <span class="k">for</span> i, v <span class="k">in</span> <span class="nt">ipairs</span>(self) <span class="k">do</span>
+        <span class="k">if</span> v == needle <span class="k">then</span> <span class="k">return</span> i <span class="k">end</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+<span class="k">function</span> <span class="nf">table:rfind</span>(pred)
+    <span class="k">for</span> i = #self, 1, -1 <span class="k">do</span>
+        <span class="k">if</span> pred(self[i]) <span class="k">then</span> <span class="k">return</span> self[i] <span class="k">end</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-4">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-4">&#182;</a>
+  </div>
+  
+<h2>Parser</h2>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>
+</pre></div>
+</td>
+</tr><tr id="section-5">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-5">&#182;</a>
+  </div>
+  
+<p>This iterates over the tokens and line numbers in a file.
+Pass in an iterator over lines of source (like from io.lines) and
+successive calls will yield successive tokens.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre><span class="k">function</span> <span class="nf">read</span>(lines)
+</pre></div>
+</td>
+</tr><tr id="section-6">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-6">&#182;</a>
+  </div>
+  
+<p>We store the current line number, the current column in that line, and the current line</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> line_num = 1
+    <span class="k">local</span> start = 1
+    <span class="k">local</span> line = lines()
+</pre></div>
+</td>
+</tr><tr id="section-7">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-7">&#182;</a>
+  </div>
+  
+<p>This handles turning tokens that look like numbers into actual numbers:
+- Decimals with an optional leading minus sign
+- Hex with a leading <code>0x</code>
+- Binary with a leading <code>0b</code></p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> <span class="k">function</span> <span class="nf">parse_number</span>(token)
+        <span class="k">if</span> token:match(<span class="s">'^[-]?&#37;d+$'</span>) <span class="k">then</span> <span class="k">return</span> <span class="nt">tonumber</span>(token)
+        <span class="k">elseif</span> token:match(<span class="s">'^0x([&#37;da-fA-F]+)$'</span>) <span class="k">then</span> <span class="k">return</span> <span class="nt">tonumber</span>(token:sub(3), 16)
+        <span class="k">elseif</span> token:match(<span class="s">'^0b([01]+)$'</span>) <span class="k">then</span> <span class="k">return</span> <span class="nt">tonumber</span>(token:sub(3), 2)
+        <span class="k">else</span> <span class="k">return</span> token <span class="k">end</span>
+    <span class="k">end</span>
+
+    <span class="k">return</span> <span class="k">function</span>()
+        <span class="k">while</span> <span class="k">true</span> <span class="k">do</span>
+</pre></div>
+</td>
+</tr><tr id="section-8">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-8">&#182;</a>
+  </div>
+  
+<p>Try to match a token: throw away any leading spaces, grab the next word,
+and then the current position. Start at the current start column</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">local</span> token, after = line:match(<span class="s">'^&#37;s*(&#37;g+)()'</span>, start)
+            <span class="k">if</span> token <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-9">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-9">&#182;</a>
+  </div>
+  
+<p>If we grabbed something, then update the start column, try to see if
+it's a number, and then return it and the current line</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                start = after
+                <span class="k">return</span> parse_number(token), line_num
+            <span class="k">else</span>
+</pre></div>
+</td>
+</tr><tr id="section-10">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-10">&#182;</a>
+  </div>
+  
+<p>Otherwise this line has no more tokens. Increment the line number,
+reset start, and grab a new line. Because we're in a loop this will
+just try again on the next line...</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                line_num = line_num + 1
+                start = 1
+                line = lines()
+</pre></div>
+</td>
+</tr><tr id="section-11">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-11">&#182;</a>
+  </div>
+  
+<p>...Unless there is no next line. In which case we break out of the
+loop and return nil.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                <span class="k">if</span> <span class="o">not</span> line <span class="k">then</span> <span class="k">break</span> <span class="k">end</span>
+            <span class="k">end</span>
+        <span class="k">end</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">function</span> <span class="nf">compile</span>(lines, final_emit)
+</pre></div>
+</td>
+</tr><tr id="section-12">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-12">&#182;</a>
+  </div>
+  
+<p>We have three segments in the program:</p>
+
+<ul>
+    <li>Global, which gets emitted first and is all the expressions in the global context, followed by an implicit hlt</li>
+    <li>Words, emitted second and are all the functions</li>
+    <li>Variables, emitted last and containing the labels and .db's for variables (all initialized to 0, the initializers
+    run where the declaration was, in text)</li>
+</ul>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> segments = { global = {}, words = {}, variables = {} }
+    <span class="k">local</span> current_segment = <span class="s">'global'</span>
+    <span class="k">local</span> <span class="k">function</span> <span class="nf">emit</span>(line, segment)
+        table.insert(segments[segment <span class="o">or</span> current_segment], line)
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-13">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-13">&#182;</a>
+  </div>
+  
+<p>The dictionary, which initially has only the primitive words in it: an entry here contains either a label or
+an opcode, and tells us how to handle each word. Initially all the words in it will be the single-opcode primitives:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> dictionary = {
+        [<span class="s">'+'</span>] = { asm = <span class="s">'add'</span> }, [<span class="s">'-'</span>] = { asm = <span class="s">'sub'</span> }, [<span class="s">'*'</span>] = { asm = <span class="s">'mul'</span> }, [<span class="s">'/'</span>] = { asm = <span class="s">'div'</span> }, mod = { asm = <span class="s">'mod'</span> },
+        drop = { asm = <span class="s">'pop'</span> }, dup = { asm = <span class="s">'dup'</span> }, [<span class="s">'2dup'</span>] = { asm = <span class="s">'2dup'</span> }, swap = { asm = <span class="s">'swap'</span> },
+        [<span class="s">'and'</span>] = { asm = <span class="s">'and'</span> }, [<span class="s">'or'</span>] = { asm = <span class="s">'or'</span> }, xor = { asm = <span class="s">'xor'</span> },
+        [<span class="s">'&gt;'</span>] = { asm = <span class="s">'agt'</span> }, [<span class="s">'&lt;'</span>] = { asm = <span class="s">'alt'</span> },
+        [<span class="s">'@'</span>] = { asm = <span class="s">'load24'</span> }, [<span class="s">'!'</span>] = { asm = <span class="s">'store24'</span> }
+    }
+</pre></div>
+</td>
+</tr><tr id="section-14">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-14">&#182;</a>
+  </div>
+  
+<p>The dictionary of locals; all locals are just mapping a name to a stack-frame-index</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> local_dictionary = {}
+</pre></div>
+</td>
+</tr><tr id="section-15">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-15">&#182;</a>
+  </div>
+  
+<p>Some things can't be used as word names:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> reserved = {
+        [<span class="s">':'</span>] = <span class="k">true</span>, [<span class="s">';'</span>] = <span class="k">true</span>, [<span class="s">'('</span>] = <span class="k">true</span>, [<span class="s">')'</span>] = <span class="k">true</span>, [<span class="s">'if'</span>] = <span class="k">true</span>, [<span class="s">'else'</span>] = <span class="k">true</span>, [<span class="s">'then'</span>] = <span class="k">true</span>
+    }
+
+    <span class="k">local</span> sym_id = 0
+    <span class="k">local</span> <span class="k">function</span> <span class="nf">gensym</span>()
+        sym_id = sym_id + 1
+        <span class="k">return</span> <span class="s">'_gen_'</span> .. sym_id
+    <span class="k">end</span>
+
+    <span class="k">local</span> mode = <span class="k">nil</span>
+    <span class="k">local</span> old_mode = <span class="k">nil</span>
+    <span class="k">local</span> comment_start_line = <span class="k">nil</span>
+    <span class="k">local</span> current_frame_size = 0
+</pre></div>
+</td>
+</tr><tr id="section-16">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-16">&#182;</a>
+  </div>
+  
+<p>A stack of currently-open control structures. Each contains, at the least, a <code>type</code>
+and a <code>line</code> field</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> controls = <span class="nt">setmetatable</span>({}, {__index = table})
+    <span class="k">local</span> <span class="k">function</span> <span class="nf">top_control</span>(...)
+        <span class="k">local</span> types = {...}
+        <span class="k">if</span> #types &gt; 0 <span class="k">then</span>
+            <span class="k">return</span> controls:rfind(<span class="k">function</span>(ctrl) <span class="k">return</span> table.index(types, ctrl.<span class="nt">type</span>) <span class="k">end</span>)
+        <span class="k">else</span> <span class="k">return</span> controls[#controls] <span class="o">or</span> {} <span class="k">end</span>
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-17">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-17">&#182;</a>
+  </div>
+  
+<p>A table of functions that get called for every token depending on
+the mode. If the corresponding function returns true, then it was
+able to handle the token; otherwise, pass it through to the default
+behavior.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> modes = {
+        comment = <span class="k">function</span>(token)
+</pre></div>
+</td>
+</tr><tr id="section-18">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-18">&#182;</a>
+  </div>
+  
+<p>Region comments go until a close paren</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="k">if</span> token == <span class="s">')'</span> <span class="k">then</span> mode = old_mode <span class="k">end</span>
+            <span class="k">return</span> <span class="k">true</span>
+        <span class="k">end</span>,
+</pre></div>
+</td>
+</tr><tr id="section-19">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-19">&#182;</a>
+  </div>
+  
+<p>We're already handling this before the mode check</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        line_comment = <span class="k">function</span>() <span class="k">return</span> <span class="k">true</span> <span class="k">end</span>,
+
+        word_name = <span class="k">function</span>(token, line_num)
+</pre></div>
+</td>
+</tr><tr id="section-20">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-20">&#182;</a>
+  </div>
+  
+<p>Ensure it's a valid name</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="nt">assert</span>(<span class="nt">type</span>(token) ~= <span class="s">'number'</span> <span class="o">and</span> <span class="o">not</span> reserved[token],
+                   <span class="s">'Invalid name \"'</span> .. token .. <span class="s">'\" for new word on line '</span> .. line_num)
+</pre></div>
+</td>
+</tr><tr id="section-21">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-21">&#182;</a>
+  </div>
+  
+<p>Put it in the dictionary and change our mode and segment</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            dictionary[token] = { label = gensym() }
+            mode, current_segment = <span class="s">'word_definition'</span>, <span class="s">'words'</span>
+</pre></div>
+</td>
+</tr><tr id="section-22">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-22">&#182;</a>
+  </div>
+  
+<p>Emit a label for the entry point of this function</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            emit(dictionary[token].label .. <span class="s">':'</span>)
+            <span class="k">return</span> <span class="k">true</span>
+        <span class="k">end</span>,
+
+        word_definition = <span class="k">function</span>(token, line_num)
+            <span class="k">if</span> token == <span class="s">':'</span> <span class="k">then</span> <span class="nt">error</span>(<span class="s">'Already defining a word on line '</span> .. line_num)
+            <span class="k">elseif</span> token == <span class="s">'if'</span> <span class="k">then</span>
+                controls:insert{ <span class="nt">type</span> = <span class="s">'if'</span>, line = line_num, after = gensym() }
+                emit(<span class="s">'\tbrz\t@'</span> .. controls[#controls].after)
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">'else'</span> <span class="k">then</span>
+                <span class="nt">assert</span>(top_control().<span class="nt">type</span> == <span class="s">'if'</span>,
+                       <span class="s">'`else` outside `if` on line '</span> .. line_num)
+                <span class="nt">assert</span>(<span class="o">not</span> top_control().has_else,
+                       <span class="s">'Extra `else` on line '</span> .. line_num)
+                <span class="k">local</span> top = top_control()
+                <span class="k">local</span> old_after = top.after
+                top.after, top.has_else = gensym(), <span class="k">true</span>
+                emit(<span class="s">'\tjr\t@'</span> .. top_control().after)
+                emit(old_after .. <span class="s">':'</span>)
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">'then'</span> <span class="k">then</span>
+                <span class="nt">assert</span>(top_control().<span class="nt">type</span> == <span class="s">'if'</span>,
+                       <span class="s">'`then` outside `if` on line '</span> .. line_num)
+                emit(top_control().after .. <span class="s">':'</span>)
+                controls:remove(#controls)
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">'begin'</span> <span class="k">then</span>
+                controls:insert{ <span class="nt">type</span> = <span class="s">'begin'</span>, line = line_num, start = gensym(), after = gensym() }
+                emit(top_control().start .. <span class="s">':'</span>)
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">'break'</span> <span class="k">then</span>
+                <span class="nt">assert</span>(top_control(<span class="s">'begin'</span>, <span class="s">'for'</span>),
+                       <span class="s">'`break` outside loop on line '</span> .. line_num)
+                emit(<span class="s">'\tjr\t@'</span> .. top_control(<span class="s">'begin'</span>, <span class="s">'for'</span>).after)
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">'while'</span> <span class="k">then</span>
+                <span class="nt">assert</span>(top_control().<span class="nt">type</span> == <span class="s">'begin'</span>,
+                       <span class="s">'`while` outside loop on line '</span> .. line_num)
+                emit(<span class="s">'\tbrz\t@'</span> .. top_control().after)
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">'again'</span> <span class="k">then</span>
+                <span class="nt">assert</span>(top_control().<span class="nt">type</span> == <span class="s">'begin'</span>,
+                       <span class="s">'`again` outside `begin` on line '</span> .. line_num)
+                emit(<span class="s">'\tjr\t@'</span> .. top_control().start)
+                emit(top_control().after .. <span class="s">':'</span>)
+                controls:remove(#controls)
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">'local'</span> <span class="k">then</span>
+                mode, old_mode = <span class="s">'local_name'</span>, mode
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">':@'</span> <span class="k">then</span>
+                emit(<span class="s">'\tlocal'</span>)
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">':!'</span> <span class="k">then</span>
+                emit(<span class="s">'\tsetlocal'</span>)
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">'for'</span> <span class="k">then</span>
+                mode, old_mode = <span class="s">'for_name'</span>, mode
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">'loop'</span> <span class="k">then</span>
+                <span class="nt">assert</span>(top_control().<span class="nt">type</span> == <span class="s">'for'</span>,
+                       <span class="s">'`loop` outside `for` on line '</span> .. line_num)
+</pre></div>
+</td>
+</tr><tr id="section-23">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-23">&#182;</a>
+  </div>
+  
+<p>Increment the counter and jump back to start</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                emit(<span class="s">'\tlocal\t'</span> .. local_dictionary[top_control().counter])
+                emit(<span class="s">'\tadd\t1'</span>)
+                emit(<span class="s">'\tsetlocal\t'</span> .. local_dictionary[top_control().counter])
+                emit(<span class="s">'\tjr\t@'</span> .. top_control().start)
+</pre></div>
+</td>
+</tr><tr id="section-24">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-24">&#182;</a>
+  </div>
+  
+<p>The after label</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                emit(top_control().after .. <span class="s">':'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-25">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-25">&#182;</a>
+  </div>
+  
+<p>Remove the counter variable</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                local_dictionary[top_control().counter] = <span class="k">nil</span>
+</pre></div>
+</td>
+</tr><tr id="section-26">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-26">&#182;</a>
+  </div>
+  
+<p>Shrink the stack size back (it might matter)</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                current_frame_size = current_frame_size - 2
+                emit(<span class="s">'\tframe\t'</span> .. current_frame_size)
+                controls:remove(#controls)
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">elseif</span> token == <span class="s">';'</span> <span class="k">then</span>
+</pre></div>
+</td>
+</tr><tr id="section-27">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-27">&#182;</a>
+  </div>
+  
+<p>First check we're not leaving any open blocks</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                <span class="k">if</span> #controls &gt; 0 <span class="k">then</span>
+                    <span class="nt">error</span>(<span class="s">'Unclosed `'</span> .. controls[1].<span class="nt">type</span> .. <span class="s">'` on line '</span> .. controls[1].line)
+                <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-28">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-28">&#182;</a>
+  </div>
+  
+<p>To end a word, emit a return and reset our mode and segment</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>                emit(<span class="s">'\tret'</span>)
+                mode, current_segment = <span class="k">nil</span>, <span class="s">'global'</span>
+                <span class="k">return</span> <span class="k">true</span>
+            <span class="k">end</span>
+        <span class="k">end</span>,
+
+        variable_name = <span class="k">function</span>(token, line_num)
+</pre></div>
+</td>
+</tr><tr id="section-29">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-29">&#182;</a>
+  </div>
+  
+<p>Ensure it's a valid name</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="nt">assert</span>(<span class="nt">type</span>(token) ~= <span class="s">'number'</span> <span class="o">and</span> <span class="o">not</span> reserved[token],
+                   <span class="s">'Invalid name \"'</span> .. token .. <span class="s">'\" for variable on line '</span> .. line_num)
+</pre></div>
+</td>
+</tr><tr id="section-30">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-30">&#182;</a>
+  </div>
+  
+<p>Put it in the dictionary and change our mode and segment</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            dictionary[token] = { variable = gensym() }
+</pre></div>
+</td>
+</tr><tr id="section-31">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-31">&#182;</a>
+  </div>
+  
+<p>Emit a label and .db for the variable</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            emit(dictionary[token].variable .. <span class="s">':\t.db 0'</span>, <span class="s">'variables'</span>)
+            mode = old_mode
+            <span class="k">return</span> <span class="k">true</span>
+        <span class="k">end</span>,
+
+        local_name = <span class="k">function</span>(token, line_num)
+</pre></div>
+</td>
+</tr><tr id="section-32">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-32">&#182;</a>
+  </div>
+  
+<p>Ensure it's a valid name</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="nt">assert</span>(<span class="nt">type</span>(token) ~= <span class="s">'number'</span> <span class="o">and</span> <span class="o">not</span> reserved[token],
+                   <span class="s">'Invalid name \"'</span> .. token .. <span class="s">'\" for local on line '</span> .. line_num)
+</pre></div>
+</td>
+</tr><tr id="section-33">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-33">&#182;</a>
+  </div>
+  
+<p>Ensure it's unused</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="nt">assert</span>(<span class="o">not</span> local_dictionary[token],
+                   <span class="s">'Reused name \"'</span> .. token .. <span class="s">'\" for local on line '</span> .. line_num)
+</pre></div>
+</td>
+</tr><tr id="section-34">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-34">&#182;</a>
+  </div>
+  
+<p>Put it in the dictionary and change our frame size and mode</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            local_dictionary[token], current_frame_size, mode = current_frame_size, current_frame_size + 1, old_mode
+            emit(<span class="s">'\tframe\t'</span> .. current_frame_size)
+            <span class="k">return</span> <span class="k">true</span>
+        <span class="k">end</span>,
+
+        for_name = <span class="k">function</span>(token, line_num)
+</pre></div>
+</td>
+</tr><tr id="section-35">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-35">&#182;</a>
+  </div>
+  
+<p>Ensure it's a valid name</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="nt">assert</span>(<span class="nt">type</span>(token) ~= <span class="s">'number'</span> <span class="o">and</span> <span class="o">not</span> reserved[token],
+                   <span class="s">'Invalid name \"'</span> .. token .. <span class="s">'\" for local on line '</span> .. line_num)
+</pre></div>
+</td>
+</tr><tr id="section-36">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-36">&#182;</a>
+  </div>
+  
+<p>Ensure it's unused</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            <span class="nt">assert</span>(<span class="o">not</span> local_dictionary[token],
+                   <span class="s">'Reused name \"'</span> .. token .. <span class="s">'\" for local on line '</span> .. line_num)
+</pre></div>
+</td>
+</tr><tr id="section-37">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-37">&#182;</a>
+  </div>
+  
+<p>Put it in the dictionary and change our frame size
+Incrementing by two to store the upper limit also</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            local_dictionary[token], current_frame_size, mode = current_frame_size, current_frame_size + 2, old_mode
+            emit(<span class="s">'\tframe\t'</span> .. current_frame_size)
+</pre></div>
+</td>
+</tr><tr id="section-38">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-38">&#182;</a>
+  </div>
+  
+<p>Push a control</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            controls:insert{ <span class="nt">type</span> = <span class="s">'for'</span>, line = line_num, start = gensym(), after = gensym(), limit = current_frame_size - 1, counter = token }
+</pre></div>
+</td>
+</tr><tr id="section-39">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-39">&#182;</a>
+  </div>
+  
+<p>Set counter to the start value and limit to the end value</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            emit(<span class="s">'\tsetlocal\t'</span> .. local_dictionary[token])
+            emit(<span class="s">'\tsetlocal\t'</span> .. top_control().limit)
+</pre></div>
+</td>
+</tr><tr id="section-40">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-40">&#182;</a>
+  </div>
+  
+<p>Start of loop label</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            emit(top_control().start .. <span class="s">':'</span>)
+</pre></div>
+</td>
+</tr><tr id="section-41">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-41">&#182;</a>
+  </div>
+  
+<p>Check if the counter == limit, brz to after:</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>            emit(<span class="s">'\tlocal\t'</span> .. local_dictionary[token])
+            emit(<span class="s">'\tlocal\t'</span> .. top_control().limit)
+            emit(<span class="s">'\tsub'</span>)
+            emit(<span class="s">'\tbrz\t@'</span> .. top_control().after)
+            <span class="k">return</span> <span class="k">true</span>
+        <span class="k">end</span>
+    }
+
+    <span class="k">for</span> token, line_num <span class="k">in</span> read(lines) <span class="k">do</span>
+</pre></div>
+</td>
+</tr><tr id="section-42">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-42">&#182;</a>
+  </div>
+  
+<p>Comment stuff: detect comment opening tokens, and change the mode</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">if</span> token == <span class="s">'\\'</span> <span class="k">then</span>
+            comment_start_line, old_mode, mode = line_num, mode, <span class="s">'line_comment'</span>
+        <span class="k">elseif</span> token == <span class="s">'('</span> <span class="k">then</span>
+            old_mode, mode = mode, <span class="s">'comment'</span>
+        <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-43">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-43">&#182;</a>
+  </div>
+  
+<p>Also detect the end of a line-comment</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">if</span> mode == <span class="s">'line_comment'</span> <span class="o">and</span> line_num ~= comment_start_line <span class="k">then</span>
+            mode = old_mode
+        <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-44">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-44">&#182;</a>
+  </div>
+  
+<p>Mode stuff: everything else we do depends on our mode. We'll check
+the table of mode handlers for our current mode and see if it can
+handle this token. If not, then the default behavior fires</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>        <span class="k">if</span> <span class="o">not</span> modes[mode] <span class="o">or</span> <span class="o">not</span> modes[mode](token, line_num) <span class="k">then</span>
+            <span class="k">if</span> <span class="nt">type</span>(token) == <span class="s">'number'</span> <span class="k">then</span>
+                emit(<span class="s">'\tnop\t'</span> .. token)
+            <span class="k">elseif</span> token == <span class="s">':'</span> <span class="k">then</span>
+                mode = <span class="s">'word_name'</span>
+                local_dictionary, current_frame_size = {}, 0
+            <span class="k">elseif</span> token == <span class="s">'variable'</span> <span class="k">then</span>
+                old_mode, mode = mode, <span class="s">'variable_name'</span>
+            <span class="k">elseif</span> local_dictionary[token] <span class="k">then</span>
+                emit(<span class="s">'\tnop\t'</span> .. local_dictionary[token])
+            <span class="k">else</span>
+                <span class="k">local</span> def = dictionary[token]
+                <span class="nt">assert</span>(def,
+                       <span class="s">'Undefined word \"'</span> .. token .. <span class="s">'\" on line '</span> .. line_num)
+                <span class="k">if</span> def.asm <span class="k">then</span> emit(<span class="s">'\t'</span> .. def.asm)
+                <span class="k">elseif</span> def.label <span class="k">then</span> emit(<span class="s">'\t'</span> .. <span class="s">'call\t'</span> .. def.label)
+                <span class="k">elseif</span> def.variable <span class="k">then</span> emit(<span class="s">'\tnop\t'</span> .. def.variable) <span class="k">end</span>
+            <span class="k">end</span>
+        <span class="k">end</span>        
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-45">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-45">&#182;</a>
+  </div>
+  
+<p>Helper for emitting an entire segment to the final output at once</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    <span class="k">local</span> <span class="k">function</span> <span class="nf">emit_segment</span>(segment)
+        <span class="k">for</span> _, line <span class="k">in</span> <span class="nt">ipairs</span>(segment) <span class="k">do</span> final_emit(line) <span class="k">end</span>
+    <span class="k">end</span>
+</pre></div>
+</td>
+</tr><tr id="section-46">
+<td class="docs">
+  <div class="pilwrap">
+    <a class="pilcrow" href="#section-46">&#182;</a>
+  </div>
+  
+<p>Emit all of the global segment followed by a hlt
+If there are any words or variables, emit those too.
+They don't need hlts because words will automatically return
+and globals never get jumped to.</p>
+
+
+</td>
+<td class="code">
+  <div class="highlight"><pre>    emit_segment(segments.global)
+    final_emit(<span class="s">'\thlt'</span>)
+    emit_segment(segments.words)
+    emit_segment(segments.variables)
+<span class="k">end</span>
+
+<span class="k">return</span> { read = read, compile = compile }
+</pre></div>
+</td>
+</tr></tbody>
+    </table>
+  </div>
+</body>
+</html>
