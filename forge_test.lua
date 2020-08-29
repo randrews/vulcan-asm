@@ -1,6 +1,8 @@
 forge = require('forge')
+vasm = require('vasm')
+CPU = require('cpu')
 
--- # Assembly parsing tests
+-- # Forge tests
 
 -- ## Utility functions
 
@@ -145,18 +147,18 @@ function test_compile(opts)
 end
 
 -- Simple
-test_compile{[[2 2 +]], {'nop 2', 'nop 2', 'add', 'hlt'}}
+test_compile{[[2 2 +]], {'.org 0x100', 'nop 2', 'nop 2', 'add', 'hlt'}}
 
 -- Comments
-test_compile{[[2 2 ( I am a comment ) +]], {'nop 2', 'nop 2', 'add', 'hlt'}}
+test_compile{[[2 2 ( I am a comment ) +]], {'.org 0x100', 'nop 2', 'nop 2', 'add', 'hlt'}}
 
 -- Line comments
 test_compile{[[
 2 2 \ I am a comment
-+]], {'nop 2', 'nop 2', 'add', 'hlt'}}
++]], {'.org 0x100', 'nop 2', 'nop 2', 'add', 'hlt'}}
 
 -- Defining new words
-test_compile{[[: sq ( n == n^2 ) dup * ; 2 sq 1024 !]], {'nop 2', 'call _gen_1', 'nop 1024', 'store24', 'hlt', '_gen_1:', 'dup', 'mul', 'ret' }}
+test_compile{[[: sq ( n == n^2 ) dup * ; 2 sq 1024 !]], {'.org 0x100', 'nop 2', 'call _gen_1', 'nop 1024', 'store24', 'hlt', '_gen_1:', 'dup', 'mul', 'ret' }}
 
 -- Reserved identifiers
 test_compile{[[: : * ;]], {},
@@ -166,29 +168,98 @@ test_compile{[[: : * ;]], {},
 }
 
 -- Variables
-test_compile{[[variable x]], {'hlt', '_gen_1: .db 0'}}
+test_compile{[[variable x]], {'.org 0x100', 'hlt', '_gen_1: .db 0'}}
 
 -- Referring to variables
-test_compile{[[variable x 3 x !]], {'nop 3', 'nop _gen_1', 'store24', 'hlt', '_gen_1: .db 0'}}
+test_compile{[[variable x 3 x !]], {'.org 0x100', 'nop 3', 'nop _gen_1', 'store24', 'hlt', '_gen_1: .db 0'}}
 
 -- Simple if
-test_compile{[[: even 2 mod if 100 then ;]], {'hlt', '_gen_1:', 'nop 2', 'mod', 'brz @_gen_2', 'nop 100', '_gen_2:', 'ret'}}
+test_compile{[[: even 2 mod if 100 then ;]], {'.org 0x100', 'hlt', '_gen_1:', 'nop 2', 'mod', 'brz @_gen_2', 'nop 100', '_gen_2:', 'ret'}}
 
 -- If / else
-test_compile{[[: even 2 mod if 100 else 200 then ;]], {'hlt', '_gen_1:', 'nop 2', 'mod', 'brz @_gen_2', 'nop 100', 'jr @_gen_3', '_gen_2:', 'nop 200', '_gen_3:', 'ret'}}
+test_compile{[[: even 2 mod if 100 else 200 then ;]], {'.org 0x100', 'hlt', '_gen_1:', 'nop 2', 'mod', 'brz @_gen_2', 'nop 100', 'jmpr @_gen_3', '_gen_2:', 'nop 200', '_gen_3:', 'ret'}}
 
 -- Infinite loop
-test_compile{[[: forever begin 0 again ;]], {'hlt', '_gen_1:', '_gen_2:', 'nop 0', 'jr @_gen_2', '_gen_3:', 'ret'}}
+test_compile{[[: forever begin 0 again ;]], {'.org 0x100', 'hlt', '_gen_1:', '_gen_2:', 'nop 0', 'jmpr @_gen_2', '_gen_3:', 'ret'}}
 
 -- Loop with break
-test_compile{[[: 10times 10 begin 1 - dup if break then again ;]], {'hlt', '_gen_1:', 'nop 10', '_gen_2:', 'nop 1', 'sub', 'dup', 'brz @_gen_4', 'jr @_gen_3', '_gen_4:', 'jr @_gen_2', '_gen_3:', 'ret'}}
+test_compile{[[: 10times 10 begin 1 - dup if break then again ;]], {'.org 0x100', 'hlt', '_gen_1:', 'nop 10', '_gen_2:', 'nop 1', 'sub', 'dup', 'brz @_gen_4', 'jmpr @_gen_3', '_gen_4:', 'jmpr @_gen_2', '_gen_3:', 'ret'}}
 
 -- While loop
 test_compile{[[variable x : 10times 10 x ! begin x @ while x @ 1 - x ! again ;]],
-    {'hlt', '_gen_2:', 'nop 10', 'nop _gen_1', 'store24', '_gen_3:', 'nop _gen_1', 'load24', 'brz @_gen_4', 'nop _gen_1', 'load24', 'nop 1', 'sub', 'nop _gen_1', 'store24', 'jr @_gen_3', '_gen_4:', 'ret', '_gen_1: .db 0'}}
+    {'.org 0x100', 'hlt', '_gen_2:', 'nop 10', 'nop _gen_1', 'store24', '_gen_3:', 'nop _gen_1', 'load24', 'brz @_gen_4', 'nop _gen_1', 'load24', 'nop 1', 'sub', 'nop _gen_1', 'store24', 'jmpr @_gen_3', '_gen_4:', 'ret', '_gen_1: .db 0'}}
 
 -- Local variables
-test_compile{[[: blah local x 10 x :! x :@ ;]], {'hlt', '_gen_1:', 'frame 1', 'nop 10', 'nop 0', 'setlocal', 'nop 0', 'local', 'ret'}}
+test_compile{[[: blah local x 10 x :! x :@ ;]], {'.org 0x100', 'hlt', '_gen_1:', 'frame 1', 'nop 10', 'nop 0', 'setlocal', 'nop 0', 'local', 'ret'}}
 
 -- For loops
-test_compile{[[: 100sum local sum 100 1 for n sum :@ n :@ + sum :! loop sum :@ ;]], {'hlt', '_gen_1:', 'frame 1', 'nop 100', 'nop 1', 'frame 3', 'setlocal 1', 'setlocal 2', '_gen_2:', 'local 1', 'local 2', 'sub', 'brz @_gen_3', 'nop 0', 'local', 'nop 1', 'local', 'add', 'nop 0', 'setlocal', 'local 1', 'add 1', 'setlocal 1', 'jr @_gen_2', '_gen_3:', 'frame 1', 'nop 0', 'local', 'ret'}}
+test_compile{[[: 100sum local sum 100 1 for n sum :@ n :@ + sum :! loop sum :@ ;]], {'.org 0x100', 'hlt', '_gen_1:', 'frame 1', 'nop 100', 'nop 1', 'frame 3', 'setlocal 1', 'setlocal 2', '_gen_2:', 'local 1', 'local 2', 'add 1', 'sub', 'brz @_gen_3', 'nop 0', 'local', 'nop 1', 'local', 'add', 'nop 0', 'setlocal', 'local 1', 'add 1', 'setlocal 1', 'jmpr @_gen_2', '_gen_3:', 'frame 1', 'nop 0', 'local', 'ret'}}
+
+-- ## Full-stack tests
+
+function array_iterator(arr)
+    local i, e = nil, nil
+    return function()
+        i, e = next(arr, i)
+        return e
+    end
+end
+
+function array_emitter()
+    local arr = {}
+    local function emit(str) table.insert(arr, str) end
+    return arr, emit
+end
+
+function serial_out()
+    local arr = {}
+    local function write(addr, val) table.insert(arr, val) end
+    return arr, write
+end
+
+function test_run(opts)
+    local src = opts[1]
+    local expected_output = opts[2]
+    local check = opts.check -- TODO
+
+    if opts.pending then
+        print('PENDING: ' .. src)
+        return
+    end
+
+    local asm, emitter = array_emitter()
+    forge.compile(iterator(src), emitter)
+    local cpu = CPU.new()
+    local console, callback = serial_out()
+    cpu:output_device(200, 202, callback)
+    cpu:load(array_iterator(asm))
+    cpu:run()
+
+    if not eq(expected_output, console) then
+        print('FAIL: Produced different output for [[' .. src .. ']]:')
+        print('Expected:')
+        print('\t' .. prettify(expected_output))
+        print('Actual:')
+        print('\t' .. prettify(console))
+        return
+    end
+
+end
+
+-- Basic byte output
+test_run{[[2 200 !b 3 200 !b]], {2, 3}}
+
+-- Calling words
+test_run{[[: write 200 !b ; 20 10 write write]], {10, 20}}
+
+-- Loops
+test_run{[[: write 200 !b ; : 10loop 10 1 for n n :@ write loop ; 10loop]], {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
+
+test_run{[[
+   : 100sum
+       local sum
+       100 1 for n
+           sum :@ n :@ + sum :!
+       loop
+       sum :@ ;
+   100sum 200 !]], {186, 19, 0}} -- (19 << 8) + 186 == 5050

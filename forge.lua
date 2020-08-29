@@ -84,7 +84,7 @@ function compile(lines, final_emit)
         drop = { asm = 'pop' }, dup = { asm = 'dup' }, ['2dup'] = { asm = '2dup' }, swap = { asm = 'swap' },
         ['and'] = { asm = 'and' }, ['or'] = { asm = 'or' }, xor = { asm = 'xor' },
         ['>'] = { asm = 'agt' }, ['<'] = { asm = 'alt' },
-        ['@'] = { asm = 'load24' }, ['!'] = { asm = 'store24' }
+        ['@'] = { asm = 'load24' }, ['!'] = { asm = 'store24' }, ['!b'] = { asm = 'store' }
     }
 
     -- The dictionary of locals; all locals are just mapping a name to a stack-frame-index
@@ -156,7 +156,7 @@ function compile(lines, final_emit)
                 local top = top_control()
                 local old_after = top.after
                 top.after, top.has_else = gensym(), true
-                emit('\tjr\t@' .. top_control().after)
+                emit('\tjmpr\t@' .. top_control().after)
                 emit(old_after .. ':')
                 return true
             elseif token == 'then' then
@@ -172,7 +172,7 @@ function compile(lines, final_emit)
             elseif token == 'break' then
                 assert(top_control('begin', 'for'),
                        '`break` outside loop on line ' .. line_num)
-                emit('\tjr\t@' .. top_control('begin', 'for').after)
+                emit('\tjmpr\t@' .. top_control('begin', 'for').after)
                 return true
             elseif token == 'while' then
                 assert(top_control().type == 'begin',
@@ -182,7 +182,7 @@ function compile(lines, final_emit)
             elseif token == 'again' then
                 assert(top_control().type == 'begin',
                        '`again` outside `begin` on line ' .. line_num)
-                emit('\tjr\t@' .. top_control().start)
+                emit('\tjmpr\t@' .. top_control().start)
                 emit(top_control().after .. ':')
                 controls:remove(#controls)
                 return true
@@ -205,7 +205,7 @@ function compile(lines, final_emit)
                 emit('\tlocal\t' .. local_dictionary[top_control().counter])
                 emit('\tadd\t1')
                 emit('\tsetlocal\t' .. local_dictionary[top_control().counter])
-                emit('\tjr\t@' .. top_control().start)
+                emit('\tjmpr\t@' .. top_control().start)
                 -- The after label
                 emit(top_control().after .. ':')
                 -- Remove the counter variable
@@ -270,9 +270,10 @@ function compile(lines, final_emit)
             emit('\tsetlocal\t' .. top_control().limit)
             -- Start of loop label
             emit(top_control().start .. ':')
-            -- Check if the counter == limit, brz to after:
+            -- Check if the counter > limit, brz to after:
             emit('\tlocal\t' .. local_dictionary[token])
             emit('\tlocal\t' .. top_control().limit)
+            emit('\tadd\t' .. 1)
             emit('\tsub')
             emit('\tbrz\t@' .. top_control().after)
             return true
@@ -325,6 +326,7 @@ function compile(lines, final_emit)
     -- If there are any words or variables, emit those too.
     -- They don't need hlts because words will automatically return
     -- and globals never get jumped to.
+    final_emit('\t.org\t0x100')
     emit_segment(segments.global)
     final_emit('\thlt')
     emit_segment(segments.words)

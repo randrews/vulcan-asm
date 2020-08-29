@@ -6,6 +6,9 @@ CPU = {}
 function CPU.new(display)
     local instance = setmetatable({}, { __index = CPU })
 
+    instance.input_devices = {}
+    instance.output_devices = {}
+
     instance.stack = {}
     for n = 0, 2048 - 1 do
         instance.stack[n] = 0
@@ -89,14 +92,33 @@ function CPU:pop_call()
     return ret
 end
 
+function CPU:input_device(start_addr, end_addr, callback)
+    table.insert(self.input_devices, { address={start_addr, end_addr}, callback=callback })
+end
+
+function CPU:output_device(start_addr, end_addr, callback)
+    table.insert(self.output_devices, { address={start_addr, end_addr}, callback=callback })
+end
+
 function CPU:poke(addr, value)
     addr = math.abs(math.floor(addr)) & 0x01ffff
     value = math.floor(value) & 0xff
+    for _, device in ipairs(self.output_devices) do
+        if addr >= device.address[1] and addr <= device.address[2] then
+            device.callback(addr - device.address[1], value)
+            return
+        end
+    end
     self.mem[addr] = value
 end
 
 function CPU:peek(addr)
     addr = math.abs(math.floor(addr)) & 0x01ffff
+    for _, device in ipairs(self.input_devices) do
+        if addr >= device.address[1] and addr <= device.address[2] then
+            return device.callback(addr - device.address[1])
+        end
+    end
     return self.mem[addr]
 end
 
@@ -322,35 +344,37 @@ end
 
 -- Memory access
 function CPU:_load()
-    self:push_data(self.mem[self:pop_data()])
+    self:push_data(self:peek(self:pop_data()))
 end
 
 function CPU:load16()
     local addr = self:pop_data()
-    self:push_data(self.mem[addr+1] << 8 | self.mem[addr])
+    self:push_data(self:peek(addr+1) << 8 | self:peek(addr))
 end
 
 function CPU:load24()
     local addr = self:pop_data()
-    self:push_data(self.mem[addr+2] << 16 | self.mem[addr+1] << 8 | self.mem[addr])
+    self:push_data(self:peek(addr+2) << 16 | self:peek(addr+1) << 8 | self:peek(addr))
 end
 
 function CPU:store24()
     local addr = self:pop_data()
     local val = self:pop_data()
-    self.mem[addr] = val & 0xff
-    self.mem[addr+1] = (val >> 8) & 0xff
-    self.mem[addr+2] = (val >> 16) & 0xff
-    self.display:refresh_address(addr)
-    self.display:refresh_address(addr+1)
-    self.display:refresh_address(addr+2)
+    self:poke(addr, val & 0xff)
+    self:poke(addr + 1, (val >> 8) & 0xff)
+    self:poke(addr + 2, (val >> 16) & 0xff)
+    if self.display then
+        self.display:refresh_address(addr)
+        self.display:refresh_address(addr+1)
+        self.display:refresh_address(addr+2)
+    end
 end
 
 function CPU:store16()
     local addr = self:pop_data()
     local val = self:pop_data()
-    self.mem[addr] = val & 0xff
-    self.mem[addr+1] = (val >> 8) & 0xff
+    self:poke(addr, val & 0xff)
+    self:poke(addr + 1, (val >> 8) & 0xff)
     if self.display then
         self.display:refresh_address(addr)
         self.display:refresh_address(addr+1)
@@ -359,8 +383,8 @@ end
 
 function CPU:store()
     local addr = self:pop_data()
-    self.mem[addr] = self:pop_data() & 0xff
-    self.display:refresh_address(addr)
+    self:poke(addr, self:pop_data() & 0xff)
+    if self.display then self.display:refresh_address(addr) end
 end
 
 -- Interrupts

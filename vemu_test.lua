@@ -81,11 +81,11 @@ assert(not cpu.halted)
 
 -- Running a simple binary
 local cpu = CPU.new()
-cpu:poke(256, 0x01)
-cpu:poke(257, 0x02)
-cpu:poke(258, 0x05)
-cpu:poke(259, 0x02)
-cpu:poke(260, 33 << 2)
+cpu:poke(256, 0x01) -- nop 1 arg
+cpu:poke(257, 0x02) -- 2
+cpu:poke(258, 0x05) -- add 1 arg
+cpu:poke(259, 0x02) -- 2
+cpu:poke(260, 29 << 2)
 cpu:run()
 assert(cpu:pop_data() == 4)
 
@@ -312,3 +312,51 @@ cpu:load(iterator([[
 cpu:run()
 assert(cpu:pop_data() ~= 0)
 assert(cpu:pop_data() == 0)
+
+-- Basic memory mapped output
+local arr = {}
+local cpu = CPU.new()
+cpu:load(iterator([[
+    .org 256
+    push 12
+    store 200
+    push 15
+    store 200
+    hlt
+]]))
+cpu:output_device(200, 200, function(_, val) table.insert(arr, val) end)
+cpu:run()
+assert(#arr == 2)
+assert(arr[1] == 12)
+assert(arr[2] == 15)
+
+-- Range memory mapped output
+local arr = {1, 2, 3, 4, 5}
+local cpu = CPU.new()
+cpu:load(iterator([[
+    .org 256
+    push 0
+    store 201
+    push 0
+    store16 203
+    hlt
+]]))
+cpu:output_device(200, 204, function(addr, val) arr[addr+1] = val end)
+cpu:run()
+assert(arr[1] == 1)
+assert(arr[2] == 0)
+assert(arr[3] == 3)
+assert(arr[4] == 0)
+assert(arr[5] == 0)
+
+-- Range memory mapped input
+local arr = {1, 2, 3, 4, 5}
+local cpu = CPU.new()
+cpu:load(iterator([[
+    .org 256
+    load24 201
+    hlt
+]]))
+cpu:input_device(200, 204, function(addr) return arr[addr+1] end)
+cpu:run()
+assert(cpu:pop_data() == (4 << 16) | (3 << 8) | 2)
