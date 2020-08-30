@@ -17,6 +17,11 @@ function table:rfind(pred)
     end
 end
 
+-- Some things can't be used as word names:
+local reserved = {
+    [':'] = true, [';'] = true, ['('] = true, [')'] = true, ['if'] = true, ['else'] = true, ['then'] = true
+}
+
 -- ## Parser
 
 -- This iterates over the tokens and line numbers in a file.
@@ -64,6 +69,9 @@ function read(lines)
     end
 end
 
+-- ## Compiler
+-- Turn an iterator of source lines into a sequence of assembly lines, which will be passed
+-- to `final_emit`
 function compile(lines, final_emit)
     -- We have three segments in the program:
     --
@@ -72,248 +80,95 @@ function compile(lines, final_emit)
     -- - Variables, emitted last and containing the labels and .db's for variables (all initialized to 0, the initializers
     --   run where the declaration was, in text)
     local segments = { global = {}, words = {}, variables = {} }
-    local current_segment = 'global'
-    local function emit(line, segment)
-        table.insert(segments[segment or current_segment], line)
-    end
 
-    -- The dictionary, which initially has only the primitive words in it: an entry here contains either a label or
-    -- an opcode, and tells us how to handle each word. Initially all the words in it will be the single-opcode primitives:
-    local dictionary = {
-        ['+'] = { asm = 'add' }, ['-'] = { asm = 'sub' }, ['*'] = { asm = 'mul' }, ['/'] = { asm = 'div' }, mod = { asm = 'mod' },
-        drop = { asm = 'pop' }, dup = { asm = 'dup' }, ['2dup'] = { asm = '2dup' }, swap = { asm = 'swap' },
-        ['and'] = { asm = 'and' }, ['or'] = { asm = 'or' }, xor = { asm = 'xor' },
-        ['>'] = { asm = 'agt' }, ['<'] = { asm = 'alt' },
-        ['@'] = { asm = 'load24' }, ['!'] = { asm = 'store24' }, ['!b'] = { asm = 'store' }
+    -- The "compiler state," which can be passed to token and mode handlers and allow them to
+    -- do anything they might want the compiler to do
+    local state = {
+        comment_start_line = nil, -- For line comments to konw when the line has ended
+        current_frame_size = 0, -- For things that create local variables to know which indices to add
+        current_segment = 'global', -- Which segment we're emitting code to
+        name_type = nil, -- For `read_name`
+        name_handler = nil,
+
+        -- A stack of currently-open control structures. Each contains, at the least, a `type`
+        -- and a `line` field
+        controls = setmetatable({}, {__index = table}),
+
+        -- The dictionary of locals; all locals are just mapping a name to a stack-frame-index
+        local_dictionary = {},
+
+        -- The dictionary, which initially has only the primitive words in it: an entry here contains either a label or
+        -- an opcode, and tells us how to handle each word. Initially all the words in it will be the single-opcode primitives:
+        dictionary = {
+            ['+'] = { asm = 'add' }, ['-'] = { asm = 'sub' }, ['*'] = { asm = 'mul' }, ['/'] = { asm = 'div' }, mod = { asm = 'mod' },
+            drop = { asm = 'pop' }, dup = { asm = 'dup' }, ['2dup'] = { asm = '2dup' }, swap = { asm = 'swap' },
+            ['and'] = { asm = 'and' }, ['or'] = { asm = 'or' }, xor = { asm = 'xor' },
+            ['>'] = { asm = 'agt' }, ['<'] = { asm = 'alt' },
+            ['@'] = { asm = 'load24' }, ['!'] = { asm = 'store24' }, ['!b'] = { asm = 'store' }
+        }
     }
 
-    -- The dictionary of locals; all locals are just mapping a name to a stack-frame-index
-    local local_dictionary = {}
+    -- A stack of compiler modes, which affect how the next word is handled
+    local mode_stack = setmetatable({'default'}, {__index = table})
+    function state.mode() return mode_stack[#mode_stack] end
+    function state.push_mode(mode) mode_stack:insert(mode) end
+    function state.pop_mode() return mode_stack:remove() end
 
-    -- Some things can't be used as word names:
-    local reserved = {
-        [':'] = true, [';'] = true, ['('] = true, [')'] = true, ['if'] = true, ['else'] = true, ['then'] = true
-    }
-
+    -- This generates unique names for assembly labels
     local sym_id = 0
-    local function gensym()
+    function state.gensym()
         sym_id = sym_id + 1
-        return '_gen_' .. sym_id
+        return '_gen' .. sym_id
     end
 
-    local mode = nil
-    local old_mode = nil
-    local comment_start_line = nil
-    local current_frame_size = 0
-
-    -- A stack of currently-open control structures. Each contains, at the least, a `type`
-    -- and a `line` field
-    local controls = setmetatable({}, {__index = table})
-    local function top_control(...)
+    -- Return the top control structure, optionally of one of the passed-in
+    -- types
+    function state.top_control(...)
         local types = {...}
         if #types > 0 then
-            return controls:rfind(function(ctrl) return table.index(types, ctrl.type) end)
-        else return controls[#controls] or {} end
+            return state.controls:rfind(function(ctrl) return table.index(types, ctrl.type) end)
+        else return state.controls[#state.controls] or {} end
     end
 
-    -- A table of functions that get called for every token depending on
-    -- the mode. If the corresponding function returns true, then it was
-    -- able to handle the token; otherwise, pass it through to the default
-    -- behavior.
-    local modes = {
-        comment = function(token)
-            -- Region comments go until a close paren
-            if token == ')' then mode = old_mode end
-            return true
-        end,
+    -- Treat the next token as a name, and pass it (and the state) to a handler function
+    -- (after returning to whatever the original mode was)
+    function state.read_name(name_type, name_handler)
+        state.name_type, state.name_handler = name_type, name_handler
+        state.push_mode('name')
+    end
 
-        -- We're already handling this before the mode check
-        line_comment = function() return true end,
+    -- Emit a line of assembly to a segment (or the current segment)
+    function state.emit(line, segment)
+        table.insert(segments[segment or state.current_segment], line)
+    end
 
-        word_name = function(token, line_num)
-            -- Ensure it's a valid name
-            assert(type(token) ~= 'number' and not reserved[token],
-                   'Invalid name \"' .. token .. '\" for new word on line ' .. line_num)
-            -- Put it in the dictionary and change our mode and segment
-            dictionary[token] = { label = gensym() }
-            mode, current_segment = 'word_definition', 'words'
-            -- Emit a label for the entry point of this function
-            emit(dictionary[token].label .. ':')
-            return true
-        end,
-
-        word_definition = function(token, line_num)
-            if token == ':' then error('Already defining a word on line ' .. line_num)
-            elseif token == 'if' then
-                controls:insert{ type = 'if', line = line_num, after = gensym() }
-                emit('\tbrz\t@' .. controls[#controls].after)
-                return true
-            elseif token == 'else' then
-                assert(top_control().type == 'if',
-                       '`else` outside `if` on line ' .. line_num)
-                assert(not top_control().has_else,
-                       'Extra `else` on line ' .. line_num)
-                local top = top_control()
-                local old_after = top.after
-                top.after, top.has_else = gensym(), true
-                emit('\tjmpr\t@' .. top_control().after)
-                emit(old_after .. ':')
-                return true
-            elseif token == 'then' then
-                assert(top_control().type == 'if',
-                       '`then` outside `if` on line ' .. line_num)
-                emit(top_control().after .. ':')
-                controls:remove(#controls)
-                return true
-            elseif token == 'begin' then
-                controls:insert{ type = 'begin', line = line_num, start = gensym(), after = gensym() }
-                emit(top_control().start .. ':')
-                return true
-            elseif token == 'break' then
-                assert(top_control('begin', 'for'),
-                       '`break` outside loop on line ' .. line_num)
-                emit('\tjmpr\t@' .. top_control('begin', 'for').after)
-                return true
-            elseif token == 'while' then
-                assert(top_control().type == 'begin',
-                       '`while` outside loop on line ' .. line_num)
-                emit('\tbrz\t@' .. top_control().after)
-                return true
-            elseif token == 'again' then
-                assert(top_control().type == 'begin',
-                       '`again` outside `begin` on line ' .. line_num)
-                emit('\tjmpr\t@' .. top_control().start)
-                emit(top_control().after .. ':')
-                controls:remove(#controls)
-                return true
-            elseif token == 'local' then
-                mode, old_mode = 'local_name', mode
-                return true
-            elseif token == ':@' then
-                emit('\tlocal')
-                return true
-            elseif token == ':!' then
-                emit('\tsetlocal')
-                return true
-            elseif token == 'for' then
-                mode, old_mode = 'for_name', mode
-                return true
-            elseif token == 'loop' then
-                assert(top_control().type == 'for',
-                       '`loop` outside `for` on line ' .. line_num)
-                -- Increment the counter and jump back to start
-                emit('\tlocal\t' .. local_dictionary[top_control().counter])
-                emit('\tadd\t1')
-                emit('\tsetlocal\t' .. local_dictionary[top_control().counter])
-                emit('\tjmpr\t@' .. top_control().start)
-                -- The after label
-                emit(top_control().after .. ':')
-                -- Remove the counter variable
-                local_dictionary[top_control().counter] = nil
-                -- Shrink the stack size back (it might matter)
-                current_frame_size = current_frame_size - 2
-                emit('\tframe\t' .. current_frame_size)
-                controls:remove(#controls)
-                return true
-            elseif token == ';' then
-                -- First check we're not leaving any open blocks
-                if #controls > 0 then
-                    error('Unclosed `' .. controls[1].type .. '` on line ' .. controls[1].line)
-                end
-                -- To end a word, emit a return and reset our mode and segment
-                emit('\tret')
-                mode, current_segment = nil, 'global'
-                return true
-            end
-        end,
-
-        variable_name = function(token, line_num)
-            -- Ensure it's a valid name
-            assert(type(token) ~= 'number' and not reserved[token],
-                   'Invalid name \"' .. token .. '\" for variable on line ' .. line_num)
-            -- Put it in the dictionary and change our mode and segment
-            dictionary[token] = { variable = gensym() }
-            -- Emit a label and .db for the variable
-            emit(dictionary[token].variable .. ':\t.db 0', 'variables')
-            mode = old_mode
-            return true
-        end,
-
-        local_name = function(token, line_num)
-            -- Ensure it's a valid name
-            assert(type(token) ~= 'number' and not reserved[token],
-                   'Invalid name \"' .. token .. '\" for local on line ' .. line_num)
-            -- Ensure it's unused
-            assert(not local_dictionary[token],
-                   'Reused name \"' .. token .. '\" for local on line ' .. line_num)
-            -- Put it in the dictionary and change our frame size and mode
-            local_dictionary[token], current_frame_size, mode = current_frame_size, current_frame_size + 1, old_mode
-            emit('\tframe\t' .. current_frame_size)
-            return true
-        end,
-
-        for_name = function(token, line_num)
-            -- Ensure it's a valid name
-            assert(type(token) ~= 'number' and not reserved[token],
-                   'Invalid name \"' .. token .. '\" for local on line ' .. line_num)
-            -- Ensure it's unused
-            assert(not local_dictionary[token],
-                   'Reused name \"' .. token .. '\" for local on line ' .. line_num)
-            -- Put it in the dictionary and change our frame size
-            -- Incrementing by two to store the upper limit also
-            local_dictionary[token], current_frame_size, mode = current_frame_size, current_frame_size + 2, old_mode
-            emit('\tframe\t' .. current_frame_size)
-            -- Push a control
-            controls:insert{ type = 'for', line = line_num, start = gensym(), after = gensym(), limit = current_frame_size - 1, counter = token }
-            -- Set counter to the start value and limit to the end value
-            emit('\tsetlocal\t' .. local_dictionary[token])
-            emit('\tsetlocal\t' .. top_control().limit)
-            -- Start of loop label
-            emit(top_control().start .. ':')
-            -- Check if the counter > limit, brz to after:
-            emit('\tlocal\t' .. local_dictionary[token])
-            emit('\tlocal\t' .. top_control().limit)
-            emit('\tadd\t' .. 1)
-            emit('\tsub')
-            emit('\tbrz\t@' .. top_control().after)
-            return true
-        end
-    }
-
+    -- ### Main Loop
+    -- Loop over each token in the source, and handle them
     for token, line_num in read(lines) do
+        state.line_num = line_num
+
         -- Comment stuff: detect comment opening tokens, and change the mode
         if token == '\\' then
-            comment_start_line, old_mode, mode = line_num, mode, 'line_comment'
+            state.comment_start_line = state.line_num
+            state.push_mode('line_comment')
         elseif token == '(' then
-            old_mode, mode = mode, 'comment'
+            state.push_mode('comment')
         end
 
         -- Also detect the end of a line-comment
-        if mode == 'line_comment' and line_num ~= comment_start_line then
-            mode = old_mode
+        if state.mode() == 'line_comment' and state.line_num ~= state.comment_start_line then
+            state.pop_mode()
         end
 
         -- Mode stuff: everything else we do depends on our mode. We'll check
         -- the table of mode handlers for our current mode and see if it can
         -- handle this token. If not, then the default behavior fires
-        if not modes[mode] or not modes[mode](token, line_num) then
-            if type(token) == 'number' then
-                emit('\tnop\t' .. token)
-            elseif token == ':' then
-                mode = 'word_name'
-                local_dictionary, current_frame_size = {}, 0
-            elseif token == 'variable' then
-                old_mode, mode = mode, 'variable_name'
-            elseif local_dictionary[token] then
-                emit('\tnop\t' .. local_dictionary[token])
-            else
-                local def = dictionary[token]
-                assert(def,
-                       'Undefined word \"' .. token .. '\" on line ' .. line_num)
-                if def.asm then emit('\t' .. def.asm)
-                elseif def.label then emit('\t' .. 'call\t' .. def.label)
-                elseif def.variable then emit('\tnop\t' .. def.variable) end
-            end
+        if type(modes[state.mode()]) == 'function' then
+            modes[state.mode()](token, state)
+        elseif type(modes[state.mode()]) == 'table' and modes[state.mode()][token] then
+            modes[state.mode()][token](state)
+        else
+            modes.default(token, state)
         end        
     end
 
@@ -331,6 +186,246 @@ function compile(lines, final_emit)
     final_emit('\thlt')
     emit_segment(segments.words)
     emit_segment(segments.variables)
+end
+
+-- ## Mode handlers
+
+-- The compiler treats words differently depending on what mode it's in.
+-- This table contains either functions, which are called with a word and a
+-- compiler state, or a table of words -> functions.
+modes = {}
+
+-- ### Default behavior:
+-- If nothing else tells us differently, we do this to handle numbers, words
+-- defined in the dictionary, etc
+
+function modes.default(token, state)
+    if type(token) == 'number' then
+        state.emit('\tnop\t' .. token)
+    elseif token == ':' then
+        state.read_name('word',
+                        function(name, state)
+                            assert(not state.dictionary[name], 'Reused name \"' .. name .. '\" on line ' .. state.line_num)
+                            -- Put it in the dictionary and change our mode and segment
+                            state.dictionary[name] = { label = state.gensym() }
+                            state.push_mode('word_definition')
+                            state.current_segment = 'words'
+                            -- Emit a label for the entry point of this function
+                            state.emit(state.dictionary[name].label .. ':')
+                            state.local_dictionary, state.current_frame_size = {}, 0
+                        end
+        )
+    elseif token == 'variable' then
+        state.read_name('variable',
+                        function(name, state)
+                            assert(not state.dictionary[name], 'Reused name \"' .. name .. '\" on line ' .. state.line_num)
+                            -- Put it in the dictionary and change our mode and segment
+                            state.dictionary[name] = { variable = state.gensym() }
+                            -- Emit a label and .db for the variable
+                            state.emit(state.dictionary[name].variable .. ':\t.db 0', 'variables')
+                        end
+        )
+    elseif state.local_dictionary[token] then
+        state.emit('\tnop\t' .. state.local_dictionary[token])
+    else
+        local def = state.dictionary[token]
+        assert(def,
+               'Undefined word \"' .. token .. '\" on line ' .. state.line_num)
+        if def.asm then state.emit('\t' .. def.asm)
+        elseif def.label then state.emit('\t' .. 'call\t' .. def.label)
+        elseif def.variable then state.emit('\tnop\t' .. def.variable) end
+    end
+end
+
+-- ### Comment behaviors
+
+-- Region comments go until a close paren
+function modes.comment(token, state)
+    if token == ')' then state.pop_mode() end
+end
+
+-- We're already handling these ending before the mode check; this
+-- just tells us to ignore all tokens inside a comment
+function modes.line_comment() end
+
+-- ### Names
+-- Names all basically work the same: when we see a token that we know is
+-- followed by a name, we push the `name` mode and set a name handler and
+-- name type in the state. The `name` mode reads any token, checks that it's
+-- a valid name, then pops the mode and calls the handler.
+
+function modes.name(token, state)
+    local valid = type(token) ~= 'number' and not reserved[token]
+    assert(valid, 'Invalid name \"' .. token .. '\" for ' .. state.name_type .. ' on line ' .. state.line_num)
+    state.pop_mode()
+    state.name_handler(token, state)
+end
+
+-- ### Word definitions
+-- This is a table of all the special tokens we might see inside a word
+-- definition. Anything not in this table will fall through to the default
+-- handler
+
+modes.word_definition = {}
+
+-- First off, we want to disallow nesting word definitions
+modes.word_definition[':'] = function(state)
+    error('Already defining a word on line ' .. state.line_num)
+end
+
+-- This is how you end a word definition
+modes.word_definition[';'] = function(state)
+    -- First check we're not leaving any open blocks
+    if #state.controls > 0 then
+        error('Unclosed `' .. state.controls[1].type .. '` on line ' .. state.controls[1].line)
+    end
+    -- To end a word, emit a return and reset our mode and segment
+    state.emit('\tret')
+    state.pop_mode()
+    state.current_segment = 'global'
+end
+
+-- ### Conditionals
+-- `if` / `else` / `then` are the conditional construct in Forge. `if` consumes
+-- the top of the stack, and if it's zero, jumps to the matching `else` or
+-- `then`.
+modes.word_definition['if'] = function(state)
+    state.controls:insert{ type = 'if', line = state.line_num, after = state.gensym() }
+    state.emit('\tbrz\t@' .. state.controls[#state.controls].after)
+end
+
+-- `else` is the jump target if the condition is false (if it's provided).
+-- First we make sure that we're actually in an `if`, and that there's not
+-- already an `else` for it. Then we splice ourselves into that control structure
+modes.word_definition['else'] = function(state)
+    assert(state.top_control().type == 'if',
+           '`else` outside `if` on line ' .. state.line_num)
+    assert(not state.top_control().has_else,
+           'Extra `else` on line ' .. state.line_num)
+    local top = state.top_control()
+    local old_after = top.after
+    top.after, top.has_else = state.gensym(), true
+    state.emit('\tjmpr\t@' .. state.top_control().after)
+    state.emit(old_after .. ':')
+end
+
+-- `then` is the end of an `if` / `else`: we just need to emit a label to
+-- jump to and pop the control stack.
+modes.word_definition['then'] = function(state)
+    assert(state.top_control().type == 'if',
+           '`then` outside `if` on line ' .. state.line_num)
+    state.emit(state.top_control().after .. ':')
+    state.controls:remove(#state.controls)
+end
+
+-- ### Loops
+-- There are three kinds of loops: an infinite loop using `begin` / `again`,
+-- a while loop using `begin` / `while` / `again`, and a counted `for` loop.
+-- The first two start with `begin`, which just needs to push a control
+-- structure and emit a jump target for the `again`
+function modes.word_definition.begin(state)
+    state.controls:insert{ type = 'begin', line = state.line_num, start = state.gensym(), after = state.gensym() }
+    state.emit(state.top_control().start .. ':')
+end
+
+-- `again` just inserts a jump to the matching `begin` and pops the control stack
+function modes.word_definition.again(state)
+    assert(state.top_control().type == 'begin',
+           '`again` outside `begin` on line ' .. state.line_num)
+    state.emit('\tjmpr\t@' .. state.top_control().start)
+    state.emit(state.top_control().after .. ':')
+    state.controls:remove(#state.controls)
+end
+
+-- All loops allow a `break` statement to jump immediately to the end of the loop
+modes.word_definition['break'] = function(state)
+    assert(state.top_control('begin', 'for'),
+           '`break` outside loop on line ' .. state.line_num)
+    state.emit('\tjmpr\t@' .. state.top_control('begin', 'for').after)
+end
+
+-- `while` can be inserted anywhere in a `begin` loop, and will exit the loop if
+-- the top of stack is zero.
+modes.word_definition['while'] = function(state)
+    assert(state.top_control().type == 'begin',
+           '`while` outside loop on line ' .. state.line_num)
+    state.emit('\tbrz\t@' .. state.top_control().after)
+end
+
+-- ### For loops
+-- A `for` loop consumes the lower and upper limits of the loop and is followed
+-- by a variable name for the counter. It runs the loop body (until the matching
+-- `loop`) for every value in the range (inclusive). The counter is a local
+-- variable visible only in the loop body.
+-- To compile this, we create a counter variable set to the lower bound, and an
+-- anonymous local variable set to the upper bound. We emit a label for `loop` to
+-- jump to and then compare the counter to the upper bound
+modes.word_definition['for'] = function(state)
+    state.read_name('for',
+                    function(name, state)
+                        -- Put it in the dictionary and change our frame size
+                        -- Incrementing by two to store the upper limit also
+                        state.local_dictionary[name], state.current_frame_size = state.current_frame_size, state.current_frame_size + 2
+                        state.emit('\tframe\t' .. state.current_frame_size)
+                        -- Push a control
+                        state.controls:insert{ type = 'for', line = state.line_num, start = state.gensym(), after = state.gensym(), limit = state.current_frame_size - 1, counter = name }
+                        -- Set counter to the start value and limit to the end value
+                        state.emit('\tsetlocal\t' .. state.local_dictionary[name])
+                        state.emit('\tsetlocal\t' .. state.top_control().limit)
+                        -- Start of loop label
+                        state.emit(state.top_control().start .. ':')
+                        -- Check if the counter > limit, brz to after:
+                        state.emit('\tlocal\t' .. state.local_dictionary[name])
+                        state.emit('\tlocal\t' .. state.top_control().limit)
+                        state.emit('\tadd\t' .. 1)
+                        state.emit('\tsub')
+                        state.emit('\tbrz\t@' .. state.top_control().after)
+                    end
+    )
+end
+
+-- `loop` ends a `for` loop: it increments the counter and then jumps to the start
+-- of the loop.
+function modes.word_definition.loop(state)
+    assert(state.top_control().type == 'for',
+           '`loop` outside `for` on line ' .. state.line_num)
+    -- Increment the counter and jump back to start
+    state.emit('\tlocal\t' .. state.local_dictionary[state.top_control().counter])
+    state.emit('\tadd\t1')
+    state.emit('\tsetlocal\t' .. state.local_dictionary[state.top_control().counter])
+    state.emit('\tjmpr\t@' .. state.top_control().start)
+    -- The after label
+    state.emit(state.top_control().after .. ':')
+    -- Remove the counter variable
+    state.local_dictionary[state.top_control().counter] = nil
+    -- Shrink the stack size back (it might matter)
+    state.current_frame_size = state.current_frame_size - 2
+    state.emit('\tframe\t' .. state.current_frame_size)
+    state.controls:remove(#state.controls)
+end
+
+-- ### Local variables
+-- Locals have syntax almost exactly like global variables, but use the `local` and
+-- `setlocal` instructions instead of `load` and `store`.
+modes.word_definition['local'] = function(state)
+    state.read_name('local',
+                    function(name, state)
+                        assert(not state.local_dictionary[name], 'Reused name \"' .. name .. '\" on line ' .. state.line_num)
+                        -- Put it in the dictionary and change our frame size and mode
+                        state.local_dictionary[name], state.current_frame_size = state.current_frame_size, state.current_frame_size + 1
+                        state.emit('\tframe\t' .. state.current_frame_size)
+                    end
+    )
+end
+
+-- since these are only usable inside word definitions, they're handled here instead
+--  of in the dictionary, even though all they do is emit one instruction
+modes.word_definition[':@'] = function(state)
+    state.emit('\tlocal')
+end
+
+modes.word_definition[':!'] = function(state)
+    state.emit('\tsetlocal')
 end
 
 return { read = read, compile = compile }

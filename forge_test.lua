@@ -158,42 +158,42 @@ test_compile{[[
 +]], {'.org 0x100', 'nop 2', 'nop 2', 'add', 'hlt'}}
 
 -- Defining new words
-test_compile{[[: sq ( n == n^2 ) dup * ; 2 sq 1024 !]], {'.org 0x100', 'nop 2', 'call _gen_1', 'nop 1024', 'store24', 'hlt', '_gen_1:', 'dup', 'mul', 'ret' }}
+test_compile{[[: sq ( n == n^2 ) dup * ; 2 sq 1024 !]], {'.org 0x100', 'nop 2', 'call _gen1', 'nop 1024', 'store24', 'hlt', '_gen1:', 'dup', 'mul', 'ret' }}
 
 -- Reserved identifiers
 test_compile{[[: : * ;]], {},
     check = function(env)
-        assert(env.error:match('Invalid name ":" for new word on line'))
+        assert(env.error:match('Invalid name ":" for word on line'))
     end
 }
 
 -- Variables
-test_compile{[[variable x]], {'.org 0x100', 'hlt', '_gen_1: .db 0'}}
+test_compile{[[variable x]], {'.org 0x100', 'hlt', '_gen1: .db 0'}}
 
 -- Referring to variables
-test_compile{[[variable x 3 x !]], {'.org 0x100', 'nop 3', 'nop _gen_1', 'store24', 'hlt', '_gen_1: .db 0'}}
+test_compile{[[variable x 3 x !]], {'.org 0x100', 'nop 3', 'nop _gen1', 'store24', 'hlt', '_gen1: .db 0'}}
 
 -- Simple if
-test_compile{[[: even 2 mod if 100 then ;]], {'.org 0x100', 'hlt', '_gen_1:', 'nop 2', 'mod', 'brz @_gen_2', 'nop 100', '_gen_2:', 'ret'}}
+test_compile{[[: even 2 mod if 100 then ;]], {'.org 0x100', 'hlt', '_gen1:', 'nop 2', 'mod', 'brz @_gen2', 'nop 100', '_gen2:', 'ret'}}
 
 -- If / else
-test_compile{[[: even 2 mod if 100 else 200 then ;]], {'.org 0x100', 'hlt', '_gen_1:', 'nop 2', 'mod', 'brz @_gen_2', 'nop 100', 'jmpr @_gen_3', '_gen_2:', 'nop 200', '_gen_3:', 'ret'}}
+test_compile{[[: even 2 mod if 100 else 200 then ;]], {'.org 0x100', 'hlt', '_gen1:', 'nop 2', 'mod', 'brz @_gen2', 'nop 100', 'jmpr @_gen3', '_gen2:', 'nop 200', '_gen3:', 'ret'}}
 
 -- Infinite loop
-test_compile{[[: forever begin 0 again ;]], {'.org 0x100', 'hlt', '_gen_1:', '_gen_2:', 'nop 0', 'jmpr @_gen_2', '_gen_3:', 'ret'}}
+test_compile{[[: forever begin 0 again ;]], {'.org 0x100', 'hlt', '_gen1:', '_gen2:', 'nop 0', 'jmpr @_gen2', '_gen3:', 'ret'}}
 
 -- Loop with break
-test_compile{[[: 10times 10 begin 1 - dup if break then again ;]], {'.org 0x100', 'hlt', '_gen_1:', 'nop 10', '_gen_2:', 'nop 1', 'sub', 'dup', 'brz @_gen_4', 'jmpr @_gen_3', '_gen_4:', 'jmpr @_gen_2', '_gen_3:', 'ret'}}
+test_compile{[[: 10times 10 begin 1 - dup if break then again ;]], {'.org 0x100', 'hlt', '_gen1:', 'nop 10', '_gen2:', 'nop 1', 'sub', 'dup', 'brz @_gen4', 'jmpr @_gen3', '_gen4:', 'jmpr @_gen2', '_gen3:', 'ret'}}
 
 -- While loop
 test_compile{[[variable x : 10times 10 x ! begin x @ while x @ 1 - x ! again ;]],
-    {'.org 0x100', 'hlt', '_gen_2:', 'nop 10', 'nop _gen_1', 'store24', '_gen_3:', 'nop _gen_1', 'load24', 'brz @_gen_4', 'nop _gen_1', 'load24', 'nop 1', 'sub', 'nop _gen_1', 'store24', 'jmpr @_gen_3', '_gen_4:', 'ret', '_gen_1: .db 0'}}
+    {'.org 0x100', 'hlt', '_gen2:', 'nop 10', 'nop _gen1', 'store24', '_gen3:', 'nop _gen1', 'load24', 'brz @_gen4', 'nop _gen1', 'load24', 'nop 1', 'sub', 'nop _gen1', 'store24', 'jmpr @_gen3', '_gen4:', 'ret', '_gen1: .db 0'}}
 
 -- Local variables
-test_compile{[[: blah local x 10 x :! x :@ ;]], {'.org 0x100', 'hlt', '_gen_1:', 'frame 1', 'nop 10', 'nop 0', 'setlocal', 'nop 0', 'local', 'ret'}}
+test_compile{[[: blah local x 10 x :! x :@ ;]], {'.org 0x100', 'hlt', '_gen1:', 'frame 1', 'nop 10', 'nop 0', 'setlocal', 'nop 0', 'local', 'ret'}}
 
 -- For loops
-test_compile{[[: 100sum local sum 100 1 for n sum :@ n :@ + sum :! loop sum :@ ;]], {'.org 0x100', 'hlt', '_gen_1:', 'frame 1', 'nop 100', 'nop 1', 'frame 3', 'setlocal 1', 'setlocal 2', '_gen_2:', 'local 1', 'local 2', 'add 1', 'sub', 'brz @_gen_3', 'nop 0', 'local', 'nop 1', 'local', 'add', 'nop 0', 'setlocal', 'local 1', 'add 1', 'setlocal 1', 'jmpr @_gen_2', '_gen_3:', 'frame 1', 'nop 0', 'local', 'ret'}}
+test_compile{[[: 100sum local sum 100 1 for n sum :@ n :@ + sum :! loop sum :@ ;]], {'.org 0x100', 'hlt', '_gen1:', 'frame 1', 'nop 100', 'nop 1', 'frame 3', 'setlocal 1', 'setlocal 2', '_gen2:', 'local 1', 'local 2', 'add 1', 'sub', 'brz @_gen3', 'nop 0', 'local', 'nop 1', 'local', 'add', 'nop 0', 'setlocal', 'local 1', 'add 1', 'setlocal 1', 'jmpr @_gen2', '_gen3:', 'frame 1', 'nop 0', 'local', 'ret'}}
 
 -- ## Full-stack tests
 
@@ -231,8 +231,8 @@ function test_run(opts)
     forge.compile(iterator(src), emitter)
     local cpu = CPU.new()
     local console, callback = serial_out()
-    cpu:output_device(200, 202, callback)
-    cpu:load(array_iterator(asm))
+    cpu:install_device(200, 202, { poke = callback })
+    cpu:load_asm(array_iterator(asm))
     cpu:run()
 
     if not eq(expected_output, console) then
