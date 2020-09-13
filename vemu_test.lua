@@ -91,7 +91,7 @@ assert(cpu:pop_data() == 4)
 
 -- Running simple ASM
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     push 2
     add 2
@@ -106,7 +106,7 @@ assert(cpu:decode(21) == 'swap')
 
 -- Fetching instructions
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     push 2
 ]]))
@@ -124,7 +124,7 @@ assert(cpu.next_pc == 35)
 
 -- Stack frame structure
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     call blah
 blah: push 3
@@ -139,7 +139,7 @@ assert(cpu.stack[cpu.call-2] == 0)
 
 -- Returning from calls
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     push 3
     call blah
@@ -153,7 +153,7 @@ assert(cpu.call == 2047)
 
 -- Setting frame size
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     call blah
 blah: frame 3
@@ -167,7 +167,7 @@ assert(cpu.stack[cpu.call-2] == 3)
 
 -- Setting frame locals
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     call blah
 blah: frame 3
@@ -187,7 +187,7 @@ assert(cpu.stack[cpu.call-4] == 7)
 
 -- Getting frame locals
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     call blah
 blah: frame 3
@@ -204,7 +204,7 @@ assert(cpu:pop_data() == 14)
 
 -- Top frame locals
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     frame 2
     push 5
@@ -219,7 +219,7 @@ assert(cpu:pop_data() == 12)
 
 -- Calls after locals
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     frame 2
     push 5
@@ -246,7 +246,7 @@ assert(cpu.stack[cpu.call-4] == 3)
 
 -- Out-of-range frame locals
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     frame 3
     local 7
@@ -257,7 +257,7 @@ assert(cpu:pop_data() == 0)
 
 -- Comparing values
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     push 10
     gt 20
@@ -277,7 +277,7 @@ assert(cpu:pop_data() == 0) -- 10 > 20 ?
 
 -- Comparing values arithmetically
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     push 10
     mul 0xffffff
@@ -303,7 +303,7 @@ assert(cpu:pop_data() == 0) -- -10 > 20 ?
 
 -- Logical not
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     not 10
     not 0
@@ -316,7 +316,7 @@ assert(cpu:pop_data() == 0)
 -- Basic memory mapped output
 local arr = {}
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     push 12
     store 200
@@ -324,7 +324,7 @@ cpu:load(iterator([[
     store 200
     hlt
 ]]))
-cpu:output_device(200, 200, function(_, val) table.insert(arr, val) end)
+cpu:install_device(200, 200, { poke = function(_, val) table.insert(arr, val) end })
 cpu:run()
 assert(#arr == 2)
 assert(arr[1] == 12)
@@ -333,7 +333,7 @@ assert(arr[2] == 15)
 -- Range memory mapped output
 local arr = {1, 2, 3, 4, 5}
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     push 0
     store 201
@@ -341,7 +341,7 @@ cpu:load(iterator([[
     store16 203
     hlt
 ]]))
-cpu:output_device(200, 204, function(addr, val) arr[addr+1] = val end)
+cpu:install_device(200, 204, { poke = function(addr, val) arr[addr+1] = val end })
 cpu:run()
 assert(arr[1] == 1)
 assert(arr[2] == 0)
@@ -352,11 +352,11 @@ assert(arr[5] == 0)
 -- Range memory mapped input
 local arr = {1, 2, 3, 4, 5}
 local cpu = CPU.new()
-cpu:load(iterator([[
+cpu:load_asm(iterator([[
     .org 256
     load24 201
     hlt
 ]]))
-cpu:input_device(200, 204, function(addr) return arr[addr+1] end)
+cpu:install_device(200, 204, { peek = function(addr) return arr[addr+1] end })
 cpu:run()
 assert(cpu:pop_data() == (4 << 16) | (3 << 8) | 2)

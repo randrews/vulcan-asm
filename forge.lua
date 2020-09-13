@@ -89,6 +89,7 @@ function compile(lines, final_emit)
         current_segment = 'global', -- Which segment we're emitting code to
         name_type = nil, -- For `read_name`
         name_handler = nil,
+        string_words = {}, -- For string mode
 
         -- A stack of currently-open control structures. Each contains, at the least, a `type`
         -- and a `line` field
@@ -148,11 +149,13 @@ function compile(lines, final_emit)
         state.line_num = line_num
 
         -- Comment stuff: detect comment opening tokens, and change the mode
-        if token == '\\' then
-            state.comment_start_line = state.line_num
-            state.push_mode('line_comment')
-        elseif token == '(' then
-            state.push_mode('comment')
+        if state.mode() ~= 'string' then
+            if token == '\\' then
+                state.comment_start_line = state.line_num
+                state.push_mode('line_comment')
+            elseif token == '(' then
+                state.push_mode('comment')
+            end
         end
 
         -- Also detect the end of a line-comment
@@ -227,6 +230,8 @@ function modes.default(token, state)
         )
     elseif state.local_dictionary[token] then
         state.emit('\tnop\t' .. state.local_dictionary[token])
+    elseif token == '"' then
+        state.push_mode('string')
     else
         local def = state.dictionary[token]
         assert(def,
@@ -247,6 +252,20 @@ end
 -- We're already handling these ending before the mode check; this
 -- just tells us to ignore all tokens inside a comment
 function modes.line_comment() end
+
+-- ### Strings
+function modes.string(token, state)
+    if token == '"' then
+        local str = table.concat(state.string_words, ' '):gsub('\\', '\\\\'):gsub('"', '\\"') .. '\\0'
+        local label = state.gensym()
+        state.emit(string.format('%s:\t.db\t"%s"', label, str), 'variables')
+        state.emit('\tnop\t' .. label)
+        state.string_words = {}
+        state.pop_mode()
+    else
+        table.insert(state.string_words, token)
+    end
+end
 
 -- ### Names
 -- Names all basically work the same: when we see a token that we know is

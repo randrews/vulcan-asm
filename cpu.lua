@@ -1,13 +1,13 @@
 local VASM = require('vasm')
+local Forge = require('forge')
 local opcodes = require('opcodes')
 
 CPU = {}
 
-function CPU.new(display)
+function CPU.new()
     local instance = setmetatable({}, { __index = CPU })
 
-    instance.input_devices = {}
-    instance.output_devices = {}
+    instance.devices = {}
 
     instance.stack = {}
     for n = 0, 2048 - 1 do
@@ -22,12 +22,6 @@ function CPU.new(display)
     instance.int_enabled = false
     instance.int_vector = 0
 
-    if display then
-        instance.display = display
-        display.cpu = instance
-        instance.display:refresh()
-    end
-
     return instance:reset()
 end
 
@@ -39,15 +33,33 @@ function CPU:reset()
     self.next_pc = nil -- Set after each fetch, opcodes can change it
     self.stack[2048 - 1] = 2048 - 1 -- First stack frame points at itself
 
+    for _, device in ipairs(self.devices) do
+        if device.reset then device.reset() end
+    end
+
     return self
 end
 
-function CPU:load(iterator)
+function CPU:load_asm(iterator)
     local bytes, start = VASM.assemble(iterator)
 
     for offset, byte in pairs(bytes) do
         self:poke(start + offset, byte)
     end
+end
+
+function CPU:load_forge(iterator)
+    local asm = {}
+    local function emit(str) table.insert(asm, str) end
+
+    Forge.compile(iterator, emit)
+
+    local i, e = nil, nil
+    local asm_iterator = function()
+        i, e = next(asm, i)
+        return e
+    end
+    self:load_asm(asm_iterator)
 end
 
 function CPU:push_data(word)
@@ -92,20 +104,27 @@ function CPU:pop_call()
     return ret
 end
 
-function CPU:input_device(start_addr, end_addr, callback)
-    table.insert(self.input_devices, { address={start_addr, end_addr}, callback=callback })
-end
-
-function CPU:output_device(start_addr, end_addr, callback)
-    table.insert(self.output_devices, { address={start_addr, end_addr}, callback=callback })
+-- Devices support different callbacks:
+-- - peek is called with an offset, if a byte within the address range is read
+-- - poke is called with an offset and a new (byte) value, if a byte is written
+-- - tick is called every time the CPU runs an instruction
+-- - reset is called when the CPU resets
+function CPU:install_device(start_addr, end_addr, callbacks)
+    table.insert(self.devices, {
+                     address = {start_addr, end_addr},
+                     peek = callbacks.peek,
+                     poke = callbacks.poke,
+                     tick = callbacks.tick,
+                     reset = callbacks.reset
+    })
 end
 
 function CPU:poke(addr, value)
     addr = math.abs(math.floor(addr)) & 0x01ffff
     value = math.floor(value) & 0xff
-    for _, device in ipairs(self.output_devices) do
-        if addr >= device.address[1] and addr <= device.address[2] then
-            device.callback(addr - device.address[1], value)
+    for _, device in ipairs(self.devices) do
+        if device.poke and addr >= device.address[1] and addr <= device.address[2] then
+            device.poke(addr - device.address[1], value)
             return
         end
     end
@@ -114,17 +133,20 @@ end
 
 function CPU:peek(addr)
     addr = math.abs(math.floor(addr)) & 0x01ffff
-    for _, device in ipairs(self.input_devices) do
-        if addr >= device.address[1] and addr <= device.address[2] then
-            return device.callback(addr - device.address[1])
+    for _, device in ipairs(self.devices) do
+        if device.peek and addr >= device.address[1] and addr <= device.address[2] then
+            return device.peek(addr - device.address[1])
         end
     end
     return self.mem[addr]
 end
 
 function CPU:print_stack()
-    for i = 0, self.data do
-        print(string.format('%d:\t0x%x', self.data-i, self.stack[i]))
+    if self.data == 2048 - 1 then print('<stack empty>')
+    else
+        for i = 0, self.data do
+            print(string.format('%d:\t0x%x', self.data-i, self.stack[i]))
+        end
     end
 end
 
@@ -164,19 +186,24 @@ function CPU:execute(mnemonic)
     self.pc = self.next_pc
 end
 
+-- Run instructions and tick devices until `hlt`
 function CPU:run()
     while not self.halted do
         self:execute(self:fetch())
+        self:tick_devices()
+    end
+end
 
-        if self.display then
-            self.display:loop()
-        end
+function CPU:tick_devices()
+    for _,device in ipairs(self.devices) do
+        if device.tick then device.tick() end
     end
 end
 
 function CPU:interrupt(...)
     if self.int_enabled then
         self.int_enabled = false
+        self.halted = false
         self:push_call(self.pc)
         for _, val in ipairs{...} do self:push_data(val) end
         self.pc = self.int_vector
@@ -363,11 +390,6 @@ function CPU:store24()
     self:poke(addr, val & 0xff)
     self:poke(addr + 1, (val >> 8) & 0xff)
     self:poke(addr + 2, (val >> 16) & 0xff)
-    if self.display then
-        self.display:refresh_address(addr)
-        self.display:refresh_address(addr+1)
-        self.display:refresh_address(addr+2)
-    end
 end
 
 function CPU:store16()
@@ -375,16 +397,11 @@ function CPU:store16()
     local val = self:pop_data()
     self:poke(addr, val & 0xff)
     self:poke(addr + 1, (val >> 8) & 0xff)
-    if self.display then
-        self.display:refresh_address(addr)
-        self.display:refresh_address(addr+1)
-    end
 end
 
 function CPU:store()
     local addr = self:pop_data()
     self:poke(addr, self:pop_data() & 0xff)
-    if self.display then self.display:refresh_address(addr) end
 end
 
 -- Interrupts
