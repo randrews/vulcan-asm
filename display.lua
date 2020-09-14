@@ -4,7 +4,7 @@ function Display.new(double)
     local instance = setmetatable({}, { __index = Display })
     local err = nil
 
-    instance.start_addr = 0x01ac00
+    instance.start_addr = 0x01a000
     instance.active = true
 
     if not Display.initialized then
@@ -39,12 +39,12 @@ function Display.new(double)
 end
 
 function Display:install(cpu)
-    -- Two buffers of 80x60x2 text screens: 0x01ac00 and 0x01d180
-    -- 2048 bytes of font ram: 0x01f700 (future)
-    -- 16 bytes of foreground palette: 0x01ff00 (future)
-    -- 16 bytes of background palette: 0x01ff10 (future)
+    -- Two buffers of 40x30x2 text screens
+    -- 2048 bytes of font ram (future)
+    -- 16 bytes of foreground palette (future)
+    -- 16 bytes of background palette (future)
 
-    local end_addr = self.start_addr + 80*60*2*2 
+    local end_addr = self.start_addr + 40*30*2
     cpu:install_device(self.start_addr, end_addr,
                        { poke = function(addr, val) self:refresh_address(addr, val) end,
                          tick = function() self:loop() end,
@@ -62,7 +62,7 @@ end
 
 function Display:char(c, x, y, fg, bg)
     local src = { w=8, h=8, x=(c%64)*8, y=math.floor(c/64)*8 }
-    local dest = { w=8, h=8, x=x*8, y=y*8 }
+    local dest = { w=16, h=16, x=x*16, y=y*16 }
     self.font:setColorMod(Display.to_rgb(fg))
     self.renderer:setDrawColor(Display.to_rgb(bg))
     self.renderer:fillRect(dest)
@@ -72,16 +72,20 @@ end
 
 function Display:loop()
     if self.cpu.halted then
-        SDL.waitEvent()
+        local event = SDL.waitEvent()
+        self:handle_event(event)
     end
 
     for event in SDL.pollEvent() do
-        if event.type == SDL.event.Quit then
-            self.active = false
-            self.cpu:interrupt(0)
-        elseif event.type == SDL.event.KeyDown or event.type == SDL.event.KeyUp then
-            self.cpu:interrupt(event.keysym.sym, event.state, 1)
-        end
+        self:handle_event(event)
+    end
+end
+
+function Display:handle_event(event)
+    if event.type == SDL.event.Quit then
+        self.active = false
+    elseif event.type == SDL.event.KeyDown or event.type == SDL.event.KeyUp then
+        self.cpu:interrupt(event.keysym.sym, event.state)
     end
 end
 
@@ -93,10 +97,10 @@ end
 function Display:refresh()
     self.active = true
 
-    for y=0, 59 do
-        for x=0, 79 do
-            local char = self.cpu:peek(self.start_addr + x + 80 * y)
-            local color = self.cpu:peek(self.start_addr + x + 80 * y + 4800)
+    for y=0, 29 do
+        for x=0, 39 do
+            local char = self.cpu:peek(self.start_addr + x + 40 * y)
+            local color = self.cpu:peek(self.start_addr + x + 40 * y + 1200)
             local fg_color = self:palette(1 + (color & 0x0f))
             local bg_color = self:palette(1 + (color >> 4))
             self:char(char, x, y, fg_color, bg_color)
@@ -106,12 +110,12 @@ end
 
 function Display:refresh_address(addr, val)
     self.cpu.mem[self.start_addr + addr] = val
-    local offset = addr % 4800
+    local offset = addr % 1200
     local char = self.cpu:peek(self.start_addr + offset)
-    local color = self.cpu:peek(self.start_addr + offset + 4800)
+    local color = self.cpu:peek(self.start_addr + offset + 1200)
     local fg_color = self:palette(1 + (color & 0x0f))
     local bg_color = self:palette(1 + (color >> 4))
-    self:char(char, offset % 80, math.floor(offset / 80), fg_color, bg_color)
+    self:char(char, offset % 40, math.floor(offset / 40), fg_color, bg_color)
 end
 
 return Display

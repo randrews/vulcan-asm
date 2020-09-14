@@ -176,7 +176,9 @@ function CPU:fetch()
         self:push_data(arg)
     end
 
-    self.next_pc = self.pc + arg_length + 1
+    if mnemonic ~= 'hlt' then
+        self.next_pc = self.pc + arg_length + 1
+    end
 
     return mnemonic
 end

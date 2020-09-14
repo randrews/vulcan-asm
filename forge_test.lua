@@ -157,6 +157,15 @@ test_compile{[[
 2 2 \ I am a comment
 +]], {'.org 0x100', 'nop 2', 'nop 2', 'add', 'hlt'}}
 
+-- Double line comments
+test_compile{[[
+2 2 \ I am a comment \ also a comment
++]], {'.org 0x100', 'nop 2', 'nop 2', 'add', 'hlt'}}
+
+-- Consecutive line comments
+test_compile{[[\ I am a comment
+\ also a comment]], {'.org 0x100', 'hlt'}}
+
 -- Defining new words
 test_compile{[[: sq ( n == n^2 ) dup * ; 2 sq 1024 !]], {'.org 0x100', 'nop 2', 'call _gen1', 'nop 1024', 'store24', 'hlt', '_gen1:', 'dup', 'mul', 'ret' }}
 
@@ -197,6 +206,11 @@ test_compile{[[: 100sum local sum 100 1 for n sum :@ n :@ + sum :! loop sum :@ ;
 
 -- Strings
 test_compile{[[variable hi " hello, world! " hi !]], {'.org 0x100', 'nop _gen2', 'nop _gen1', 'store24', 'hlt', '_gen1: .db 0', '_gen2: .db "hello, world!\\0"'}}
+
+-- Interrupts
+test_compile{[[
+: key inton ;
+setiv key intoff]], {'.org 0x100', 'setiv _gen1', 'intoff', 'hlt', '_gen1:', 'inton', 'ret'}}
 
 -- ## Full-stack tests
 

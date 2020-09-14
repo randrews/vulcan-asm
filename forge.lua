@@ -105,7 +105,8 @@ function compile(lines, final_emit)
             drop = { asm = 'pop' }, dup = { asm = 'dup' }, ['2dup'] = { asm = '2dup' }, swap = { asm = 'swap' },
             ['and'] = { asm = 'and' }, ['or'] = { asm = 'or' }, xor = { asm = 'xor' },
             ['>'] = { asm = 'agt' }, ['<'] = { asm = 'alt' },
-            ['@'] = { asm = 'load24' }, ['!'] = { asm = 'store24' }, ['!b'] = { asm = 'store' }
+            ['@'] = { asm = 'load24' }, ['!'] = { asm = 'store24' }, ['!b'] = { asm = 'store' },
+            inton = { asm = 'inton' }, intoff = { asm = 'intoff' }
         }
     }
 
@@ -148,19 +149,19 @@ function compile(lines, final_emit)
     for token, line_num in read(lines) do
         state.line_num = line_num
 
+        -- Also detect the end of a line-comment
+        if state.mode() == 'line_comment' and state.line_num ~= state.comment_start_line then
+            state.pop_mode()
+        end
+
         -- Comment stuff: detect comment opening tokens, and change the mode
         if state.mode() ~= 'string' then
-            if token == '\\' then
+            if token == '\\' and state.mode() ~= 'line_comment' then
                 state.comment_start_line = state.line_num
                 state.push_mode('line_comment')
             elseif token == '(' then
                 state.push_mode('comment')
             end
-        end
-
-        -- Also detect the end of a line-comment
-        if state.mode() == 'line_comment' and state.line_num ~= state.comment_start_line then
-            state.pop_mode()
         end
 
         -- Mode stuff: everything else we do depends on our mode. We'll check
@@ -226,6 +227,14 @@ function modes.default(token, state)
                             state.dictionary[name] = { variable = state.gensym() }
                             -- Emit a label and .db for the variable
                             state.emit(state.dictionary[name].variable .. ':\t.db 0', 'variables')
+                        end
+        )
+    elseif token == 'setiv' then
+        state.read_name('word',
+                        function(name, state)
+                            assert(state.dictionary[name] and state.dictionary[name].label,
+                                   'Undefined word \"' .. name .. '\" set as interrupt vector on line ' .. state.line_num)
+                            state.emit('\tsetiv\t' .. state.dictionary[name].label)
                         end
         )
     elseif state.local_dictionary[token] then
