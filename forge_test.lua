@@ -199,10 +199,10 @@ test_compile{[[variable x : 10times 10 x ! begin x @ while x @ 1 - x ! again ;]]
     {'.org 0x100', 'hlt', '_gen2:', 'nop 10', 'nop _gen1', 'store24', '_gen3:', 'nop _gen1', 'load24', 'brz @_gen4', 'nop _gen1', 'load24', 'nop 1', 'sub', 'nop _gen1', 'store24', 'jmpr @_gen3', '_gen4:', 'ret', '_gen1: .db 0'}}
 
 -- Local variables
-test_compile{[[: blah local x 10 x :! x :@ ;]], {'.org 0x100', 'hlt', '_gen1:', 'frame 1', 'nop 10', 'nop 0', 'setlocal', 'nop 0', 'local', 'ret'}}
+test_compile{[[: blah local x 10 x! x ;]], {'.org 0x100', 'hlt', '_gen1:', 'frame 1', 'nop 10', 'setlocal 0', 'local 0', 'ret'}}
 
 -- For loops
-test_compile{[[: 100sum local sum 100 1 for n sum :@ n :@ + sum :! loop sum :@ ;]], {'.org 0x100', 'hlt', '_gen1:', 'frame 1', 'nop 100', 'nop 1', 'frame 3', 'setlocal 1', 'setlocal 2', '_gen2:', 'local 1', 'local 2', 'add 1', 'sub', 'brz @_gen3', 'nop 0', 'local', 'nop 1', 'local', 'add', 'nop 0', 'setlocal', 'local 1', 'add 1', 'setlocal 1', 'jmpr @_gen2', '_gen3:', 'frame 1', 'nop 0', 'local', 'ret'}}
+test_compile{[[: 100sum local sum 100 1 for n sum n + sum! loop sum ;]], {'.org 0x100', 'hlt', '_gen1:', 'frame 1', 'nop 100', 'nop 1', 'frame 3', 'setlocal 1', 'setlocal 2', '_gen2:', 'local 1', 'local 2', 'add 1', 'sub', 'brz @_gen3', 'local 0', 'local 1', 'add', 'setlocal 0', 'local 1', 'add 1', 'setlocal 1', 'jmpr @_gen2', '_gen3:', 'frame 1', 'local 0', 'ret'}}
 
 -- Strings
 test_compile{[[variable hi " hello, world! " hi !]], {'.org 0x100', 'nop _gen2', 'nop _gen1', 'store24', 'hlt', '_gen1: .db 0', '_gen2: .db "hello, world!\\0"'}}
@@ -270,26 +270,26 @@ test_run{[[2 200 !b 3 200 !b]], {2, 3}}
 test_run{[[: write 200 !b ; 20 10 write write]], {10, 20}}
 
 -- Loops
-test_run{[[: write 200 !b ; : 10loop 10 1 for n n :@ write loop ; 10loop]], {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
+test_run{[[: write 200 !b ; : 10loop 10 1 for n n write loop ; 10loop]], {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
 
 test_run{[[
    : 100sum
        local sum
        100 1 for n
-           sum :@ n :@ + sum :!
+           sum n + sum!
        loop
-       sum :@ ;
+       sum ;
    100sum 200 !]], {186, 19, 0}} -- (19 << 8) + 186 == 5050
 
 test_run{[[
     : test_while
         local c
-        10 c :!
+        10 c!
         begin
-            c :@ dup
+            c dup
         while
             200 !b
-            c :@ 1 - c :!
+            c 1 - c!
         again ;
     test_while]],
     {10, 9, 8, 7, 6, 5, 4, 3, 2, 1}}
@@ -297,12 +297,12 @@ test_run{[[
 test_run{[[
     : print ( str -- )
         local c
-        c :!
+        c!
         begin
-            c :@ @ 0xff and \ grab a word, extract the low byte
+            c @ 0xff and \ grab a word, extract the low byte
         dup while \ until we hit a zero
             200 !b \ write this byte
-            c :@ 1 + c :! \ increment
+            c 1 + c! \ increment
         again ;
     " hello! " print]],
     {('hello!'):byte(1, 6)}}

@@ -238,7 +238,9 @@ function modes.default(token, state)
                         end
         )
     elseif state.local_dictionary[token] then
-        state.emit('\tnop\t' .. state.local_dictionary[token])
+        state.emit('\tlocal\t' .. state.local_dictionary[token])
+    elseif token:sub(-1) == '!' and state.local_dictionary[token:sub(1, -2)] then
+        state.emit('\tsetlocal\t' .. state.local_dictionary[token:sub(1, -2)])
     elseif token == '"' then
         state.push_mode('string')
     else
@@ -444,16 +446,6 @@ modes.word_definition['local'] = function(state)
                         state.emit('\tframe\t' .. state.current_frame_size)
                     end
     )
-end
-
--- since these are only usable inside word definitions, they're handled here instead
---  of in the dictionary, even though all they do is emit one instruction
-modes.word_definition[':@'] = function(state)
-    state.emit('\tlocal')
-end
-
-modes.word_definition[':!'] = function(state)
-    state.emit('\tsetlocal')
 end
 
 return { read = read, compile = compile }

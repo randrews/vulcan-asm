@@ -85,6 +85,7 @@ function Display:handle_event(event)
     if event.type == SDL.event.Quit then
         self.active = false
     elseif event.type == SDL.event.KeyDown or event.type == SDL.event.KeyUp then
+        print(event.keysym.sym, event.state)
         self.cpu:interrupt(event.keysym.sym, event.state)
     end
 end

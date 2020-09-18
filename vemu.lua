@@ -1,6 +1,7 @@
 SDL = require('SDL')
 SDL.image = require('SDL.image')
 local Display = require('display')
+local logger = require('logger')
 local CPU = require('cpu')
 
 local random_seed = os.time()
@@ -13,6 +14,8 @@ if argv[1] then
 
     local display = Display.new(false)
     display:install(cpu)
+
+    logger(cpu, 200, print)
 
     if argv[1]:match('%.asm$') then
         cpu:load_asm(iterator:lines())
