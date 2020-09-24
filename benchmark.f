@@ -44,12 +44,21 @@ variable cursor
 10000 count
 2 log
 
-1 log
+( 1 log
 20000 count
 2 log
 
 1 log
 40000 count
-2 log
+2 log )
 
 endl " Done " puts
+
+endl
+
+: keypress 3 log if putc else drop then inton 4 log ;
+: re-enable inton ;
+: fast drop 200 !b inton ;
+setiv keypress
+\ setiv fast
+inton

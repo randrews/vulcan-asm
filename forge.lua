@@ -176,6 +176,10 @@ function compile(lines, final_emit)
         end        
     end
 
+    if state.mode() ~= 'default' then
+        error('End of input while still in mode ' .. state.mode() .. ' at line ' .. state.line_num)
+    end
+
     -- Helper for emitting an entire segment to the final output at once
     local function emit_segment(segment)
         for _, line in ipairs(segment) do final_emit(line) end
