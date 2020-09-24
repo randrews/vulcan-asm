@@ -1,5 +1,3 @@
-local VASM = require('vasm')
-local Forge = require('forge')
 local opcodes = require('opcodes')
 
 CPU = {}
@@ -38,28 +36,6 @@ function CPU:reset()
     end
 
     return self
-end
-
-function CPU:load_asm(iterator)
-    local bytes, start = VASM.assemble(iterator)
-
-    for offset, byte in pairs(bytes) do
-        self:poke(start + offset, byte)
-    end
-end
-
-function CPU:load_forge(iterator)
-    local asm = {}
-    local function emit(str) table.insert(asm, str) end
-
-    Forge.compile(iterator, emit)
-
-    local i, e = nil, nil
-    local asm_iterator = function()
-        i, e = next(asm, i)
-        return e
-    end
-    self:load_asm(asm_iterator)
 end
 
 function CPU:push_data(word)

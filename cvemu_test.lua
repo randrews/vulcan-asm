@@ -1,5 +1,5 @@
-dofile('vemu.lua')
-local Loader = require('loader')
+CPU = require('cvemu')
+Loader = require('loader')
 
 -- Fake an iterator from a string
 function iterator(str)
@@ -13,72 +13,23 @@ function iterator(str)
     end
 end
 
--- Initial state
-local cpu = CPU.new()
-assert(cpu.stack[0] == 0)
-assert(cpu.stack[2047] == 2047)
-assert(cpu.stack[2048] == nil)
-assert(cpu.mem[0] ~= nil)
-assert(cpu.mem[131071] ~= nil)
-assert(cpu.mem[131072] == nil)
-assert(cpu.call == 2047)
-assert(cpu.data == 2047)
-
--- State after pushing data
-local cpu = CPU.new()
-cpu:push_data(37)
-cpu:push_data(45)
-assert(cpu.stack[0] == 37)
-assert(cpu.stack[1] == 45)
-assert(cpu.call == 2047)
-assert(cpu.data == 1)
-
--- State after pushing return addresses
-local cpu = CPU.new()
-cpu:push_call(37)
-cpu:push_call(45)
-assert(cpu.stack[2047] == 2047) -- First frame prev
-assert(cpu.stack[2046] == 0) -- First frame ret
-assert(cpu.stack[2045] == 0) -- First frame locals
-
-assert(cpu.stack[2044] == 2047) -- Second frame prev
-assert(cpu.stack[2043] == 37) -- Second frame ret
-assert(cpu.stack[2042] == 0) -- Second frame locals
-
-assert(cpu.stack[2041] == 2044) -- Third frame prev
-assert(cpu.stack[2040] == 45) -- Third frame ret
-assert(cpu.stack[2039] == 0) -- Third frame locals
-assert(cpu.call == 2041) -- Pointing at start of second frame
-assert(cpu.data == 2047)
-
 -- Pushing and then popping data
 local cpu = CPU.new()
 cpu:push_data(47)
 cpu:push_data(32)
 assert(cpu:pop_data() == 32)
 assert(cpu:pop_data() == 47)
-assert(cpu.data == 2047)
 
 -- Reading and writing to memory
 local cpu = CPU.new()
 cpu:poke(37, 45)
-assert(cpu.mem[37] == 45)
 assert(cpu:peek(37) == 45)
 
 -- Masking addresses to only the main memory range
 local cpu = CPU.new()
 cpu:poke(0xffffff, 47)
-assert(cpu.mem[0x01ffff] == 47)
 assert(cpu:peek(0xffffff) == 47)
 assert(cpu:peek(0x01ffff) == 47)
-
--- Resetting the CPU
-local cpu = CPU.new()
-cpu.pc = 1000
-cpu.halted = true
-cpu:reset()
-assert(cpu.pc == 256)
-assert(not cpu.halted)
 
 -- Running a simple binary
 local cpu = CPU.new()
@@ -101,42 +52,51 @@ Loader.asm(cpu, iterator([[
 cpu:run()
 assert(cpu:pop_data() == 4)
 
--- Decoding instructions
-local cpu = CPU.new()
-assert(cpu:decode(21) == 'swap')
-
--- Fetching instructions
+-- Comparisons
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 256
     push 2
+    gt 1
+    push 2
+    lt 5
+    push 0xfffffe
+    agt 3
+    hlt
 ]]))
-assert(cpu:fetch() == 'push')
-assert(cpu.next_pc == 258)
-assert(cpu:pop_data() == 2)
+cpu:run()
+assert(cpu:pop_data() == 0)
+assert(cpu:pop_data() == 1)
+assert(cpu:pop_data() == 1)
 
--- A call instruction
+-- Shifts
 local cpu = CPU.new()
-cpu.next_pc = 10
-cpu:push_data(35)
-cpu:_call()
-assert(cpu:pop_call() == 10)
-assert(cpu.next_pc == 35)
+Loader.asm(cpu, iterator([[
+    .org 256
+    push 1
+    lshift 3
+    push 8
+    rshift 2
+    push 0x810000
+    arshift 4
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 0xf81000)
+assert(cpu:pop_data() == 2)
+assert(cpu:pop_data() == 8)
 
 -- Stack frame structure
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
-    call blah
+    .org 100
 blah: push 3
     hlt
+    .org 256
+    call blah
 ]]))
 cpu:run()
 assert(cpu:pop_data() == 3)
-assert(cpu.call == 2044)
-assert(cpu.stack[cpu.call] == 2047)
-assert(cpu.stack[cpu.call-1] == 260)
-assert(cpu.stack[cpu.call-2] == 0)
 
 -- Returning from calls
 local cpu = CPU.new()
@@ -150,41 +110,74 @@ blah: mul 2
 ]]))
 cpu:run()
 assert(cpu:pop_data() == 6)
-assert(cpu.call == 2047)
 
--- Setting frame size
+-- Branching
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 256
-    call blah
-blah: frame 3
+    push 3
+    brz @two
+    push 20
+    hlt
+two: push 10
     hlt
 ]]))
 cpu:run()
-assert(cpu.call == 2044)
-assert(cpu.stack[cpu.call] == 2047)
-assert(cpu.stack[cpu.call-1] == 260)
-assert(cpu.stack[cpu.call-2] == 3)
+assert(cpu:pop_data() == 20)
 
--- Setting frame locals
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 256
-    call blah
-blah: frame 3
-    push 7
-    setlocal 1
-    push 2
-    setlocal 0
+    push 0
+    brz @two
+    push 20
+    hlt
+two: push 10
     hlt
 ]]))
 cpu:run()
-assert(cpu.call == 2044)
-assert(cpu.stack[cpu.call] == 2047)
-assert(cpu.stack[cpu.call-1] == 260)
-assert(cpu.stack[cpu.call-2] == 3)
-assert(cpu.stack[cpu.call-3] == 2)
-assert(cpu.stack[cpu.call-4] == 7)
+assert(cpu:pop_data() == 10)
+
+-- Loads
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 256
+    load 1234
+    load16 1234
+    load24 1234
+    hlt
+]]))
+cpu:poke(1234, 1)
+cpu:poke(1235, 2)
+cpu:poke(1236, 3)
+cpu:run()
+assert(cpu:pop_data() == 0x030201)
+assert(cpu:pop_data() == 0x000201)
+assert(cpu:pop_data() == 1)
+
+-- Stores
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 256
+    push 0x1234
+    store 1000
+    push 0x123456
+    store16 2000
+    push 0xaabbcc
+    store24 3000
+    hlt
+]]))
+cpu:poke(1001, 0)
+cpu:poke(2002, 0)
+cpu:run()
+assert(cpu:peek(1000) == 0x34)
+assert(cpu:peek(1001) == 0x00)
+assert(cpu:peek(2000) == 0x56)
+assert(cpu:peek(2001) == 0x34)
+assert(cpu:peek(2002) == 0x00)
+assert(cpu:peek(3000) == 0xcc)
+assert(cpu:peek(3001) == 0xbb)
+assert(cpu:peek(3002) == 0xaa)
 
 -- Getting frame locals
 local cpu = CPU.new()
@@ -217,33 +210,6 @@ Loader.asm(cpu, iterator([[
 cpu:run()
 assert(cpu:pop_data() == 5)
 assert(cpu:pop_data() == 12)
-
--- Calls after locals
-local cpu = CPU.new()
-Loader.asm(cpu, iterator([[
-    .org 256
-    frame 2
-    push 5
-    setlocal 1
-    call blah
-blah: frame 2
-    push 3
-    setlocal 1
-    hlt
-]]))
-cpu:run()
-assert(cpu.call == 2042)
-assert(cpu.stack[2047] == 2047) -- First frame
-assert(cpu.stack[2046] == 0)
-assert(cpu.stack[2045] == 2)
-assert(cpu.stack[2044] == 0)
-assert(cpu.stack[2043] == 5)
-
-assert(cpu.stack[cpu.call] == 2047) -- Second frame
-assert(cpu.stack[cpu.call-1] == 266)
-assert(cpu.stack[cpu.call-2] == 2)
-assert(cpu.stack[cpu.call-3] == 0)
-assert(cpu.stack[cpu.call-4] == 3)
 
 -- Out-of-range frame locals
 local cpu = CPU.new()
@@ -314,10 +280,25 @@ cpu:run()
 assert(cpu:pop_data() ~= 0)
 assert(cpu:pop_data() == 0)
 
+-- Benchmark
+local cpu = CPU.new()
+Loader.forge(cpu, iterator([[
+  : count ( max -- )
+  local sum
+  0 for n
+  sum n + sum!
+  loop ;
+  10000 count
+]]))
+local start = os.clock()
+cpu:run()
+print(os.clock() - start)
+
+--[==[
 -- Basic memory mapped output
 local arr = {}
 local cpu = CPU.new()
-Loader.asm(cpu, iterator([[
+cpu:load_asm(iterator([[
     .org 256
     push 12
     store 200
@@ -334,7 +315,7 @@ assert(arr[2] == 15)
 -- Range memory mapped output
 local arr = {1, 2, 3, 4, 5}
 local cpu = CPU.new()
-Loader.asm(cpu, iterator([[
+cpu:load_asm(iterator([[
     .org 256
     push 0
     store 201
@@ -353,7 +334,7 @@ assert(arr[5] == 0)
 -- Range memory mapped input
 local arr = {1, 2, 3, 4, 5}
 local cpu = CPU.new()
-Loader.asm(cpu, iterator([[
+cpu:load_asm(iterator([[
     .org 256
     load24 201
     hlt
@@ -362,16 +343,4 @@ cpu:install_device(200, 204, { peek = function(addr) return arr[addr+1] end })
 cpu:run()
 assert(cpu:pop_data() == (4 << 16) | (3 << 8) | 2)
 
--- Benchmark
-local cpu = CPU.new()
-Loader.forge(cpu, iterator([[
-  : count ( max -- )
-  local sum
-  0 for n
-  sum n + sum!
-  loop ;
-  10000 count
-]]))
-local start = os.clock()
-cpu:run()
-print(os.clock() - start)
+--]==]

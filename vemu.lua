@@ -3,6 +3,7 @@ SDL.image = require('SDL.image')
 local Display = require('display')
 local logger = require('logger')
 local CPU = require('cpu')
+local Loader = require('loader')
 
 local random_seed = os.time()
 math.randomseed(random_seed)
@@ -18,9 +19,9 @@ if argv[1] then
     logger(cpu, 200, print)
 
     if argv[1]:match('%.asm$') then
-        cpu:load_asm(iterator:lines())
+        Loader.asm(cpu, iterator:lines())
     elseif argv[1]:match('%.f$') then
-        cpu:load_forge(iterator:lines())
+        Loader.forge(cpu, iterator:lines())
     end
 
     iterator:close()
