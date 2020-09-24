@@ -38,6 +38,10 @@ function CPU:reset()
     return self
 end
 
+function CPU:flags()
+    return self.halted, self.int_enabled
+end
+
 function CPU:push_data(word)
     word = math.floor(word) & 0xffffff
     self.data = (self.data + 1) % 2048

@@ -23,6 +23,11 @@ function Display.new(double)
         props.height = props.height * 2
     end
 
+    instance.mem = {}
+    for n = 0, (40*30*2) - 1 do
+        instance.mem[n] = math.floor(math.random() * 256)
+    end
+
     instance.window = SDL.createWindow(props)
 
     instance.renderer, err = SDL.createRenderer(instance.window, -1)
@@ -71,10 +76,11 @@ function Display:char(c, x, y, fg, bg)
 end
 
 function Display:loop()
-    if self.cpu.halted then
+    local halted, int_enabled = self.cpu:flags()
+    if halted then
         local event = SDL.waitEvent()
         self:handle_event(event)
-    elseif self.cpu.int_enabled then
+    elseif int_enabled then
         local event = SDL.waitEvent(0)
         if event then self:handle_event(event) end
     end
@@ -98,8 +104,8 @@ function Display:refresh()
 
     for y=0, 29 do
         for x=0, 39 do
-            local char = self.cpu:peek(self.start_addr + x + 40 * y)
-            local color = self.cpu:peek(self.start_addr + x + 40 * y + 1200)
+            local char = self.mem[x + 40 * y]
+            local color = self.mem[x + 40 * y + 1200]
             local fg_color = self:palette(1 + (color & 0x0f))
             local bg_color = self:palette(1 + (color >> 4))
             self:char(char, x, y, fg_color, bg_color)
@@ -108,10 +114,10 @@ function Display:refresh()
 end
 
 function Display:refresh_address(addr, val)
-    self.cpu.mem[self.start_addr + addr] = val
+    self.mem[addr] = val
     local offset = addr % 1200
-    local char = self.cpu:peek(self.start_addr + offset)
-    local color = self.cpu:peek(self.start_addr + offset + 1200)
+    local char = self.mem[offset]
+    local color = self.mem[offset + 1200]
     local fg_color = self:palette(1 + (color & 0x0f))
     local bg_color = self:palette(1 + (color >> 4))
     self:char(char, offset % 40, math.floor(offset / 40), fg_color, bg_color)

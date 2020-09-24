@@ -11,8 +11,12 @@
 // The size of main memory in bytes
 #define MEM (128 * 1024)
 
+typedef struct Device { int start, end; int peek, poke, tick, reset; } Device;
+
 typedef struct Cpu {
-    // instance.devices = {}
+    Device *devices; // All the devices
+    int num_devices;
+    int num_hooks;
 
     int *stack; // initialized to zeroes
 

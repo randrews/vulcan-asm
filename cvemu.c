@@ -1,6 +1,9 @@
 #include "cvemu.h"
 #include "opcodes.h"
 
+const int MAX_DEVICES = 100;
+const int MAX_HOOKS = 256;
+
 /* Userdata boilerplate */
 int newCpu(lua_State *L);
 Cpu* checkCpu(lua_State *L, int i);
@@ -19,13 +22,18 @@ void cpu_push_call(Cpu *cpu, int addr);
 int cvemu_pop_call(lua_State *L);
 int cpu_pop_call(Cpu *cpu);
 int cvemu_poke(lua_State *L);
-void cpu_poke(Cpu *cpu, unsigned int addr, unsigned char value);
+void cpu_poke(Cpu *cpu, unsigned int addr, unsigned char value, lua_State *L);
 int cvemu_peek(lua_State *L);
-unsigned char cpu_peek(Cpu *cpu, unsigned int addr);
+unsigned char cpu_peek(Cpu *cpu, unsigned int addr, lua_State *L);
 int cvemu_print_stack(lua_State *L);
-Opcode cpu_fetch(Cpu *cpu);
+Opcode cpu_fetch(Cpu *cpu, lua_State *L);
 int cvemu_run(lua_State *L);
-void cpu_run(Cpu *cpu);
+void cpu_run(Cpu *cpu, lua_State *L);
+int cvemu_install_device(lua_State *L);
+int cvemu_flags(lua_State *L);
+int cvemu_tick_devices(lua_State *L);
+void cpu_tick_devices(Cpu *cpu, lua_State *L);
+int cvemu_interrupt(lua_State *L);
 
 /* Utils */
 int to_signed(int word);
@@ -44,7 +52,11 @@ int luaopen_cvemu(lua_State *lua){
         {"poke", cvemu_poke},
         {"peek", cvemu_peek},
         {"print_stack", cvemu_print_stack},
+        {"install_device", cvemu_install_device},
         {"run", cvemu_run},
+        {"flags", cvemu_flags},
+        {"tick_devices", cvemu_tick_devices},
+        {"interrupt", cvemu_interrupt},
         {NULL, NULL}
     };
 
@@ -68,12 +80,10 @@ int luaopen_cvemu(lua_State *lua){
 
 int newCpu(lua_State *L){
     if ( lua_gettop(L) > 0 ) { srand(luaL_checkinteger(L, 1)); }
-    Cpu *cpu = lua_newuserdatauv(L, sizeof(Cpu), 0);
+    Cpu *cpu = lua_newuserdatauv(L, sizeof(Cpu), MAX_HOOKS); // The uservalues are all functions for device hooks
     lua_pushvalue(L, -1);
     luaL_getmetatable(L, "Cpu");
     lua_setmetatable(L, -2);
-
-    // cpu.devices = {}
 
     cpu->stack = malloc(STACK * sizeof(int));
     for(int n = 0; n < STACK; n++) {
@@ -87,6 +97,10 @@ int newCpu(lua_State *L){
 
     cpu->int_enabled = 0;
     cpu->int_vector = 0;
+
+    cpu->devices = malloc(MAX_DEVICES * sizeof(Device));
+    cpu->num_devices = 0;
+    cpu->num_hooks = 0;
 
     cpu_reset(cpu);
 
@@ -123,6 +137,15 @@ int gcCpu(lua_State *L){
 int cvemu_reset(lua_State *L) {
     Cpu *cpu = checkCpu(L, 1);
     cpu_reset(cpu);
+
+    for(int n = 0; n < cpu->num_devices; n++) {
+        if (cpu->devices[n].reset) {
+            lua_getiuservalue(L, 1, cpu->devices[n].reset);
+            lua_call(L, 0, 0);
+        }
+    }
+
+    lua_pushvalue(L, 1);
     return 1;
 }
 
@@ -133,10 +156,68 @@ void cpu_reset(Cpu *cpu) {
     cpu->halted = 0; // Flag to stop execution
     cpu->next_pc = -1; // Set after each fetch, opcodes can change it
     cpu->stack[STACK - 1] = STACK - 1; // First stack frame points at itself
+}
 
-    /* for _, device in ipairs(cpu->devices) do */
-    /*     if device.reset then device.reset() end */
-    /* end */
+static void dumpstack (lua_State *L) {
+  int top=lua_gettop(L);
+  for (int i=1; i <= top; i++) {
+    printf("%d\t%s\t", i, luaL_typename(L,i));
+    switch (lua_type(L, i)) {
+      case LUA_TNUMBER:
+        printf("%g\n",lua_tonumber(L,i));
+        break;
+      case LUA_TSTRING:
+        printf("%s\n",lua_tostring(L,i));
+        break;
+      case LUA_TBOOLEAN:
+        printf("%s\n", (lua_toboolean(L, i) ? "true" : "false"));
+        break;
+      case LUA_TNIL:
+        printf("%s\n", "nil");
+        break;
+      default:
+        printf("%p\n",lua_topointer(L,i));
+        break;
+    }
+  }
+}
+
+int store_hook(Cpu *cpu, lua_State *L, const char *name) {
+    lua_pushstring(L, name);
+    lua_gettable(L, -2);
+    if (lua_isfunction(L, -1)) {
+        cpu->num_hooks++;
+        if (lua_setiuservalue(L, 1, cpu->num_hooks)) {
+            return cpu->num_hooks;
+        } else { return luaL_error(L, "Out of hooks"); }
+    } else {
+        lua_pop(L, 1);
+        return 0;
+    }
+
+}
+
+int cvemu_install_device(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    if (cpu->num_devices == MAX_DEVICES) { // Ensure there's room
+        return luaL_error(L, "Maximum number of devices installed");
+    }
+    // Store the address range
+    cpu->devices[cpu->num_devices].start = luaL_checkinteger(L, 2);
+    cpu->devices[cpu->num_devices].end = luaL_checkinteger(L, 3);
+
+    if (!lua_istable(L, 4)) { luaL_error(L, "Expected a table for the final argument to install_device"); }
+
+    // Store the hooks as uservalues
+    cpu->devices[cpu->num_devices].reset = store_hook(cpu, L, "reset");
+    cpu->devices[cpu->num_devices].peek = store_hook(cpu, L, "peek");
+    cpu->devices[cpu->num_devices].poke = store_hook(cpu, L, "poke");
+    cpu->devices[cpu->num_devices].tick = store_hook(cpu, L, "tick");
+
+    cpu->num_devices++;
+
+    lua_pushvalue(L, 1);
+    return 1;
 }
 
 int cvemu_push_data(lua_State *L) {
@@ -199,40 +280,53 @@ int cvemu_poke(lua_State *L) {
     Cpu *cpu = checkCpu(L, 1);
     unsigned int addr = luaL_checkinteger(L, 2);
     unsigned char value = luaL_checkinteger(L, 3) & 0xff;
-    cpu_poke(cpu, addr, value);
+    cpu_poke(cpu, addr, value, L);
+
     return 0;
 }
 
-void cpu_poke(Cpu *cpu, unsigned int addr, unsigned char value) {
+void cpu_poke(Cpu *cpu, unsigned int addr, unsigned char value, lua_State *L) {
     addr &= 0x01ffff;
-    /* for _, device in ipairs(self.devices) do */
-    /*     if device.poke and addr >= device.address[1] and addr <= device.address[2] then */
-    /*         device.poke(addr - device.address[1], value) */
-    /*         return */
-    /*     end */
-    /* end */
+
+    for(int n = 0; n < cpu->num_devices; n++) {
+        if (cpu->devices[n].poke && addr >= cpu->devices[n].start && addr <= cpu->devices[n].end) {
+            lua_getiuservalue(L, 1, cpu->devices[n].poke);
+            lua_pushinteger(L, addr - cpu->devices[n].start);
+            lua_pushinteger(L, value);
+            lua_call(L, 2, 0);
+            return;
+        }
+    }
+
     cpu->mem[addr] = value;
 }
 
 int cvemu_peek(lua_State *L) {
     Cpu *cpu = checkCpu(L, 1);
     unsigned int addr = luaL_checkinteger(L, 2);
-    lua_pushinteger(L, cpu_peek(cpu, addr));
+    lua_pushinteger(L, cpu_peek(cpu, addr, L));
     return 1;
 }
 
-unsigned char cpu_peek(Cpu *cpu, unsigned int addr) {
+unsigned char cpu_peek(Cpu *cpu, unsigned int addr, lua_State *L) {
     addr &= 0x01ffff;
-    /* for _, device in ipairs(self.devices) do */
-    /*     if device.peek and addr >= device.address[1] and addr <= device.address[2] then */
-    /*         return device.peek(addr - device.address[1]) */
-    /*     end */
-    /* end */
+
+    for(int n = 0; n < cpu->num_devices; n++) {
+        if (cpu->devices[n].peek && addr >= cpu->devices[n].start && addr <= cpu->devices[n].end) {
+            lua_getiuservalue(L, 1, cpu->devices[n].peek);
+            lua_pushinteger(L, addr - cpu->devices[n].start);
+            lua_call(L, 1, 1);
+            int val = luaL_checkinteger(L, -1);
+            lua_pop(L, 1);
+            return val;
+        }
+    }
+
     return cpu->mem[addr];
 }
 
 int cvemu_print_stack(lua_State *L) {
-    Cpu *cpu = checkCpu(L, 1);    
+    Cpu *cpu = checkCpu(L, 1);
     if (cpu->data == STACK - 1) {
         printf("<stack empty>\n");
     } else {
@@ -243,15 +337,15 @@ int cvemu_print_stack(lua_State *L) {
     return 0;
 }
 
-Opcode cpu_fetch(Cpu *cpu) {
-    int instruction = cpu_peek(cpu, cpu->pc);
+Opcode cpu_fetch(Cpu *cpu, lua_State *L) {
+    int instruction = cpu_peek(cpu, cpu->pc, L);
     int arg_length = instruction & 3;
     Opcode opcode = instruction >> 2;
 
     if (arg_length > 0) {
         int arg = 0;
         for(int n=1; n <= arg_length; n++) {
-            unsigned int b = cpu_peek(cpu, cpu->pc + n);
+            unsigned int b = cpu_peek(cpu, cpu->pc + n, L);
             b <<= (8 * (n - 1));
             arg += b;
         }
@@ -274,7 +368,7 @@ int to_signed(int word) {
     }
 }
 
-void cpu_execute(Cpu *cpu, Opcode instruction) {
+void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
     int a, b;
 
     switch(instruction) {
@@ -396,33 +490,33 @@ void cpu_execute(Cpu *cpu, Opcode instruction) {
         cpu->halted = 1;
         break;
     case LOAD:
-        cpu_push_data(cpu, cpu_peek(cpu, cpu_pop_data(cpu)));
+        cpu_push_data(cpu, cpu_peek(cpu, cpu_pop_data(cpu), L));
         break;
     case LOAD16:
         b = cpu_pop_data(cpu);
-        cpu_push_data(cpu, cpu_peek(cpu, b) | cpu_peek(cpu, b+1) << 8);
+        cpu_push_data(cpu, cpu_peek(cpu, b, L) | cpu_peek(cpu, b+1, L) << 8);
         break;
     case LOAD24:
         b = cpu_pop_data(cpu);
-        cpu_push_data(cpu, cpu_peek(cpu, b) | cpu_peek(cpu, b+1) << 8 | cpu_peek(cpu, b+2) << 16);
+        cpu_push_data(cpu, cpu_peek(cpu, b, L) | cpu_peek(cpu, b+1, L) << 8 | cpu_peek(cpu, b+2, L) << 16);
         break;
     case STORE:
         b = cpu_pop_data(cpu);
         a = cpu_pop_data(cpu);
-        cpu_poke(cpu, b, a);
+        cpu_poke(cpu, b, a, L);
         break;
     case STORE16:
         b = cpu_pop_data(cpu);
         a = cpu_pop_data(cpu);
-        cpu_poke(cpu, b, a);
-        cpu_poke(cpu, b+1, a >> 8);
+        cpu_poke(cpu, b, a, L);
+        cpu_poke(cpu, b+1, a >> 8, L);
         break;
     case STORE24:
         b = cpu_pop_data(cpu);
         a = cpu_pop_data(cpu);
-        cpu_poke(cpu, b, a);
-        cpu_poke(cpu, b+1, a >> 8);
-        cpu_poke(cpu, b+2, a >> 16);
+        cpu_poke(cpu, b, a, L);
+        cpu_poke(cpu, b+1, a >> 8, L);
+        cpu_poke(cpu, b+2, a >> 16, L);
         break;
     case INTON:
         cpu->int_enabled = 1;
@@ -457,13 +551,52 @@ void cpu_execute(Cpu *cpu, Opcode instruction) {
 
 int cvemu_run(lua_State *L) {
     Cpu *cpu = checkCpu(L, 1);
-    cpu_run(cpu);
+    cpu_run(cpu, L);
     return 1;
 }
 
-void cpu_run(Cpu *cpu) {
+void cpu_run(Cpu *cpu, lua_State *L) {
     while (!cpu->halted) {
-        cpu_execute(cpu, cpu_fetch(cpu));
-        //self:tick_devices()
+        cpu_execute(cpu, cpu_fetch(cpu, L), L);
+        cpu_tick_devices(cpu, L);
     }
+}
+
+int cvemu_flags(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    lua_pushboolean(L, cpu->halted);
+    lua_pushboolean(L, cpu->int_enabled);
+    return 2;
+}
+
+int cvemu_tick_devices(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    cpu_tick_devices(cpu, L);
+    return 0;
+}
+
+void cpu_tick_devices(Cpu *cpu, lua_State *L) {
+    if (cpu->num_devices) {
+        for(int n = 0; n < cpu->num_devices; n++) {
+            if (cpu->devices[n].tick) {
+                lua_getiuservalue(L, 1, cpu->devices[n].tick);
+                lua_call(L, 0, 0);
+            }
+        }
+    }
+}
+
+int cvemu_interrupt(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    if (cpu->int_enabled) {
+        cpu->int_enabled = 0;
+        cpu->halted = 0;
+        cpu_push_call(cpu, cpu->pc);
+
+        for(int n = 2; n <= lua_gettop(L); n++) {
+            cpu_push_data(cpu, luaL_checkinteger(L, n));
+        }
+        cpu->pc = cpu->int_vector;
+    }
+    return 0;
 }

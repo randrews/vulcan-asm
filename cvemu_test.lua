@@ -294,11 +294,18 @@ local start = os.clock()
 cpu:run()
 print(os.clock() - start)
 
---[==[
+-- Device reset hooks
+local arr = {}
+local cpu = CPU.new()
+cpu:poke(100, 0)
+cpu:install_device(200, 200, { reset = function() cpu:poke(100, 100) end })
+cpu:reset()
+assert(cpu:peek(100) == 100)
+
 -- Basic memory mapped output
 local arr = {}
 local cpu = CPU.new()
-cpu:load_asm(iterator([[
+Loader.asm(cpu, iterator([[
     .org 256
     push 12
     store 200
@@ -307,6 +314,7 @@ cpu:load_asm(iterator([[
     hlt
 ]]))
 cpu:install_device(200, 200, { poke = function(_, val) table.insert(arr, val) end })
+cpu:reset()
 cpu:run()
 assert(#arr == 2)
 assert(arr[1] == 12)
@@ -315,7 +323,7 @@ assert(arr[2] == 15)
 -- Range memory mapped output
 local arr = {1, 2, 3, 4, 5}
 local cpu = CPU.new()
-cpu:load_asm(iterator([[
+Loader.asm(cpu, iterator([[
     .org 256
     push 0
     store 201
@@ -334,7 +342,7 @@ assert(arr[5] == 0)
 -- Range memory mapped input
 local arr = {1, 2, 3, 4, 5}
 local cpu = CPU.new()
-cpu:load_asm(iterator([[
+Loader.asm(cpu, iterator([[
     .org 256
     load24 201
     hlt
@@ -343,4 +351,15 @@ cpu:install_device(200, 204, { peek = function(addr) return arr[addr+1] end })
 cpu:run()
 assert(cpu:pop_data() == (4 << 16) | (3 << 8) | 2)
 
---]==]
+-- Flags
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 256
+    inton
+    hlt
+]]))
+local h, i = cpu:flags()
+assert(not h and not i)
+cpu:run()
+h, i = cpu:flags()
+assert(h and i)

@@ -1,4 +1,4 @@
-dofile('vemu.lua')
+local CPU = require('cpu')
 local Loader = require('loader')
 
 -- Fake an iterator from a string
