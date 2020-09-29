@@ -90,7 +90,31 @@ function Display:handle_event(event)
     if event.type == SDL.event.Quit then
         self.active = false
     elseif event.type == SDL.event.KeyDown or event.type == SDL.event.KeyUp then
-        self.cpu:interrupt(event.keysym.sym, event.state)
+        local key = self:to_key(event.keysym.scancode)
+        if key then
+            self.cpu:interrupt(key, event.state, 2)
+        end
+    end
+end
+
+-- Convert an SDL keyboard scancode to a Vulcan-keyboard scancode
+function Display:to_key(scancode)
+    if scancode >= SDL.scancode.A and scancode <= SDL.scancode.Z then
+        return scancode + 93
+    elseif scancode >= SDL.scancode['1'] and scancode <= SDL.scancode['9'] then
+        return scancode + 49 - SDL.scancode['1']
+    elseif scancode == SDL.scancode['0'] then
+        return 48
+    elseif scancode == SDL.scancode.Space then
+        return 0
+    elseif scancode == SDL.scancode.Return then
+        return 0xff
+    elseif scancode == SDL.scancode.RightShift then
+        return 0x0200
+    elseif scancode == SDL.scancode.LeftShift then
+        return 0x0100
+    else
+        return nil
     end
 end
 

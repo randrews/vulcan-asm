@@ -56,9 +56,56 @@ endl " Done " puts
 
 endl
 
-: keypress 3 log if putc else drop then inton 4 log ;
+\ : keypress 3 log if putc else drop then inton 4 log ;
+
+: printable? ( code -- bool )
+  dup 0x300 and swap ( is-shift? code )
+  0xff = ( is-shift? enter? )
+  or not ;
+
+variable r-shift
+variable l-shift
+
+: is-number? ( key -- bool )
+  dup 47 > swap 58 < and ;
+
+: is-letter? ( key -- bool )
+  dup 96 > swap 123 < and ;
+
+: shiftify ( key -- char )
+  r-shift @ l-shift @ or if \ if shifted?
+     \ dup is-number? if 16 - exit then
+     dup is-letter? if 32 - exit then
+  then ;
+
+: handle-key ( code up/down -- )
+   if \ if it's a press
+        dup printable? if
+           shiftify putc \ echo printable chars
+        else
+           dup 0xff = if endl then \ next line on enter
+           dup 0x100 = if 1 r-shift ! then \ set r-shift flag
+           dup 0x200 = if 1 l-shift ! then \ set r-shift flag
+           drop
+        then
+   else \ it's a release
+       dup 0x100 = if 0 r-shift ! then \ set r-shift flag
+       dup 0x200 = if 0 l-shift ! then \ set r-shift flag
+       drop
+   then ;
+
+: int-vector ( ??? device -- )
+    dup 2 = if \ keyboard?
+        drop handle-key
+    else
+        drop drop drop
+    then
+    inton ;
+
+
+
 : re-enable inton ;
 : fast drop 200 !b inton ;
-setiv keypress
+setiv int-vector
 \ setiv fast
 inton

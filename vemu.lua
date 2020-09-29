@@ -12,7 +12,7 @@ math.randomseed(random_seed)
 local argv = {...}
 if argv[1] then
     local iterator = io.open(argv[1])
-    local cpu = CPU.new()
+    local cpu = CPU.new(random_seed)
 
     local display = Display.new(false)
     display:install(cpu)

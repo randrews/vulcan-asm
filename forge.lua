@@ -103,10 +103,11 @@ function compile(lines, final_emit)
         dictionary = {
             ['+'] = { asm = 'add' }, ['-'] = { asm = 'sub' }, ['*'] = { asm = 'mul' }, ['/'] = { asm = 'div' }, mod = { asm = 'mod' },
             drop = { asm = 'pop' }, dup = { asm = 'dup' }, ['2dup'] = { asm = '2dup' }, swap = { asm = 'swap' },
-            ['and'] = { asm = 'and' }, ['or'] = { asm = 'or' }, xor = { asm = 'xor' },
-            ['>'] = { asm = 'agt' }, ['<'] = { asm = 'alt' },
+            ['and'] = { asm = 'and' }, ['or'] = { asm = 'or' }, xor = { asm = 'xor' }, ['not'] = { asm = 'not' },
+            ['>'] = { asm = 'agt' }, ['<'] = { asm = 'alt' }, ['='] = { asm = {'sub', 'not'}},
             ['@'] = { asm = 'load24' }, ['!'] = { asm = 'store24' }, ['!b'] = { asm = 'store' },
-            inton = { asm = 'inton' }, intoff = { asm = 'intoff' }
+            inton = { asm = 'inton' }, intoff = { asm = 'intoff' },
+            exit = { asm = 'ret' }
         }
     }
 
@@ -251,7 +252,12 @@ function modes.default(token, state)
         local def = state.dictionary[token]
         assert(def,
                'Undefined word \"' .. token .. '\" on line ' .. state.line_num)
-        if def.asm then state.emit('\t' .. def.asm)
+        if def.asm then
+            if type(def.asm) == 'string' then
+                state.emit('\t' .. def.asm)
+            else
+                for _, op in ipairs(def.asm) do state.emit('\t' .. op) end
+            end
         elseif def.label then state.emit('\t' .. 'call\t' .. def.label)
         elseif def.variable then state.emit('\tnop\t' .. def.variable) end
     end
