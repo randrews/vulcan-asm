@@ -72,34 +72,32 @@ variable l-shift
 : is-letter? ( key -- bool )
   dup 96 > swap 123 < and ;
 
+variable symbols
+" )!@#$%^&*( " symbols !
 : shiftify ( key -- char )
   r-shift @ l-shift @ or if \ if shifted?
-     \ dup is-number? if 16 - exit then
-     dup is-letter? if 32 - exit then
-  then ;
+     dup is-number? if 45 - symbols + @b exit end
+     dup is-letter? if 32 - exit end
+  end ;
 
 : handle-key ( code up/down -- )
-   if \ if it's a press
-        dup printable? if
-           shiftify putc \ echo printable chars
-        else
-           dup 0xff = if endl then \ next line on enter
-           dup 0x100 = if 1 r-shift ! then \ set r-shift flag
-           dup 0x200 = if 1 l-shift ! then \ set r-shift flag
-           drop
-        then
-   else \ it's a release
-       dup 0x100 = if 0 r-shift ! then \ set r-shift flag
-       dup 0x200 = if 0 l-shift ! then \ set r-shift flag
-       drop
-   then ;
+   local code
+   local press
+   press! code!
+   when code printable? press and then code shiftify putc \ if it's a press of a printable key, echo
+   when code 0xff = press and then endl \ press a newline, endl
+   when code 0x100 = press and then 1 r-shift ! \ press a shift, set the flag
+   when code 0x200 = press and then 1 l-shift !
+   when code 0x100 = then 0 r-shift ! \ release a shift, clear the flag
+   when code 0x200 = then 0 l-shift !
+   end ;
 
 : int-vector ( ??? device -- )
-    dup 2 = if \ keyboard?
+    when dup 2 = then \ keyboard?
         drop handle-key
-    else
+    when 1 then
         drop drop drop
-    then
+    end
     inton ;
 
 

@@ -1,6 +1,7 @@
 forge = require('forge')
 vasm = require('vasm')
 CPU = require('cpu')
+Loader = require('loader')
 
 -- # Forge tests
 
@@ -125,7 +126,7 @@ function test_compile(opts)
     end
 
     local actual_asm = {}
-    local function emitter(str) table.insert(actual_asm, str:gsub('%s', ' '):match('^%s*(.*)')) end
+    local function emitter(str) table.insert(actual_asm, str:gsub('%s+', ' '):match('^%s*(.*)')) end
 
     local success = true
     if check then
@@ -136,10 +137,18 @@ function test_compile(opts)
 
     if success and not eq(asm, actual_asm) then
         print('FAIL: Produced different assembly for [[' .. src .. ']]:')
-        print('Expected:')
-        for _,l in ipairs(asm) do print('\t' .. l) end
-        print('Actual:')
-        for _,l in ipairs(actual_asm) do print('\t' .. l) end
+
+        local width = 0
+        local flag
+        for _,s in ipairs(asm) do width = math.max(width, #tostring(s)) end
+
+        print('\tExpected' .. string.rep(' ', width - 8) .. '\tActual')
+
+        for n=1, math.max(#asm, #actual_asm) do
+            local expected = tostring(asm[n]) .. string.rep(' ', width - #tostring(asm[n]))
+            if asm[n] ~= actual_asm[n] then flag = '<========' else flag = '' end
+            print(string.format('\t%s\t%s\t%s', expected, actual_asm[n], flag))
+        end
         return
     end
 
@@ -183,16 +192,22 @@ test_compile{[[variable x]], {'.org 0x100', 'hlt', '_gen1: .db 0'}}
 test_compile{[[variable x 3 x !]], {'.org 0x100', 'nop 3', 'nop _gen1', 'store24', 'hlt', '_gen1: .db 0'}}
 
 -- Simple if
-test_compile{[[: even 2 mod if 100 then ;]], {'.org 0x100', 'hlt', '_gen1:', 'nop 2', 'mod', 'brz @_gen2', 'nop 100', '_gen2:', 'ret'}}
+test_compile{[[: even 2 mod if 100 end ;]], {'.org 0x100', 'hlt', '_gen1:', 'nop 2', 'mod', 'brz @_gen2', 'nop 100', '_gen2:', 'ret'}}
 
--- If / else
-test_compile{[[: even 2 mod if 100 else 200 then ;]], {'.org 0x100', 'hlt', '_gen1:', 'nop 2', 'mod', 'brz @_gen2', 'nop 100', 'jmpr @_gen3', '_gen2:', 'nop 200', '_gen3:', 'ret'}}
+-- Simple when
+test_compile{[[: even when 2 mod then 100 end ;]], {'.org 0x100', 'hlt', '_gen1:', 'nop 2', 'mod', 'brz @_gen2', 'nop 100', '_gen2:', 'ret'}}
+
+-- When-as-else
+test_compile{[[: even when 2 mod then 100 when 1 then 200 end ;]], {'.org 0x100', 'hlt', '_gen1:', 'nop 2', 'mod', 'brz @_gen2', 'nop 100', 'jmpr @_gen3', '_gen2:', 'nop 1', 'brz @_gen4', 'nop 200', '_gen4:', '_gen3:', 'ret'}}
+
+-- Multi-branch when
+test_compile{[[: thing when dup 1 = then 10 when dup 2 = then 20 when dup 3 = then 30 when 1 then -1 end ;]], {'.org 0x100', 'hlt', '_gen1:', 'dup', 'nop 1', 'sub', 'not', 'brz @_gen2', 'nop 10', 'jmpr @_gen3', '_gen2:', 'dup', 'nop 2', 'sub', 'not', 'brz @_gen4', 'nop 20', 'jmpr @_gen3', '_gen4:', 'dup', 'nop 3', 'sub', 'not', 'brz @_gen5', 'nop 30', 'jmpr @_gen3', '_gen5:', 'nop 1', 'brz @_gen6', 'nop -1', '_gen6:', '_gen3:', 'ret'}}
 
 -- Infinite loop
 test_compile{[[: forever begin 0 again ;]], {'.org 0x100', 'hlt', '_gen1:', '_gen2:', 'nop 0', 'jmpr @_gen2', '_gen3:', 'ret'}}
 
 -- Loop with break
-test_compile{[[: 10times 10 begin 1 - dup if break then again ;]], {'.org 0x100', 'hlt', '_gen1:', 'nop 10', '_gen2:', 'nop 1', 'sub', 'dup', 'brz @_gen4', 'jmpr @_gen3', '_gen4:', 'jmpr @_gen2', '_gen3:', 'ret'}}
+test_compile{[[: 10times 10 begin 1 - dup if break end again ;]], {'.org 0x100', 'hlt', '_gen1:', 'nop 10', '_gen2:', 'nop 1', 'sub', 'dup', 'brz @_gen4', 'jmpr @_gen3', '_gen4:', 'jmpr @_gen2', '_gen3:', 'ret'}}
 
 -- While loop
 test_compile{[[variable x : 10times 10 x ! begin x @ while x @ 1 - x ! again ;]],
@@ -249,7 +264,7 @@ function test_run(opts)
     local cpu = CPU.new()
     local console, callback = serial_out()
     cpu:install_device(200, 202, { poke = callback })
-    cpu:load_asm(array_iterator(asm))
+    Loader.asm(cpu, array_iterator(asm))
     cpu:run()
 
     if not eq(expected_output, console) then
@@ -306,3 +321,34 @@ test_run{[[
         again ;
     " hello! " print]],
     {('hello!'):byte(1, 6)}}
+
+test_run{[[
+    : even when 2 mod then 100 end ;
+    5 even 200 !b
+]], {100}}
+
+test_run{[[
+    : even when 2 mod then 0 when 1 then 1 end ;
+    5 even 200 !b
+    18 even 200 !b
+]], {0, 1}}
+
+test_run{[[
+    : thing ( n -- ? )
+       when dup 1 = then 10
+       when dup 2 = then 20
+       when dup 3 = then 30
+       when 1 then 0xff end
+       swap drop ;
+    7 thing 200 !b
+    2 thing 200 !b
+]], {255, 20}}
+
+test_run{[[
+    : thing2
+       when dup 1 = then 10 200 !b
+       when dup 2 = then 20 200 !b
+       when dup 3 = then 30 200 !b
+       when 1 then 0xff 200 !b end ;
+    2 thing2
+]], {20}}
