@@ -1,4 +1,4 @@
-vram:   .equ 0x01ac00
+vram:   .equ 0x01a000
 
     .org 50
 str: .db "Hello, there!\0"
@@ -13,18 +13,12 @@ str: .db "Hello, there!\0"
 
     setiv onkeypress
     inton
-    jmpr 0                      ; spin forever
-
     hlt
 
     ;; --------------------------------------------------
 
 onkeypress:
-    pop
-    pop
-    store vram
-    inton
-    ret
+    hlt
     
     ;; --------------------------------------------------
 
@@ -54,7 +48,7 @@ clear:  call clear_text
 
     ;; --------------------------------------------------
 
-clear_text:  push 4800
+clear_text:  push 1200
 clear_text_loop: dup
     brz @clear_text_done        ; Check for done
     sub 1                       ; Decrement offset
@@ -69,12 +63,12 @@ clear_text_done: pop
 
     ;; --------------------------------------------------
 
-clear_colors:   push 4800
+clear_colors:   push 1200
 clear_colors_loop:  dup
     brz @clear_colors_done
     sub 1
     dup
-    add vram + 4800
+    add vram + 1200
     push 0x07
     swap
     store

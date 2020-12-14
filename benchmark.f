@@ -1,13 +1,17 @@
 : screen 0x001a000 ;
 
 : clear-screen ( -- )
-    40 30 * 1 - 0 for offset
-      0 screen offset + !b \ clear characters
-      0x07 screen offset 1200 + + !b \ set color to fg-white, bg-black
-    loop
+  40 30 * 1 - 0 for offset
+    0 screen offset + !b \ clear characters
+    0x07 screen offset 1200 + + !b \ set color to fg-white, bg-black
+  loop
 ;
 
 clear-screen
+
+
+
+
 
 variable cursor
 0 cursor !
@@ -24,9 +28,9 @@ variable cursor
 : puts ( str -- )
   local str str!
   begin
-  str @ 0xff and while
-  str @ putc
-  str 1 + str!
+    str @ 0xff and while
+    str @ putc
+    str 1 + str!
   again ;
 
 " Hello, world! " puts
@@ -34,7 +38,7 @@ variable cursor
 : count ( max -- )
   local sum
   0 for n
-  sum n + sum!
+    sum n + sum!
   loop ;
 
 : log ( n -- )
@@ -72,11 +76,11 @@ variable l-shift
 : is-letter? ( key -- bool )
   dup 96 > swap 123 < and ;
 
-variable symbols
-" )!@#$%^&*( " symbols !
+: symbols " )!@#$%^&*( " ;
+
 : shiftify ( key -- char )
   r-shift @ l-shift @ or if \ if shifted?
-     dup is-number? if 45 - symbols + @b exit end
+     dup is-number? if 48 - symbols + @b exit end
      dup is-letter? if 32 - exit end
   end ;
 
@@ -93,14 +97,17 @@ variable symbols
    end ;
 
 : int-vector ( ??? device -- )
-    when dup 2 = then \ keyboard?
-        drop handle-key
-    when 1 then
-        drop drop drop
-    end
-    inton ;
+  when dup 2 = then \ keyboard?
+    drop handle-key
+  when 1 then
+    drop drop drop
+  end
+  inton ;
 
-
+: cond-test
+  65 if
+    3
+  end ;
 
 : re-enable inton ;
 : fast drop 200 !b inton ;
