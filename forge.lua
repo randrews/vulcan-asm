@@ -190,7 +190,7 @@ function compile(lines, final_emit)
     -- If there are any words or variables, emit those too.
     -- They don't need hlts because words will automatically return
     -- and globals never get jumped to.
-    final_emit('\t.org\t0x100')
+    final_emit('\t.org\t0x400')
     emit_segment(segments.global)
     final_emit('\thlt')
     emit_segment(segments.words)

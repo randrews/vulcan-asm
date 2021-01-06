@@ -7,10 +7,8 @@ function CPU.new()
 
     instance.devices = {}
 
-    instance.stack = {}
-    for n = 0, 2048 - 1 do
-        instance.stack[n] = 0
-    end
+    instance.sp = 0
+    instance.dp = 0
 
     instance.mem = {}
     for n = 0, (128 * 1024) - 1 do
@@ -24,12 +22,15 @@ function CPU.new()
 end
 
 function CPU:reset()
-    self.pc = 256 -- Program counter
-    self.call = 2048 - 1 -- Stack index of first frame of of call stack
-    self.data = 2048 - 1 -- Stack index of top of data stack
+    self.dp = 256 -- Data stack pointer (0x00-0xff reserved, always points at low byte of top of stack)
+    self.bottom_dp = 256 -- Exists only for debugging; set this in a setdp instruction
+    self.sp = 1023 -- Return stack pointer (256 cells higher)
+    self.pc = 1024 -- Program counter
     self.halted = false -- Flag to stop execution
     self.next_pc = nil -- Set after each fetch, opcodes can change it
-    self.stack[2048 - 1] = 2048 - 1 -- First stack frame points at itself
+    self:poke24(self.sp - 2, self.sp) -- First stack frame points at itself
+    self:poke24(self.sp - 5, 1024) -- First stack frame returns to reset vector
+    self:poke24(self.sp - 8, 0) -- First stack frame has no locals
 
     for _, device in ipairs(self.devices) do
         if device.reset then device.reset() end
@@ -44,43 +45,43 @@ end
 
 function CPU:push_data(word)
     word = math.floor(word) & 0xffffff
-    self.data = (self.data + 1) % 2048
-    self.stack[self.data] = word
+    self:poke24(self.dp, word)
+    self.dp = (self.dp + 3)
 end
 
 -- A stack frame consists of:
 --
--- - The address of the previous stack frame
--- - The return address
--- - The number of locals in this stack frame
--- - A sequence of local variables (optional)
+-- - The address of the previous stack frame (24 bits)
+-- - The return address (24 bits)
+-- - The number of locals in this stack frame (24 bits)
+-- - A sequence of local variables (optional, 24 bits each)
 --
--- The 'call' variable always points to the address of the
--- previous frame, so stack[call] is the old frame,
--- stack[call - 1] is the return, etc etc.
+-- The 'sp' register always points to the high byte of the
+-- address of the previous frame, so mem[sp-2] is the (lsb)
+-- old frame, mem[sp - 5] is the return, etc etc.
 function CPU:push_call(addr)
-    local oldcall = self.call
-    local size = self.stack[self.call - 2] + 3 -- Size of this stack frame
-    self.call = self.call - size
+    local oldsp = self.sp
+    -- Size of this stack frame: 6 bytes of pointers + 3 bytes of local count + the locals
+    local size = 6 + 3 + self:peek24(self.sp - 8) * 3
+    self.sp = self.sp - size
 
     -- Initialize new frame
-    self.stack[self.call] = oldcall -- Pointer to previous frame
-    self.stack[self.call - 1] = math.floor(addr) & 0xffffff -- Return address
-    self.stack[self.call - 2] = 0 -- No locals (yet)
+    self:poke24(self.sp - 2, oldsp) -- Pointer to previous frame
+    self:poke24(self.sp - 5, math.floor(addr) & 0xffffff) -- Return address
+    self:poke24(self.sp - 8, 0) -- No locals (yet)
 end
 
 function CPU:pop_data()
-    local word = self.stack[self.data]
-    self.data = (self.data - 1 + 2048) % 2048
-    return word
+    self.dp = self.dp - 3
+    return self:peek24(self.dp)
 end
 
 -- Pops a frame off the stock and returns the return address
 -- from that frame
 function CPU:pop_call()
-    local prev = self.stack[self.call]
-    local ret = self.stack[self.call - 1]
-    self.call = prev
+    local prev = self:peek24(self.sp - 2)
+    local ret = self:peek24(self.sp - 5)
+    self.sp = prev
     return ret
 end
 
@@ -111,6 +112,12 @@ function CPU:poke(addr, value)
     self.mem[addr] = value
 end
 
+function CPU:poke24(addr, value)
+    self:poke(addr, value & 0xff)
+    self:poke(addr + 1, (value >> 8) & 0xff)
+    self:poke(addr + 2, (value >> 16) & 0xff)
+end
+
 function CPU:peek(addr)
     addr = math.abs(math.floor(addr)) & 0x01ffff
     for _, device in ipairs(self.devices) do
@@ -121,11 +128,18 @@ function CPU:peek(addr)
     return self.mem[addr]
 end
 
+function CPU:peek24(addr)
+    local val = self:peek(addr)
+    val = val | (self:peek(addr + 1) << 8)
+    val = val | (self:peek(addr + 2) << 16)
+    return val
+end
+
 function CPU:print_stack()
-    if self.data == 2048 - 1 then print('<stack empty>')
+    if self.dp == self.bottom_dp then print('<stack empty>')
     else
-        for i = 0, self.data do
-            print(string.format('%d:\t0x%x', self.data-i, self.stack[i]))
+        for i = self.dp, self.bottom_dp, -3 do
+            print(string.format('0x%x:\t0x%x', i, self:peek24(i)))
         end
     end
 end
@@ -208,25 +222,28 @@ end
 
 -- Stack manipulation
 function CPU:dup()
-    self:push_data(self.stack[self.data])
+    self:push_data(self.peek24(self.dp))
 end
 
 function CPU:_2dup()
-    self:push_data(self.stack[self.data-1])
-    self:push_data(self.stack[self.data-1])
+    self:push_data(self:peek24(self.dp-3))
+    self:push_data(self:peek24(self.dp-3))
 end
 
 function CPU:swap()
-    self.stack[self.data], self.stack[self.data-1] = self.stack[self.data-1], self.stack[self.data]
+    local a = self:pop_data()
+    local b = self:pop_data()
+    self:push_data(a)
+    self:push_data(b)
 end
 
 function CPU:pick()
     local index = self:pop_data()
-    self:push_data(self.stack[self.data - index])
+    self:push_data(self.peek24(self.dp - index * 3))
 end
 
 function CPU:height()
-    self:push_data(self.data+1)
+    error('this opcode must die')
 end
 
 -- Math functions
@@ -363,7 +380,7 @@ end
 
 function CPU:load24()
     local addr = self:pop_data()
-    self:push_data(self:peek(addr+2) << 16 | self:peek(addr+1) << 8 | self:peek(addr))
+    self:push_data(self:peek24(addr))
 end
 
 function CPU:store24()
@@ -401,21 +418,21 @@ end
 
 -- Call stack
 function CPU:frame()
-    self.stack[self.call - 2] = self:pop_data()
+    self:poke24(self.sp - 8, self:pop_data())
 end
 
 function CPU:setlocal()
     local id = self:pop_data()
     local val = self:pop_data()
-    if self.stack[self.call - 2] > id then -- If we have this many locals
-        self.stack[self.call - 3 - id] = val
+    if self:peek24(self.sp - 8) > id then -- If we have this many locals
+        self:poke24(self.sp - 11 - id * 3, val)
     end
 end
 
 function CPU:_local()
     local id = self:pop_data()
-    if self.stack[self.call - 2] > id then -- If we have this many locals
-        self:push_data(self.stack[self.call - 3 - id])
+    if self:peek24(self.sp - 8) > id then -- If we have this many locals
+        self:push_data(self:peek24(self.sp - 11 - id * 3))
     else -- Default to pushing 0
         self:push_data(0)
     end
