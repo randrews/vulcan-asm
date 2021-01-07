@@ -211,20 +211,20 @@ test_compile{[[variable x : 10times 10 x ! begin x @ while x @ 1 - x ! again ;]]
     {'.org 0x400', 'hlt', '_gen2:', 'nop 10', 'nop _gen1', 'store24', '_gen3:', 'nop _gen1', 'load24', 'brz @_gen4', 'nop _gen1', 'load24', 'nop 1', 'sub', 'nop _gen1', 'store24', 'jmpr @_gen3', '_gen4:', 'ret', '_gen1: .db 0'}}
 
 -- Local variables
-test_compile{[[: blah local x drop 10 x! x ;]], {'.org 0x400', 'hlt', '_gen1:', 'decsp 3', 'pop', 'nop 10', 'sp', 'store24', 'sp', 'load24', 'incsp 3', 'ret'}}
+test_compile{[[: blah local x drop 10 x! x ;]], {'.org 0x400', 'hlt', '_gen1:', 'decsp 3', 'pop', 'nop 10', 'sp 0', 'store24', 'sp 0', 'load24', 'incsp 3', 'ret'}}
 
 -- More idiomatic locals
-test_compile{[[: blah 10 local x ! x ;]], {'.org 0x400', 'hlt', '_gen1:', 'nop 10', 'decsp 3', 'store24', 'sp', 'load24', 'incsp 3', 'ret'}}
+test_compile{[[: blah 10 local x ! x ;]], {'.org 0x400', 'hlt', '_gen1:', 'nop 10', 'decsp 3', 'store24', 'sp 0', 'load24', 'incsp 3', 'ret'}}
 
 -- For loops
 test_compile{[[: 100sum 0 local sum ! 100 1 for n sum n + sum! loop sum ;]],
     {'.org 0x400', 'hlt', -- main function
      '_gen1:', 'nop 0', 'decsp 3', 'store24', -- initialize sum
-     'nop 100', 'nop 1', 'decsp 6', 'pop', 'sp', 'add 3', 'store24', 'sp', 'store24', -- Store loop limits
-     '_gen2:', 'sp', 'add 3', 'load24', 'sp', 'add 0', 'load24', 'add 1', 'sub', 'brz @_gen3', -- Loop counter check
-     'sp', 'add 6', 'load24', 'sp', 'add 3', 'load24', 'add', 'sp', 'add 6', 'store24', -- Body
-     'sp', 'add 3', 'dup', 'load24', 'add 1', 'swap', 'store24', 'jmpr @_gen2', -- Counter increment
-     '_gen3:', 'sp', 'add 6', 'load24', 'incsp 9', 'ret'}}
+     'nop 100', 'nop 1', 'decsp 6', 'pop', 'sp 3', 'store24', 'sp 0', 'store24', -- Store loop limits
+     '_gen2:', 'sp 3', 'load24', 'sp 0', 'load24', 'add 1', 'sub', 'brz @_gen3', -- Loop counter check
+     'sp 6', 'load24', 'sp 3', 'load24', 'add', 'sp 6', 'store24', -- Body
+     'sp 3', 'dup', 'load24', 'add 1', 'swap', 'store24', 'jmpr @_gen2', -- Counter increment
+     '_gen3:', 'sp 6', 'load24', 'incsp 9', 'ret'}}
 
 -- Strings
 test_compile{[[variable hi " hello, world! " hi !]], {'.org 0x400', 'nop _gen2', 'nop _gen1', 'store24', 'hlt', '_gen1: .db 0', '_gen2: .db "hello, world!\\0"'}}
@@ -273,7 +273,7 @@ function test_run(opts)
     cpu:install_device(200, 202, { poke = callback })
     
     Loader.asm(cpu, array_iterator(asm))
-    -- for _,ln in ipairs(asm) do print(ln) end
+    --for _,ln in ipairs(asm) do print(ln) end
 
     cpu:run()
 

@@ -185,7 +185,7 @@ Loader.asm(cpu, iterator([[
 blah: push 7
     decsp 3
     store24
-    sp
+    sp 0
     load24
     mul 2
     hlt
@@ -202,8 +202,7 @@ Loader.asm(cpu, iterator([[
     add 3
     store24
     push 12
-    sp
-    add 3
+    sp 3
     load24
     hlt
 ]]))

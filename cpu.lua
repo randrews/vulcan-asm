@@ -395,7 +395,7 @@ end
 
 -- Call stack
 function CPU:_sp()
-    self:push_data(self.sp)
+    self:push_data(self.sp + self:pop_data())
 end
 
 function CPU:_dp()
