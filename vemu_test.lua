@@ -1,5 +1,6 @@
 local CPU = require('cpu')
 local Loader = require('loader')
+local opcodes = require('opcodes')
 
 -- Fake an iterator from a string
 function iterator(str)
@@ -15,15 +16,10 @@ end
 
 -- Initial state
 local cpu = CPU.new()
-assert(cpu.mem[1023] == 0x00) -- high,
-assert(cpu.mem[1022] == 0x03) -- middle,
-assert(cpu.mem[1021] == 0xff) -- and low bytes of 1023, the starting sp
-assert(cpu:peek24(1023 - 5) == 1024) -- starting stack frame return addr
-assert(cpu:peek24(1023 - 8) == 0) -- starting stack frame, no locals
 assert(cpu.mem[0] ~= nil)
 assert(cpu.mem[131071] ~= nil)
 assert(cpu.mem[131072] == nil)
-assert(cpu.sp == 1023)
+assert(cpu.sp == 1024)
 assert(cpu.dp == 256)
 
 -- State after pushing data
@@ -32,23 +28,16 @@ cpu:push_data(37)
 cpu:push_data(45)
 assert(cpu:peek24(256) == 37)
 assert(cpu:peek24(259) == 45)
-assert(cpu.sp == 1023)
+assert(cpu.sp == 1024)
 assert(cpu.dp == 256 + 6)
 
 -- State after pushing return addresses
 local cpu = CPU.new()
 cpu:push_call(37)
 cpu:push_call(45)
-assert(cpu:peek24(1023 - 2) == 1023) -- First frame prev (set on reset)
-assert(cpu:peek24(1023 - 5) == 1024) -- First frame ret (set on reset)
-assert(cpu:peek24(1023 - 8) == 0) -- First frame locals (set on reset)
-assert(cpu:peek24(1023 - 11) == 1023) -- Second frame prev
-assert(cpu:peek24(1023 - 14) == 37) -- Second frame ret
-assert(cpu:peek24(1023 - 17) == 0) -- Second frame locals
-assert(cpu:peek24(1023 - 20) == 1023 - 9) -- Third frame prev
-assert(cpu:peek24(1023 - 23) == 45) -- Third frame ret
-assert(cpu:peek24(1023 - 26) == 0) -- Third frame locals
-assert(cpu.sp == 1023 - 18) -- Pointing at start of second frame
+assert(cpu:peek24(cpu.sp) == 45)
+assert(cpu:peek24(cpu.sp + 3) == 37)
+assert(cpu.sp == 1024 - 6)
 assert(cpu.dp == 256)
 
 -- Pushing and then popping data
@@ -90,7 +79,7 @@ cpu:poke(0x400, 0x01) -- nop 1 arg
 cpu:poke(0x401, 0x02) -- 2
 cpu:poke(0x402, 0x05) -- add 1 arg
 cpu:poke(0x403, 0x02) -- 2
-cpu:poke(0x404, 29 << 2)
+cpu:poke(0x404, opcodes.opcode_for('hlt') << 2) -- hlt
 cpu:run()
 assert(cpu:pop_data() == 4)
 
@@ -137,16 +126,14 @@ blah: push 3
 ]]))
 cpu:run()
 assert(cpu:pop_data() == 3)
-assert(cpu.sp == 1023 - 9)
-assert(cpu:peek24(cpu.sp - 2) == 1023)
-assert(cpu:peek24(cpu.sp - 5) == 0x400 + 4)
-assert(cpu:peek24(cpu.sp - 8) == 0)
+assert(cpu.sp == 1024 - 3)
+assert(cpu:peek24(cpu.sp) == 0x400 + 4)
 
 -- Returning from calls
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
-    push 3
+    nop 3
     call blah
     hlt
 blah: mul 2
@@ -154,53 +141,52 @@ blah: mul 2
 ]]))
 cpu:run()
 assert(cpu:pop_data() == 6)
-assert(cpu.sp == 1023)
+assert(cpu.sp == 1024)
 
 -- Setting frame size
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
     call blah
-blah: frame 3
+blah: decsp 9
     hlt
 ]]))
 cpu:run()
-assert(cpu.sp == 1023 - 9)
-assert(cpu:peek24(cpu.sp - 2) == 1023)
-assert(cpu:peek24(cpu.sp - 5) == 0x404)
-assert(cpu:peek24(cpu.sp - 8) == 3)
+assert(cpu.sp == 1024 - 12)
+assert(cpu:pop_data() == cpu.sp)
+assert(cpu:peek24(cpu.sp + 9) == 0x404)
 
 -- Setting frame locals
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
     call blah
-blah: frame 3
+blah: decsp 9
+    dup
     push 7
-    setlocal 1
+    swap
+    store24
+    add 3
     push 2
-    setlocal 0
+    swap
+    store24
     hlt
 ]]))
 cpu:run()
-assert(cpu.sp == 1023 - 9)
-assert(cpu:peek24(cpu.sp - 2) == 1023)
-assert(cpu:peek24(cpu.sp - 5) == 0x404)
-assert(cpu:peek24(cpu.sp - 8) == 3)
-assert(cpu:peek24(cpu.sp - 11) == 2)
-assert(cpu:peek24(cpu.sp - 14) == 7)
+assert(cpu.sp == 1024 - 12)
+assert(cpu:peek24(cpu.sp) == 7)
+assert(cpu:peek24(cpu.sp + 3) == 2)
 
 -- Getting frame locals
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
     call blah
-blah: frame 3
-    push 7
-    setlocal 1
-    push 2
-    setlocal 0
-    local 1
+blah: push 7
+    decsp 3
+    store24
+    sp
+    load24
     mul 2
     hlt
 ]]))
@@ -211,11 +197,14 @@ assert(cpu:pop_data() == 14)
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
-    frame 2
     push 5
-    setlocal 1
+    decsp 6
+    add 3
+    store24
     push 12
-    local 1
+    sp
+    add 3
+    load24
     hlt
 ]]))
 cpu:run()
@@ -226,37 +215,22 @@ assert(cpu:pop_data() == 12)
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
-    frame 2
     push 5
-    setlocal 1
+    decsp 6
+    add 3
+    store24
     call blah
-blah: frame 2
-    push 3
-    setlocal 1
+blah: push 3
+    decsp 6
+    add 3
+    store24
     hlt
 ]]))
 cpu:run()
-assert(cpu.sp == 1023 - 15)
-assert(cpu:peek24(1023 - 2) == 1023) -- First frame
-assert(cpu:peek24(1023 - 5) == 0x400)
-assert(cpu:peek24(1023 - 8) == 2)
-assert(cpu:peek24(1023 - 14) == 5)
-
-assert(cpu:peek24(cpu.sp - 2) == 1023) -- Second frame
-assert(cpu:peek24(cpu.sp - 5) == 0x400 + 10)
-assert(cpu:peek24(cpu.sp - 8) == 2)
-assert(cpu:peek24(cpu.sp - 14) == 3)
-
--- Out-of-range frame locals
-local cpu = CPU.new()
-Loader.asm(cpu, iterator([[
-    .org 0x400
-    frame 3
-    local 7
-    hlt
-]]))
-cpu:run()
-assert(cpu:pop_data() == 0)
+assert(cpu.sp == 1024 - 15)
+assert(cpu:peek24(1024 - 3) == 5) -- First local
+assert(cpu:peek24(1024 - 9) == 0x400 + 11) -- Skip a local, the return address
+assert(cpu:peek24(1024 - 12) == 3) -- First local in the 2nd frame
 
 -- Comparing values
 local cpu = CPU.new()
@@ -315,6 +289,35 @@ Loader.asm(cpu, iterator([[
 cpu:run()
 assert(cpu:pop_data() ~= 0)
 assert(cpu:pop_data() == 0)
+
+-- 2dup
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 1024
+    nop 10
+    nop 20
+    2dup
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 20)
+assert(cpu:pop_data() == 10)
+assert(cpu:pop_data() == 20)
+assert(cpu:pop_data() == 10)
+
+-- pick
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 1024
+    nop 10
+    nop 20
+    pick 1
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 10)
+assert(cpu:pop_data() == 20)
+assert(cpu:pop_data() == 10)
 
 -- Basic memory mapped output
 local arr = {}

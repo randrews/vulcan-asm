@@ -177,7 +177,7 @@ function compile(lines, final_emit)
         end        
     end
 
-    if state.mode() ~= 'default' then
+    if state.mode() ~= 'default' and state.mode() ~= 'line_comment' then
         error('End of input while still in mode ' .. state.mode() .. ' at line ' .. state.line_num)
     end
 

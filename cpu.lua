@@ -24,13 +24,10 @@ end
 function CPU:reset()
     self.dp = 256 -- Data stack pointer (0x00-0xff reserved, always points at low byte of top of stack)
     self.bottom_dp = 256 -- Exists only for debugging; set this in a setdp instruction
-    self.sp = 1023 -- Return stack pointer (256 cells higher)
+    self.sp = 1024 -- Return stack pointer (256 cells higher)
     self.pc = 1024 -- Program counter
     self.halted = false -- Flag to stop execution
     self.next_pc = nil -- Set after each fetch, opcodes can change it
-    self:poke24(self.sp - 2, self.sp) -- First stack frame points at itself
-    self:poke24(self.sp - 5, 1024) -- First stack frame returns to reset vector
-    self:poke24(self.sp - 8, 0) -- First stack frame has no locals
 
     for _, device in ipairs(self.devices) do
         if device.reset then device.reset() end
@@ -43,32 +40,19 @@ function CPU:flags()
     return self.halted, self.int_enabled
 end
 
+-- The 'dp' register always points one above the high byte of the
+-- top of the stack, so mem[dp-3] is the least significant byte
 function CPU:push_data(word)
     word = math.floor(word) & 0xffffff
     self:poke24(self.dp, word)
-    self.dp = (self.dp + 3)
+    self.dp = self.dp + 3
 end
 
--- A stack frame consists of:
---
--- - The address of the previous stack frame (24 bits)
--- - The return address (24 bits)
--- - The number of locals in this stack frame (24 bits)
--- - A sequence of local variables (optional, 24 bits each)
---
--- The 'sp' register always points to the high byte of the
--- address of the previous frame, so mem[sp-2] is the (lsb)
--- old frame, mem[sp - 5] is the return, etc etc.
-function CPU:push_call(addr)
-    local oldsp = self.sp
-    -- Size of this stack frame: 6 bytes of pointers + 3 bytes of local count + the locals
-    local size = 6 + 3 + self:peek24(self.sp - 8) * 3
-    self.sp = self.sp - size
-
-    -- Initialize new frame
-    self:poke24(self.sp - 2, oldsp) -- Pointer to previous frame
-    self:poke24(self.sp - 5, math.floor(addr) & 0xffffff) -- Return address
-    self:poke24(self.sp - 8, 0) -- No locals (yet)
+-- The 'sp' register always points to the low byte of the
+-- top of the stack, so mem[sp] is the least significant byte
+function CPU:push_call(val)
+    self.sp = self.sp - 3
+    self:poke24(self.sp, math.floor(val) & 0xffffff)
 end
 
 function CPU:pop_data()
@@ -79,10 +63,9 @@ end
 -- Pops a frame off the stock and returns the return address
 -- from that frame
 function CPU:pop_call()
-    local prev = self:peek24(self.sp - 2)
-    local ret = self:peek24(self.sp - 5)
-    self.sp = prev
-    return ret
+    local val = self:peek24(self.sp)
+    self.sp = self.sp + 3
+    return val
 end
 
 -- Devices support different callbacks:
@@ -148,7 +131,7 @@ function CPU:decode(opcode)
     local name = opcodes.mnemonic_for(opcode)
     if not name then error('Unrecognized opcode ' .. opcode) end
     if (name == 'and' or name == 'or' or name == 'not' or name == '2dup'
-        or name == 'call' or name == 'load' or name == 'local') then
+        or name == 'call' or name == 'load' or name == 'sp' or name == 'dp') then
         return '_' .. name
     end
     return name
@@ -222,12 +205,12 @@ end
 
 -- Stack manipulation
 function CPU:dup()
-    self:push_data(self.peek24(self.dp))
+    self:push_data(self:peek24(self.dp - 3))
 end
 
 function CPU:_2dup()
-    self:push_data(self:peek24(self.dp-3))
-    self:push_data(self:peek24(self.dp-3))
+    self:push_data(self:peek24(self.dp-6))
+    self:push_data(self:peek24(self.dp-6))
 end
 
 function CPU:swap()
@@ -239,11 +222,7 @@ end
 
 function CPU:pick()
     local index = self:pop_data()
-    self:push_data(self.peek24(self.dp - index * 3))
-end
-
-function CPU:height()
-    error('this opcode must die')
+    self:push_data(self:peek24(self.dp - (index + 1) * 3))
 end
 
 -- Math functions
@@ -386,9 +365,7 @@ end
 function CPU:store24()
     local addr = self:pop_data()
     local val = self:pop_data()
-    self:poke(addr, val & 0xff)
-    self:poke(addr + 1, (val >> 8) & 0xff)
-    self:poke(addr + 2, (val >> 16) & 0xff)
+    self:poke24(addr, val)
 end
 
 function CPU:store16()
@@ -417,25 +394,29 @@ function CPU:setiv()
 end
 
 -- Call stack
-function CPU:frame()
-    self:poke24(self.sp - 8, self:pop_data())
+function CPU:_sp()
+    self:push_data(self.sp)
 end
 
-function CPU:setlocal()
-    local id = self:pop_data()
-    local val = self:pop_data()
-    if self:peek24(self.sp - 8) > id then -- If we have this many locals
-        self:poke24(self.sp - 11 - id * 3, val)
-    end
+function CPU:_dp()
+    self:push_data(self.dp)
 end
 
-function CPU:_local()
-    local id = self:pop_data()
-    if self:peek24(self.sp - 8) > id then -- If we have this many locals
-        self:push_data(self:peek24(self.sp - 11 - id * 3))
-    else -- Default to pushing 0
-        self:push_data(0)
-    end
+function CPU:setsp()
+    self.sp = self:pop_data()
+end
+
+function CPU:setdp()
+    self.dp = self:pop_data()
+end
+
+function CPU:incsp()
+    self.sp = self.sp + self:pop_data()
+end
+
+function CPU:decsp()
+    self.sp = self.sp - self:pop_data()
+    self:push_data(self.sp)
 end
 
 -- Convert a 24-bit unsigned value to a signed Lua number
