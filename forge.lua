@@ -95,7 +95,7 @@ function compile(lines, final_emit)
         -- and a `line` field
         controls = setmetatable({}, {__index = table}),
 
-        -- The dictionary of locals; all locals are just mapping a name to a stack-frame-index
+        -- The dictionary of locals; all locals in the order they were declared.
         local_dictionary = {},
 
         -- The dictionary, which initially has only the primitive words in it: an entry here contains either a label or
@@ -145,6 +145,37 @@ function compile(lines, final_emit)
         table.insert(segments[segment or state.current_segment], line)
     end
 
+    -- Return the offset from sp, right now, for a given local
+    function state.local_offset(name)
+        for i, n in ipairs(state.local_dictionary) do
+            if n == name then
+                return 3 * (#state.local_dictionary - i)
+            end
+        end
+    end
+
+    function state.setlocal(offset)
+        state.emit('\tsp')
+        if offset ~= 0 then state.emit('\tadd\t' .. offset) end
+        state.emit('\tstore24')
+    end
+
+    function state.getlocal(offset)
+        state.emit('\tsp')
+        if offset ~= 0 then state.emit('\tadd\t' .. offset) end
+        state.emit('\tload24')
+    end
+
+    function state.inclocal(offset, amount)
+        state.emit('\tsp')
+        if offset ~= 0 then state.emit('\tadd\t' .. offset) end
+        state.emit('\tdup')
+        state.emit('\tload24')
+        state.emit('\tadd\t' .. amount)
+        state.emit('\tswap')
+        state.emit('\tstore24')
+    end
+
     -- ### Main Loop
     -- Loop over each token in the source, and handle them
     for token, line_num in read(lines) do
@@ -174,7 +205,7 @@ function compile(lines, final_emit)
             modes[state.mode()][token](state)
         else
             modes.default(token, state)
-        end        
+        end
     end
 
     if state.mode() ~= 'default' and state.mode() ~= 'line_comment' then
@@ -242,10 +273,18 @@ function modes.default(token, state)
                             state.emit('\tsetiv\t' .. state.dictionary[name].label)
                         end
         )
-    elseif state.local_dictionary[token] then
-        state.emit('\tlocal\t' .. state.local_dictionary[token])
-    elseif token:sub(-1) == '!' and state.local_dictionary[token:sub(1, -2)] then
-        state.emit('\tsetlocal\t' .. state.local_dictionary[token:sub(1, -2)])
+    elseif state.local_offset(token) then
+        state.emit('\tsp')
+        if state.local_offset(token) ~= 0 then
+            state.emit('\tadd\t' .. state.local_offset(token))
+        end
+        state.emit('\tload24')
+    elseif token:sub(-1) == '!' and token ~= '!' and state.local_offset(token:sub(1, -2)) then
+        state.emit('\tsp')
+        if state.local_offset(token:sub(1, -2)) ~= 0 then
+            state.emit('\tadd\t' .. state.local_offset(token:sub(1, -2)))
+        end
+        state.emit('\tstore24')
     elseif token == '"' then
         state.push_mode('string')
     else
@@ -319,7 +358,10 @@ modes.word_definition[';'] = function(state)
     if #state.controls > 0 then
         error('Unclosed `' .. state.controls[1].type .. '` on line ' .. state.controls[1].line)
     end
-    -- To end a word, emit a return and reset our mode and segment
+    -- To end a word, move sp back, emit a return and reset our mode and segment
+    if #state.local_dictionary > 0 then
+        state.emit('\tincsp\t' .. #state.local_dictionary * 3)
+    end
     state.emit('\tret')
     state.pop_mode()
     state.current_segment = 'global'
@@ -405,18 +447,23 @@ modes.word_definition['for'] = function(state)
                     function(name, state)
                         -- Put it in the dictionary and change our frame size
                         -- Incrementing by two to store the upper limit also
-                        state.local_dictionary[name], state.current_frame_size = state.current_frame_size, state.current_frame_size + 2
-                        state.emit('\tframe\t' .. state.current_frame_size)
+                        table.insert(state.local_dictionary, name)
+                        table.insert(state.local_dictionary, '') -- The limit has no name
+                        state.current_frame_size = state.current_frame_size + 2
+                        state.emit('\tdecsp\t6')
+                        state.emit('\tpop')
                         -- Push a control
-                        state.controls:insert{ type = 'for', line = state.line_num, start = state.gensym(), after = state.gensym(), limit = state.current_frame_size - 1, counter = name }
+                        state.controls:insert{ type = 'for', line = state.line_num, start = state.gensym(), after = state.gensym(), limit = state.local_offset(name) - 3, counter = name }
                         -- Set counter to the start value and limit to the end value
-                        state.emit('\tsetlocal\t' .. state.local_dictionary[name])
-                        state.emit('\tsetlocal\t' .. state.top_control().limit)
+                        state.setlocal(state.local_offset(name))
+                        state.setlocal(state.top_control().limit)
                         -- Start of loop label
                         state.emit(state.top_control().start .. ':')
                         -- Check if the counter > limit, brz to after:
-                        state.emit('\tlocal\t' .. state.local_dictionary[name])
-                        state.emit('\tlocal\t' .. state.top_control().limit)
+                        state.getlocal(state.local_offset(name))
+                        state.emit('\tsp')
+                        state.emit('\tadd\t' .. state.top_control().limit)
+                        state.emit('\tload24')
                         state.emit('\tadd\t' .. 1)
                         state.emit('\tsub')
                         state.emit('\tbrz\t@' .. state.top_control().after)
@@ -430,17 +477,14 @@ function modes.word_definition.loop(state)
     assert(state.top_control().type == 'for',
            '`loop` outside `for` on line ' .. state.line_num)
     -- Increment the counter and jump back to start
-    state.emit('\tlocal\t' .. state.local_dictionary[state.top_control().counter])
-    state.emit('\tadd\t1')
-    state.emit('\tsetlocal\t' .. state.local_dictionary[state.top_control().counter])
+    state.inclocal(state.local_offset(state.top_control().counter), 1)
     state.emit('\tjmpr\t@' .. state.top_control().start)
     -- The after label
     state.emit(state.top_control().after .. ':')
     -- Remove the counter variable
-    state.local_dictionary[state.top_control().counter] = nil
-    -- Shrink the stack size back (it might matter)
-    state.current_frame_size = state.current_frame_size - 2
-    state.emit('\tframe\t' .. state.current_frame_size)
+    for i, n in ipairs(state.local_dictionary) do
+        if n == state.top_control().counter then state.local_dictionary[i] = '' end
+    end
     state.controls:remove(#state.controls)
 end
 
@@ -450,10 +494,11 @@ end
 modes.word_definition['local'] = function(state)
     state.read_name('local',
                     function(name, state)
-                        assert(not state.local_dictionary[name], 'Reused name \"' .. name .. '\" on line ' .. state.line_num)
+                        assert(not state.local_offset(name), 'Reused name \"' .. name .. '\" on line ' .. state.line_num)
                         -- Put it in the dictionary and change our frame size and mode
-                        state.local_dictionary[name], state.current_frame_size = state.current_frame_size, state.current_frame_size + 1
-                        state.emit('\tframe\t' .. state.current_frame_size)
+                        table.insert(state.local_dictionary, name)
+                        state.current_frame_size = state.current_frame_size + 1
+                        state.emit('\tdecsp\t3')
                     end
     )
 end

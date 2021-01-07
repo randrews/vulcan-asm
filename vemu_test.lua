@@ -371,7 +371,7 @@ assert(cpu:pop_data() == (4 << 16) | (3 << 8) | 2)
 local cpu = CPU.new()
 Loader.forge(cpu, iterator([[
   : count ( max -- )
-  local sum
+  0 local sum !
   0 for n
   sum n + sum!
   loop ;
