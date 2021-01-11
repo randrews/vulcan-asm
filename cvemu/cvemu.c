@@ -1,5 +1,5 @@
 #include "cvemu.h"
-#include "opcodes.h"
+#include "../util/opcodes.h"
 
 const int MAX_DEVICES = 100;
 const int MAX_HOOKS = 256;

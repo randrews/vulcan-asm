@@ -1,4 +1,4 @@
-local opcodes = require('opcodes')
+local opcodes = require('util.opcodes')
 
 CPU = {}
 
@@ -402,12 +402,9 @@ function CPU:_dp()
     self:push_data(self.dp)
 end
 
-function CPU:setsp()
-    self.sp = self:pop_data()
-end
-
-function CPU:setdp()
+function CPU:setsdp()
     self.dp = self:pop_data()
+    self.sp = self:pop_data()
 end
 
 function CPU:incsp()

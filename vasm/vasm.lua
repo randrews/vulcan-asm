@@ -6,7 +6,7 @@
 -- ### Dependencies
 -- To parse Vulcan assembly, we'll need a parser library, so, LPeg:
 lpeg = require('lpeg')
-opcodes = require('opcodes')
+opcodes = require('util.opcodes')
 
 -- # Utility functions
 

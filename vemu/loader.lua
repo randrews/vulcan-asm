@@ -1,5 +1,5 @@
-local VASM = require('vasm')
-local Forge = require('forge')
+local VASM = require('vasm.vasm')
+local Forge = require('forge.forge')
 
 function load_asm(cpu, iterator)
     local bytes, start = VASM.assemble(iterator)

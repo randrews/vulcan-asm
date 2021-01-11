@@ -11,7 +11,7 @@ function Display.new(double)
         local ret, err = SDL.init(SDL.flags.Video)
         if not ret then error(err) end
 
-        Display.image, err = SDL.image.load('font.png')
+        Display.image, err = SDL.image.load('vemu/font.png')
         if not Display.image then error(err) end
 
         Display.initialized = true

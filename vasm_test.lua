@@ -1,4 +1,4 @@
-vulcan = require('vasm')
+vulcan = require('vasm.vasm')
 
 statement = vulcan.statement
 

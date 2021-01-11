@@ -1,7 +1,7 @@
-forge = require('forge')
-vasm = require('vasm')
-CPU = require('cpu')
-Loader = require('loader')
+forge = require('forge.forge')
+vasm = require('vasm.vasm')
+CPU = require('vemu.cpu')
+Loader = require('vemu.loader')
 
 -- # Forge tests
 
