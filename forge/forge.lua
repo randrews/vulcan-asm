@@ -104,7 +104,7 @@ function compile(lines, final_emit)
             drop = { asm = 'pop' }, dup = { asm = 'dup' }, ['2dup'] = { asm = '2dup' }, swap = { asm = 'swap' },
             ['and'] = { asm = 'and' }, ['or'] = { asm = 'or' }, xor = { asm = 'xor' }, ['not'] = { asm = 'not' },
             ['>'] = { asm = 'agt' }, ['<'] = { asm = 'alt' }, ['='] = { asm = {'sub', 'not'}},
-            ['@'] = { asm = 'load24' }, ['!'] = { asm = 'store24' }, ['!b'] = { asm = 'store' },
+            ['@'] = { asm = 'load24' }, ['@b'] = { asm = 'load' }, ['!'] = { asm = 'store24' }, ['!b'] = { asm = 'store' },
             inton = { asm = 'inton' }, intoff = { asm = 'intoff' },
             exit = { asm = 'ret' }
         }
@@ -357,35 +357,51 @@ end
 
 -- ### Conditionals
 -- `if` / `else` / `then` are the conditional construct in Forge. `if` consumes
--- the top of the stack, and if it's zero, jumps to the matching `else` or
--- `then`.
+-- the top of the stack, and if it's zero, jumps to the matching `end`
 modes.word_definition['if'] = function(state)
     state.controls:insert{ type = 'if', line = state.line_num, after = state.gensym() }
     state.emit('\tbrz\t@' .. state.controls[#state.controls].after)
 end
 
--- `else` is the jump target if the condition is false (if it's provided).
--- First we make sure that we're actually in an `if`, and that there's not
--- already an `else` for it. Then we splice ourselves into that control structure
-modes.word_definition['else'] = function(state)
-    assert(state.top_control().type == 'if',
-           '`else` outside `if` on line ' .. state.line_num)
-    assert(not state.top_control().has_else,
-           'Extra `else` on line ' .. state.line_num)
-    local top = state.top_control()
-    local old_after = top.after
-    top.after, top.has_else = state.gensym(), true
-    state.emit('\tjmpr\t@' .. state.top_control().after)
-    state.emit(old_after .. ':')
-end
-
--- `then` is the end of an `if` / `else`: we just need to emit a label to
+-- `end` is the end of an `if`: we just need to emit a label to
 -- jump to and pop the control stack.
-modes.word_definition['then'] = function(state)
-    assert(state.top_control().type == 'if',
-           '`then` outside `if` on line ' .. state.line_num)
+modes.word_definition['end'] = function(state)
+    assert(state.top_control().type == 'if' or state.top_control().type == 'when',
+           '`end` outside `if` / `when` on line ' .. state.line_num)
+    if state.top_control().next and state.top_control().next ~= state.top_control().after then
+        state.emit(state.top_control().next .. ':')
+    end
     state.emit(state.top_control().after .. ':')
     state.controls:remove(#state.controls)
+end
+
+-- `when` / `then` / `end` is Forge's multi-case conditional: `when` is followed
+-- by a condition; `then` evaluates the condition and if false jumps to the next
+-- `when` (or `end` if there is none)
+modes.word_definition.when = function(state)
+    if state.top_control().type == 'when' then
+        -- If this is the second `when` then we don't have a good 'after' yet:
+        if state.top_control().after == state.top_control().next then
+            state.top_control().after = state.gensym()
+        end
+        -- If we're already in a `when`, emit a jump so the previous case heads to the end:
+        state.emit('\tjmpr\t@' .. state.top_control().after)
+        -- Then the label for the previous `then` to jump to:
+        state.emit(state.top_control().next .. ':')
+        -- Then create a new label for our own `then` to jump to:
+        state.top_control().next = state.gensym()
+        state.top_control().line = state.line_num
+    else
+        -- 'after' is the label of our `end`, 'next' is the label of the next `when`
+        local label = state.gensym()
+        state.controls:insert{ type = 'when', line = state.line_num, next = label, after = label }
+    end
+end
+
+modes.word_definition['then'] = function(state)
+    assert(state.top_control().type == 'when',
+           '`then` outside `when` on line ' .. state.line_num)
+    state.emit('\tbrz\t@' .. state.top_control().next)
 end
 
 -- ### Loops
