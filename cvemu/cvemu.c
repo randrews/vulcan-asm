@@ -23,6 +23,10 @@ int cvemu_pop_call(lua_State *L);
 int cpu_pop_call(Cpu *cpu);
 int cvemu_poke(lua_State *L);
 void cpu_poke(Cpu *cpu, unsigned int addr, unsigned char value, lua_State *L);
+int cvemu_poke24(lua_State *L);
+void cpu_poke24(Cpu *cpu, unsigned int addr, unsigned int value, lua_State *L);
+int cvemu_peek24(lua_State *L);
+int cpu_peek24(Cpu *cpu, unsigned int addr, lua_State *L);
 int cvemu_peek(lua_State *L);
 unsigned char cpu_peek(Cpu *cpu, unsigned int addr, lua_State *L);
 int cvemu_print_stack(lua_State *L);
@@ -34,6 +38,9 @@ int cvemu_flags(lua_State *L);
 int cvemu_tick_devices(lua_State *L);
 void cpu_tick_devices(Cpu *cpu, lua_State *L);
 int cvemu_interrupt(lua_State *L);
+int cvemu_pc(lua_State *L);
+int cvemu_sp(lua_State *L);
+int cvemu_dp(lua_State *L);
 
 /* Utils */
 int to_signed(int word);
@@ -51,6 +58,11 @@ int luaopen_cvemu(lua_State *lua){
         {"pop_call", cvemu_pop_call},
         {"poke", cvemu_poke},
         {"peek", cvemu_peek},
+        {"poke24", cvemu_poke24},
+        {"peek24", cvemu_peek24},
+        {"pc", cvemu_pc},
+        {"sp", cvemu_sp},
+        {"dp", cvemu_dp},
         {"print_stack", cvemu_print_stack},
         {"install_device", cvemu_install_device},
         {"run", cvemu_run},
@@ -85,15 +97,13 @@ int newCpu(lua_State *L){
     luaL_getmetatable(L, "Cpu");
     lua_setmetatable(L, -2);
 
-    cpu->stack = malloc(STACK * sizeof(int));
-    for(int n = 0; n < STACK; n++) {
-        cpu->stack[n] = 0;
-    }
-
     cpu->mem = malloc(MEM * sizeof(char));
     for(int n = 0; n < MEM; n++) {
         cpu->mem[n] = (char) (rand() % 256);
     }
+
+    cpu->sp = 0;
+    cpu->dp = 0;
 
     cpu->int_enabled = 0;
     cpu->int_vector = 0;
@@ -125,7 +135,6 @@ int cpuToString(lua_State *L){
 int gcCpu(lua_State *L){
     Cpu *cpu = checkCpu(L, 1);
     printf("killing <cvemu.CPU 0x%lx>\n", (unsigned long)(cpu));
-    free(cpu->stack);
     free(cpu->mem);
     return 0;
 }
@@ -150,12 +159,12 @@ int cvemu_reset(lua_State *L) {
 }
 
 void cpu_reset(Cpu *cpu) {
-    cpu->pc = 256; // Program counter
-    cpu->call = STACK - 1; // Stack index of first frame of of call stack
-    cpu->data = STACK - 1; // Stack index of top of data stack
+    cpu->dp = 256; // Data stack pointer (0x00-0xff reserved, always points at low byte of top of stack)
+    cpu->bottom_dp = 256; // Exists only for debugging; set this in a setdp instruction
+    cpu->sp = 1024; // Return stack pointer (256 cells higher)
+    cpu->pc = 1024; // Program counter
     cpu->halted = 0; // Flag to stop execution
     cpu->next_pc = -1; // Set after each fetch, opcodes can change it
-    cpu->stack[STACK - 1] = STACK - 1; // First stack frame points at itself
 }
 
 static void dumpstack (lua_State *L) {
@@ -194,7 +203,6 @@ int store_hook(Cpu *cpu, lua_State *L, const char *name) {
         lua_pop(L, 1);
         return 0;
     }
-
 }
 
 int cvemu_install_device(lua_State *L) {
@@ -227,10 +235,13 @@ int cvemu_push_data(lua_State *L) {
     return 0;
 }
 
+// The 'dp' register always points one above the high byte of the
+// top of the stack, so mem[dp-3] is the least significant byte
 void cpu_push_data(Cpu *cpu, int word) {
     word &= 0xffffff;
-    cpu->data = (cpu->data + 1) % STACK;
-    cpu->stack[cpu->data] = word;
+    // Warning! We're implicitly assuming the stacks don't overlap with device memory
+    cpu_poke24(cpu, cpu->dp, word, 0);
+    cpu->dp += 3;
 }
 
 int cvemu_pop_data(lua_State *L) {
@@ -240,27 +251,24 @@ int cvemu_pop_data(lua_State *L) {
 }
 
 int cpu_pop_data(Cpu *cpu) {
-    int word = cpu->stack[cpu->data];
-    cpu->data = (cpu->data - 1 + STACK) % STACK;
-    return word;
+    cpu->dp -= 3;
+    // Warning! We're implicitly assuming the stacks don't overlap with device memory
+    return cpu_peek24(cpu, cpu->dp, 0);
 }
 
 int cvemu_push_call(lua_State *L) {
     Cpu *cpu = checkCpu(L, 1);
-    int addr = luaL_checkinteger(L, 2);
-    cpu_push_call(cpu, addr);
+    int val = luaL_checkinteger(L, 2);
+    cpu_push_call(cpu, val);
     return 0;
 }
 
-void cpu_push_call(Cpu *cpu, int addr) {
-    int oldcall = cpu->call;
-    int size = cpu->stack[cpu->call - 2] + 3; // Size of this stack frame
-    cpu->call -= size;
-
-    // Initialize new frame
-    cpu->stack[cpu->call] = oldcall; // Pointer to previous frame
-    cpu->stack[cpu->call - 1] = addr & 0xffffff; // Return address
-    cpu->stack[cpu->call - 2] = 0; // No locals (yet)
+// The 'sp' register always points to the low byte of the
+// top of the stack, so mem[sp] is the least significant byte
+void cpu_push_call(Cpu *cpu, int val) {
+    cpu->sp -= 3;
+    // Warning! We're implicitly assuming the stacks don't overlap with device memory
+    cpu_poke24(cpu, cpu->sp, val & 0xffffff, 0);
 }
 
 int cvemu_pop_call(lua_State *L) {
@@ -270,10 +278,10 @@ int cvemu_pop_call(lua_State *L) {
 }
 
 int cpu_pop_call(Cpu *cpu) {
-    int prev = cpu->stack[cpu->call];
-    int ret = cpu->stack[cpu->call - 1];
-    cpu->call = prev;
-    return ret;
+    // Warning! We're implicitly assuming the stacks don't overlap with device memory
+    int val = cpu_peek24(cpu, cpu->sp, 0);
+    cpu->sp += 3;
+    return val;
 }
 
 int cvemu_poke(lua_State *L) {
@@ -285,20 +293,44 @@ int cvemu_poke(lua_State *L) {
     return 0;
 }
 
+// The lua_State parameter is optional! This can be called from opcodes / contexts
+// where poking to devices makes sense, or it can be called from contexts where it
+// doesn't make sense, because setting the stack pointers to memory that overlaps
+// memory-mapped devices will cause undefined behavior.
 void cpu_poke(Cpu *cpu, unsigned int addr, unsigned char value, lua_State *L) {
     addr &= 0x01ffff;
 
-    for(int n = 0; n < cpu->num_devices; n++) {
-        if (cpu->devices[n].poke && addr >= cpu->devices[n].start && addr <= cpu->devices[n].end) {
-            lua_getiuservalue(L, 1, cpu->devices[n].poke);
-            lua_pushinteger(L, addr - cpu->devices[n].start);
-            lua_pushinteger(L, value);
-            lua_call(L, 2, 0);
-            return;
+    if(L) {
+        for(int n = 0; n < cpu->num_devices; n++) {
+            if (cpu->devices[n].poke && addr >= cpu->devices[n].start && addr <= cpu->devices[n].end) {
+                lua_getiuservalue(L, 1, cpu->devices[n].poke);
+                lua_pushinteger(L, addr - cpu->devices[n].start);
+                lua_pushinteger(L, value);
+                lua_call(L, 2, 0);
+                return;
+            }
         }
     }
 
     cpu->mem[addr] = value;
+}
+
+int cvemu_pc(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    lua_pushinteger(L, cpu->pc);
+    return 1;
+}
+
+int cvemu_sp(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    lua_pushinteger(L, cpu->sp);
+    return 1;
+}
+
+int cvemu_dp(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    lua_pushinteger(L, cpu->dp);
+    return 1;
 }
 
 int cvemu_peek(lua_State *L) {
@@ -308,30 +340,62 @@ int cvemu_peek(lua_State *L) {
     return 1;
 }
 
+// The lua_State parameter is optional! See cpu_poke
 unsigned char cpu_peek(Cpu *cpu, unsigned int addr, lua_State *L) {
     addr &= 0x01ffff;
 
-    for(int n = 0; n < cpu->num_devices; n++) {
-        if (cpu->devices[n].peek && addr >= cpu->devices[n].start && addr <= cpu->devices[n].end) {
-            lua_getiuservalue(L, 1, cpu->devices[n].peek);
-            lua_pushinteger(L, addr - cpu->devices[n].start);
-            lua_call(L, 1, 1);
-            int val = luaL_checkinteger(L, -1);
-            lua_pop(L, 1);
-            return val;
+    if(L) {
+        for(int n = 0; n < cpu->num_devices; n++) {
+            if (cpu->devices[n].peek && addr >= cpu->devices[n].start && addr <= cpu->devices[n].end) {
+                lua_getiuservalue(L, 1, cpu->devices[n].peek);
+                lua_pushinteger(L, addr - cpu->devices[n].start);
+                lua_call(L, 1, 1);
+                int val = luaL_checkinteger(L, -1);
+                lua_pop(L, 1);
+                return val;
+            }
         }
     }
 
     return cpu->mem[addr];
 }
 
+int cvemu_poke24(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    unsigned int addr = luaL_checkinteger(L, 2);
+    unsigned char value = luaL_checkinteger(L, 3) & 0xff;
+    cpu_poke24(cpu, addr, value, L);
+
+    return 0;
+}
+
+void cpu_poke24(Cpu *cpu, unsigned int addr, unsigned int value, lua_State *L) {
+    cpu_poke(cpu, addr, value & 0xff, L);
+    cpu_poke(cpu, addr + 1, (value >> 8) & 0xff, L);
+    cpu_poke(cpu, addr + 2, (value >> 16) & 0xff, L);
+}
+
+int cvemu_peek24(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    unsigned int addr = luaL_checkinteger(L, 2);
+    lua_pushinteger(L, cpu_peek24(cpu, addr, L));
+    return 1;
+}
+
+int cpu_peek24(Cpu *cpu, unsigned int addr, lua_State *L) {
+    int val = cpu_peek(cpu, addr, L);
+    val |= (cpu_peek(cpu, addr + 1, L) << 8);
+    val |= (cpu_peek(cpu, addr + 2, L) << 16);
+    return val;
+}
+
 int cvemu_print_stack(lua_State *L) {
     Cpu *cpu = checkCpu(L, 1);
-    if (cpu->data == STACK - 1) {
+    if (cpu->dp == cpu->bottom_dp) {
         printf("<stack empty>\n");
     } else {
-        for (int i = 0; i <= cpu->data; i++) {
-            printf("%d:\t0x%x\n", cpu->data-i, cpu->stack[i]);
+        for (int i = cpu->bottom_dp; i <= cpu->dp; i+=3) {
+            printf("%d:\t0x%x\n", i, cpu_peek24(cpu, i, 0));
         }
     }
     return 0;
@@ -450,11 +514,11 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         b = cpu_pop_data(cpu);
         break;
     case DUP:
-        cpu_push_data(cpu, cpu->stack[cpu->data]);
+        cpu_push_data(cpu, cpu_peek24(cpu, cpu->dp - 3, 0));
         break;
     case DUP2:
-        cpu_push_data(cpu, cpu->stack[cpu->data - 1]);
-        cpu_push_data(cpu, cpu->stack[cpu->data - 1]);
+        cpu_push_data(cpu, cpu_peek24(cpu, cpu->dp - 6, 0));
+        cpu_push_data(cpu, cpu_peek24(cpu, cpu->dp - 6, 0));
         break;
     case SWAP:
         b = cpu_pop_data(cpu);
@@ -464,10 +528,7 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         break;
     case PICK:
         b = cpu_pop_data(cpu);
-        cpu_push_data(cpu, cpu->stack[cpu->data - b]);
-        break;
-    case HEIGHT:
-        cpu_push_data(cpu, cpu->data + 1);
+        cpu_push_data(cpu, cpu_peek24(cpu, cpu-> dp - (b + 1) * 3, 0));
         break;
     case JMP:
         cpu->next_pc = cpu_pop_data(cpu);
@@ -527,23 +588,22 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
     case SETIV:
         cpu->int_vector = cpu_pop_data(cpu);
         break;
-    case FRAME:
-        cpu->stack[cpu->call - 2] = cpu_pop_data(cpu);
+    case SP:
+        cpu_push_data(cpu, cpu->sp + cpu_pop_data(cpu));
         break;
-    case LOCAL:
-        b = cpu_pop_data(cpu);
-        if (cpu->stack[cpu->call - 2] > b) { // If we have this many locals
-            cpu_push_data(cpu, cpu->stack[cpu->call - 3 - b]);
-        } else { // Default to pushing 0
-            cpu_push_data(cpu, 0);
-        }
+    case DP:
+        cpu_push_data(cpu, cpu->sp);
         break;
-    case SETLOCAL:
-        b = cpu_pop_data(cpu);
-        a = cpu_pop_data(cpu);
-        if ( cpu->stack[cpu->call - 2] > b) { // If we have this many locals
-            cpu->stack[cpu->call - 3 - b] = a;
-        }
+    case SETSDP:
+        cpu->dp = cpu_pop_data(cpu);
+        cpu->sp = cpu_pop_data(cpu);
+        break;
+    case INCSP:
+        cpu->sp += cpu_pop_data(cpu);
+        break;
+    case DECSP:
+        cpu->sp -= cpu_pop_data(cpu);
+        cpu_push_data(cpu, cpu->sp);
         break;
     }
     cpu->pc = cpu->next_pc;

@@ -366,16 +366,16 @@ cpu:install_device(200, 204, { peek = function(addr) return arr[addr+1] end })
 cpu:run()
 assert(cpu:pop_data() == (4 << 16) | (3 << 8) | 2)
 
--- -- Benchmark
--- local cpu = CPU.new()
--- Loader.forge(cpu, iterator([[
---   : count ( max -- )
---   0 local sum !
---   0 for n
---   sum n + sum!
---   loop ;
---   10000 count
--- ]]))
--- local start = os.clock()
--- cpu:run()
--- print(os.clock() - start)
+-- Benchmark
+local cpu = CPU.new()
+Loader.forge(cpu, iterator([[
+  : count ( max -- )
+  0 local sum !
+  0 for n
+  sum n + sum!
+  loop ;
+  10000 count
+]]))
+local start = os.clock()
+cpu:run()
+print(os.clock() - start)

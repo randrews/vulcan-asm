@@ -14,6 +14,13 @@ function iterator(str)
     end
 end
 
+-- Initial state
+local cpu = CPU.new()
+assert(cpu:peek(0) ~= nil)
+assert(cpu:peek(131071) ~= nil)
+assert(cpu:sp() == 1024)
+assert(cpu:dp() == 256)
+
 -- Pushing and then popping data
 local cpu = CPU.new()
 cpu:push_data(47)
@@ -34,21 +41,18 @@ assert(cpu:peek(0x01ffff) == 47)
 
 -- Running a simple binary
 local cpu = CPU.new()
-cpu:poke(256, 0x01) -- nop 1 arg
-cpu:poke(257, 0x02) -- 2
-cpu:poke(258, 0x05) -- add 1 arg
-cpu:poke(259, 0x02) -- 2
-cpu:poke(260, 29 << 2)
+cpu:poke(0x400, 0x01) -- nop 1 arg
+cpu:poke(0x401, 0x02) -- 2
+cpu:poke(0x402, 0x05) -- add 1 arg
+cpu:poke(0x403, 0x02) -- 2
+cpu:poke(0x404, opcodes.opcode_for('hlt') << 2) -- hlt
 cpu:run()
 assert(cpu:pop_data() == 4)
-
-print('tests past this are not working due to addressable stack changes')
-os.exit()
 
 -- Running simple ASM
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 2
     add 2
     hlt
@@ -56,10 +60,23 @@ Loader.asm(cpu, iterator([[
 cpu:run()
 assert(cpu:pop_data() == 4)
 
+-- Stack frame structure
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 1024
+    call blah
+blah: push 3
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 3)
+assert(cpu:sp() == 1024 - 3)
+assert(cpu:peek24(cpu:sp()) == 0x400 + 4)
+
 -- Comparisons
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 2
     gt 1
     push 2
@@ -76,7 +93,7 @@ assert(cpu:pop_data() == 1)
 -- Shifts
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 1
     lshift 3
     push 8
@@ -96,7 +113,7 @@ Loader.asm(cpu, iterator([[
     .org 100
 blah: push 3
     hlt
-    .org 256
+    .org 0x400
     call blah
 ]]))
 cpu:run()
@@ -105,7 +122,7 @@ assert(cpu:pop_data() == 3)
 -- Returning from calls
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 3
     call blah
     hlt
@@ -118,7 +135,7 @@ assert(cpu:pop_data() == 6)
 -- Branching
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 3
     brz @two
     push 20
@@ -131,7 +148,7 @@ assert(cpu:pop_data() == 20)
 
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 0
     brz @two
     push 20
@@ -145,7 +162,7 @@ assert(cpu:pop_data() == 10)
 -- Loads
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     load 1234
     load16 1234
     load24 1234
@@ -162,7 +179,7 @@ assert(cpu:pop_data() == 1)
 -- Stores
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 0x1234
     store 1000
     push 0x123456
@@ -186,14 +203,13 @@ assert(cpu:peek(3002) == 0xaa)
 -- Getting frame locals
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     call blah
-blah: frame 3
-    push 7
-    setlocal 1
-    push 2
-    setlocal 0
-    local 1
+blah: push 7
+    decsp 3
+    store24
+    sp 0
+    load24
     mul 2
     hlt
 ]]))
@@ -203,33 +219,45 @@ assert(cpu:pop_data() == 14)
 -- Top frame locals
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
-    frame 2
+    .org 0x400
     push 5
-    setlocal 1
+    decsp 6
+    add 3
+    store24
     push 12
-    local 1
+    sp 3
+    load24
     hlt
 ]]))
 cpu:run()
 assert(cpu:pop_data() == 5)
 assert(cpu:pop_data() == 12)
 
--- Out-of-range frame locals
+-- Calls after locals
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
-    frame 3
-    local 7
+    .org 0x400
+    push 5
+    decsp 6
+    add 3
+    store24
+    call blah
+blah: push 3
+    decsp 6
+    add 3
+    store24
     hlt
 ]]))
 cpu:run()
-assert(cpu:pop_data() == 0)
+assert(cpu:sp() == 1024 - 15)
+assert(cpu:peek24(1024 - 3) == 5) -- First local
+assert(cpu:peek24(1024 - 9) == 0x400 + 11) -- Skip a local, the return address
+assert(cpu:peek24(1024 - 12) == 3) -- First local in the 2nd frame
 
 -- Comparing values
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 10
     gt 20
     push 20
@@ -249,7 +277,7 @@ assert(cpu:pop_data() == 0) -- 10 > 20 ?
 -- Comparing values arithmetically
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 10
     mul 0xffffff
     agt 20
@@ -275,7 +303,7 @@ assert(cpu:pop_data() == 0) -- -10 > 20 ?
 -- Logical not
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     not 10
     not 0
     hlt
@@ -283,20 +311,6 @@ Loader.asm(cpu, iterator([[
 cpu:run()
 assert(cpu:pop_data() ~= 0)
 assert(cpu:pop_data() == 0)
-
--- Benchmark
-local cpu = CPU.new()
-Loader.forge(cpu, iterator([[
-  : count ( max -- )
-  local sum
-  0 for n
-  sum n + sum!
-  loop ;
-  10000 count
-]]))
-local start = os.clock()
-cpu:run()
-print(os.clock() - start)
 
 -- Device reset hooks
 local arr = {}
@@ -310,7 +324,7 @@ assert(cpu:peek(100) == 100)
 local arr = {}
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 12
     store 200
     push 15
@@ -328,7 +342,7 @@ assert(arr[2] == 15)
 local arr = {1, 2, 3, 4, 5}
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     push 0
     store 201
     push 0
@@ -347,7 +361,7 @@ assert(arr[5] == 0)
 local arr = {1, 2, 3, 4, 5}
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     load24 201
     hlt
 ]]))
@@ -358,7 +372,7 @@ assert(cpu:pop_data() == (4 << 16) | (3 << 8) | 2)
 -- Flags
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
-    .org 256
+    .org 0x400
     inton
     hlt
 ]]))
@@ -367,3 +381,17 @@ assert(not h and not i)
 cpu:run()
 h, i = cpu:flags()
 assert(h and i)
+
+-- Benchmark
+local cpu = CPU.new()
+Loader.forge(cpu, iterator([[
+  : count ( max -- )
+  0 local sum !
+  0 for n
+  sum n + sum!
+  loop ;
+  10000 count
+]]))
+local start = os.clock()
+cpu:run()
+print(os.clock() - start)

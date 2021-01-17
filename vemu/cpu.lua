@@ -60,8 +60,6 @@ function CPU:pop_data()
     return self:peek24(self.dp)
 end
 
--- Pops a frame off the stock and returns the return address
--- from that frame
 function CPU:pop_call()
     local val = self:peek24(self.sp)
     self.sp = self.sp + 3
@@ -121,7 +119,7 @@ end
 function CPU:print_stack()
     if self.dp == self.bottom_dp then print('<stack empty>')
     else
-        for i = self.dp, self.bottom_dp, -3 do
+        for i = self.bottom_dp, self.dp, 3 do
             print(string.format('0x%x:\t0x%x', i, self:peek24(i)))
         end
     end

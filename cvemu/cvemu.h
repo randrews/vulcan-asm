@@ -18,15 +18,15 @@ typedef struct Cpu {
     int num_devices;
     int num_hooks;
 
-    int *stack; // initialized to zeroes
-
     char *mem; // Initialized to rand
 
     int int_enabled; // false
     int int_vector; // zero
 
-    int pc; // 256
-    int call, data; // STACK - 1
+    int pc; // 1024, Program counter
+    int dp; // 256, Data stack pointer (0x00-0xff reserved, always points at low byte of top of stack)
+    int bottom_dp; // 256, Exists only for debugging; set this in a setdp instruction
+    int sp; // 1024, Return stack pointer (256 cells higher)
     int halted; // false
     int next_pc; // 0
     // Last entry of stack is set to STACK - 1
