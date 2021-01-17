@@ -2,8 +2,9 @@ SDL = require('SDL')
 SDL.image = require('SDL.image')
 local Display = require('vemu.display')
 local logger = require('vemu.logger')
-local CPU = require('vemu.cpu')
---local CPU = require('cvemu')
+--local CPU = require('vemu.cpu')
+package.cpath = package.cpath .. ';./cvemu/?.so'
+local CPU = require('cvemu')
 local Loader = require('vemu.loader')
 
 local random_seed = os.time()
