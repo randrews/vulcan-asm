@@ -5,9 +5,6 @@
 #include <lualib.h>
 #include <lauxlib.h>
 
-// The size of the stack in 24-bit words
-#define STACK 2048
-
 // The size of main memory in bytes
 #define MEM (128 * 1024)
 

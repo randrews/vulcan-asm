@@ -2,11 +2,13 @@ local VASM = require('vasm.vasm')
 local Forge = require('forge.forge')
 
 function load_asm(cpu, iterator)
-    local bytes, start = VASM.assemble(iterator)
+    local bytes, start, address_lines, symbols = VASM.assemble(iterator, true)
 
     for offset, byte in pairs(bytes) do
         cpu:poke(start + offset, byte)
     end
+
+    return symbols
 end
 
 function load_forge(cpu, iterator)
