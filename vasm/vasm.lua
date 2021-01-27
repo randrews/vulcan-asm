@@ -458,13 +458,22 @@ end
 -- ## Assemble function
 -- Bring everything else together to go from an iterator on lines of code, to a final array
 -- of bytes ready to be written to something (or interpreted by a CPU)
-function assemble(iterator)
+function assemble(iterator, debuginfo)
     local lines = parse_assembly(iterator)
     local symbols = solve_equs(lines)
     measure_instructions(lines, symbols)
     place_labels(lines, symbols)
     calculate_args(lines, symbols)
-    return generate_code(lines, symbols['$start'], symbols['$end']), symbols['$start']
+
+    if debuginfo then
+        local address_lines = {}
+        for _, line in ipairs(lines) do
+            address_lines[line.address] = line.line
+        end
+        return generate_code(lines, symbols['$start'], symbols['$end']), symbols['$start'], address_lines
+    else
+        return generate_code(lines, symbols['$start'], symbols['$end']), symbols['$start']
+    end
 end
 
 return {

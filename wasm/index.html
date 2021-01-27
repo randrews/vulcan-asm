@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script type="text/javascript" src="jsEditor.js"></script>
+    <script type="text/javascript" src="emulator.js"></script>
+    <link rel="stylesheet" href="jsEditor.css"></link>
+  </head>
+
+  <body>
+    <div class="container editor-container">
+      <div class="controls">
+        <a class="button reset">Reset</a>
+        <a class="button step">Step</a>
+      </div>
+      <div class="editor" contenteditable="true" spellcheck="false">
+        <div>.org 0x400 ; start here</div>
+        <div>    push 1</div>
+        <div>loop:</div>
+        <div>    dup</div>
+        <div>    store 0x02 ; write it to output</div>
+        <div>    add 1</div>
+        <div>    dup</div>
+        <div>    gt 10 ; have we done it 10 times yet?</div>
+        <div>    brz @loop</div>
+        <div>    hlt</div>
+      </div>
+    </div>
+
+    <div class="container memory-container">
+      <div class="controls">
+        <a class="button hex-dec">HEX/dec</a>
+      </div>
+      <div class="stack-display"></div>
+      <div class="memory-display"></div>
+    </div>
+
+    <script type='text/javascript'>
+     const $ = function(s) { return document.querySelector(s) }
+     const rom = {"start":1024,"binary":[1,76,129,2,5,1,76,45,10,111,248,255,255,112],"lines":{"1024":2,"1032":8,"1026":4,"1027":5,"1034":9,"1029":6,"1038":10,"1031":7}}
+     let memMode = 'hex'
+     const emulator = {
+       peek: Module.cwrap('peek', 'number', ['number']),
+       poke: Module.cwrap('poke', null, ['number', 'number']),
+       step: Module.cwrap('step', null, []),
+       reset: Module.cwrap('reset', null, []),
+       loadROM: Module.cwrap('loadROM', null, ['array', 'number']),
+       stackSize: Module.cwrap('stackSize', 'number', []),
+       getStack: Module.cwrap('getStack', 'number', ['number'])
+     }
+
+     $('.reset').onclick = function() {
+       emulator.loadROM(rom.binary, rom.binary.length)
+       emulator.reset()
+       initMemoryDisplay()
+       initStackDisplay()
+     }
+
+     $('.step').onclick = function() {
+       console.log('step')
+       emulator.step()
+     }
+
+     $('.hex-dec').onclick = function() {
+       memMode = (memMode == 'hex' ? 'dec' : 'hex')
+       $('.hex-dec').innerText = (memMode == 'hex' ? 'HEX/dec' : 'hex/DEC')
+       initMemoryDisplay()
+       initStackDisplay()
+     }
+
+     editor($('.editor'))
+
+     const hex = (num, len) => {
+       let h = num.toString(16)
+       while (h.length < len) h = '0' + h
+       return '0x' + h
+     }
+
+     function initStackDisplay() {
+       const max = emulator.stackSize()
+       const cells = []
+       for(var n = 0; n < max; n++) {
+         if (memMode == 'hex') {
+           cells.push(`<tr><td>${hex(emulator.getStack(n),6)}</td></tr>`)
+         } else {
+           cells.push(`<tr><td>${emulator.getStack(n)}</td></tr>`)
+         }
+       }
+
+       $('.stack-display').innerHTML = `<table>${cells.join('')}</table>`
+     }
+
+     function initMemoryDisplay() {
+       const rows = []
+       for(var n = 0; n < 16; n++) {
+         const b = emulator.peek(n)
+         if (memMode == 'hex') {
+           rows.push(`<tr><td class="address">${hex(n,4)}</td><td class="cell" data-address="${n}" contenteditable="true">${hex(b,2)}</td></tr>`)
+         } else {
+           rows.push(`<tr><td class="address">${n}</td><td class="cell" data-address="${n}" contenteditable="true">${b}</td></tr>`)
+         }
+       }
+       $('.memory-display').innerHTML = `<table>${rows.join('')}</table>`
+
+       const listener = e => {
+         // enter, tab, and esc
+         if (!e.keyCode || e.keyCode == 13) {
+           const el = e.target
+           console.log(`setting ${el.attributes['data-address'].value} to ${el.innerText}`)
+           el.blur()
+           e.preventDefault()
+         }
+       }
+
+       document.querySelectorAll('.memory-display .cell').forEach(el => el.addEventListener('keypress', listener))
+       document.querySelectorAll('.memory-display .cell').forEach(el => el.addEventListener('blur', listener))
+     }
+
+     Module.onRuntimeInitialized = () => {
+       initMemoryDisplay()
+       initStackDisplay()
+     }
+    </script>
+  </body>
+</html>
