@@ -9,10 +9,16 @@
   </head>
 
   <body>
-    <div class="container editor-container">
-      <div class="controls">
+    <div class="container">
+      <div class="left-controls controls">
         <a class="button reset">Reset</a>
         <a class="button step">Step</a>
+      </div>
+      <div class="right-controls controls">
+        <a class="button hex-dec">HEX/dec</a>
+        <a class="button mem-prev">&lt;-</a>
+        <span class="mem-page" contenteditable="true"></span>
+        <a class="button mem-next">-&gt;</a>
       </div>
       <div class="editor" contenteditable="true" spellcheck="false">
         <div>.org 0x400 ; start here</div>
@@ -26,40 +32,62 @@
         <div>    brz @loop</div>
         <div>    hlt</div>
       </div>
-    </div>
-
-    <div class="container memory-container">
-      <div class="controls">
-        <a class="button hex-dec">HEX/dec</a>
-      </div>
-      <div class="stack-display"></div>
-      <div class="memory-display"></div>
+      <div class="stack-label">Data stack</div>
+      <div class="return-label">Return stack</div>
+      <div class="memory-label">Memory</div>
+      <div class="stack-display divider"></div>
+      <div class="return-display divider"></div>
+      <div class="memory-display divider"></div>
     </div>
 
     <script type='text/javascript'>
      const $ = function(s) { return document.querySelector(s) }
-     const rom = {"start":1024,"binary":[1,76,129,2,5,1,76,45,10,111,248,255,255,112],"lines":{"1024":2,"1032":8,"1026":4,"1027":5,"1034":9,"1029":6,"1038":10,"1031":7}}
+     const $$ = function(s) { return document.querySelectorAll(s) }
+     const rom = {"start":1024,"binary":[1,1,76,129,2,5,1,76,45,10,111,248,255,255,112],"lines":{"1024":2,"1032":8,"1026":4,"1027":5,"1034":9,"1029":6,"1038":10,"1031":7}}
      let memMode = 'hex'
-     const emulator = {
-       peek: Module.cwrap('peek', 'number', ['number']),
-       poke: Module.cwrap('poke', null, ['number', 'number']),
-       step: Module.cwrap('step', null, []),
-       reset: Module.cwrap('reset', null, []),
-       loadROM: Module.cwrap('loadROM', null, ['array', 'number']),
-       stackSize: Module.cwrap('stackSize', 'number', []),
-       getStack: Module.cwrap('getStack', 'number', ['number'])
+     let currentPage = 0
+
+     const emulator = {}
+
+     function initEmulator() {
+       emulator.peek = addr => Module.peek(Number(addr))
+       emulator.poke = (addr, val) => Module.poke(Number(addr), Number(val))
+       emulator.step = Module.step
+       emulator.reset = Module.reset
+       emulator.loadROM = rom => {
+         let addr = rom.start
+         rom.binary.forEach(b => {
+           emulator.poke(addr, Number(b))
+           addr++
+         })
+       }
+       emulator.stackSize = Module.stackSize,
+       emulator.getStack = idx => Module.getStack(Number(idx)),
+       emulator.returnSize = Module.returnSize,
+       emulator.getReturn = idx => Module.getReturn(Number(idx)),
+       emulator.getPC = Module.getPC
+     }
+
+     function highlightLine() {
+       const old = $('.editor .line.highlighted')
+       if(old) { old.classList.remove('highlighted') }
+       const lineNum = rom.lines[emulator.getPC()]
+       $$('.editor .line')[lineNum - 1].classList.add('highlighted')
      }
 
      $('.reset').onclick = function() {
-       emulator.loadROM(rom.binary, rom.binary.length)
+       emulator.loadROM(rom)
        emulator.reset()
        initMemoryDisplay()
        initStackDisplay()
+       highlightLine()
      }
 
      $('.step').onclick = function() {
-       console.log('step')
-       emulator.step()
+       emulator.step()  
+       initMemoryDisplay()
+       initStackDisplay() 
+       highlightLine()
      }
 
      $('.hex-dec').onclick = function() {
@@ -67,6 +95,7 @@
        $('.hex-dec').innerText = (memMode == 'hex' ? 'HEX/dec' : 'hex/DEC')
        initMemoryDisplay()
        initStackDisplay()
+       updateMemoryPager()
      }
 
      editor($('.editor'))
@@ -91,33 +120,82 @@
        $('.stack-display').innerHTML = `<table>${cells.join('')}</table>`
      }
 
-     function initMemoryDisplay() {
-       const rows = []
-       for(var n = 0; n < 16; n++) {
-         const b = emulator.peek(n)
-         if (memMode == 'hex') {
-           rows.push(`<tr><td class="address">${hex(n,4)}</td><td class="cell" data-address="${n}" contenteditable="true">${hex(b,2)}</td></tr>`)
-         } else {
-           rows.push(`<tr><td class="address">${n}</td><td class="cell" data-address="${n}" contenteditable="true">${b}</td></tr>`)
-         }
-       }
-       $('.memory-display').innerHTML = `<table>${rows.join('')}</table>`
-
-       const listener = e => {
+     function cellEditCallback(onEdit) {
+       return e => {
          // enter, tab, and esc
          if (!e.keyCode || e.keyCode == 13) {
            const el = e.target
-           console.log(`setting ${el.attributes['data-address'].value} to ${el.innerText}`)
+           onEdit(el, el.innerText)
            el.blur()
            e.preventDefault()
          }
        }
+     }
+
+     function initMemoryDisplay() {
+       const rows = []
+       for(var n = 0; n < 256; n++) {
+         const a = currentPage * 256 + n
+         const b = emulator.peek(a)
+         if (memMode == 'hex') {
+           rows.push(`<tr><td class="address">${hex(a,4)}</td><td class="cell" data-address="${a}" contenteditable="true">${hex(b,2)}</td></tr>`)
+         } else {
+           rows.push(`<tr><td class="address">${a}</td><td class="cell" data-address="${a}" contenteditable="true">${b}</td></tr>`)
+         }
+       }
+       $('.memory-display').innerHTML = `<table>${rows.join('')}</table>`
+
+       const listener = cellEditCallback((el, newText) => {
+         const newValue = parseInt(newText)
+         if(isNaN(newValue) || newValue < 0 || newValue > 0xff) {
+           initMemoryDisplay()
+         } else {
+           const a = el.attributes['data-address'].value
+           emulator.poke(a, newValue)
+         }
+         //console.log(`setting ${el.attributes['data-address'].value} to ${newText}`)
+       })
 
        document.querySelectorAll('.memory-display .cell').forEach(el => el.addEventListener('keypress', listener))
        document.querySelectorAll('.memory-display .cell').forEach(el => el.addEventListener('blur', listener))
      }
 
+     function initMemoryPager() {
+       const listener = cellEditCallback((el, newPage) => {
+         if (isNaN(parseInt(newPage))) {
+           updateMemoryPager()
+         } else {
+           currentPage = parseInt(newPage)
+           initMemoryDisplay()
+         }
+       })
+
+       $('.mem-page').addEventListener('keypress', listener)
+       $('.mem-page').addEventListener('blur', listener)
+       $('.mem-next').onclick = () => {
+         if (currentPage < 0xff) {
+           currentPage++
+           updateMemoryPager()
+           initMemoryDisplay()
+         }
+       }
+       $('.mem-prev').onclick = () => {
+         if (currentPage > 0) {
+           currentPage--
+           updateMemoryPager()
+           initMemoryDisplay()
+         }
+       }
+       updateMemoryPager()
+     }
+
+     function updateMemoryPager() {
+       $('.mem-page').innerText = (memMode == 'hex' ? hex(currentPage, 2) : currentPage)
+     }
+
      Module.onRuntimeInitialized = () => {
+       initEmulator()
+       initMemoryPager()
        initMemoryDisplay()
        initStackDisplay()
      }

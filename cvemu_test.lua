@@ -159,6 +159,24 @@ two: push 10
 cpu:run()
 assert(cpu:pop_data() == 10)
 
+-- Backwards jumps
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+.org 0x400 ; start here
+    push 1
+loop:
+    dup
+    store 0x02 ; write it to output
+    add 1
+    dup
+    gt 10 ; have we done it 10 times yet?
+    brz @loop
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 11)
+assert(cpu:peek(2) == 10)
+
 -- Loads
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[

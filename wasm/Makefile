@@ -1,4 +1,5 @@
-OPTS=-s EXPORTED_FUNCTIONS='["_loadROM", "_peek", "_poke", "_step", "_reset", "_stackSize", "_getStack"]' -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]'
+#OPTS=-s EXPORTED_FUNCTIONS='["_loadROM", "_peek", "_poke", "_step", "_reset", "_stackSize", "_getStack"]' -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]'
+OPTS=--bind
 HEADERS=Vulcan.h
 
 all: emulator.js

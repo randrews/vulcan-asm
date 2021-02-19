@@ -1,20 +1,7 @@
 #include "Vulcan.h"
+#include <emscripten/bind.h>
 
 Vulcan cpu;
-
-extern "C" {
-    void loadROM(const unsigned char *rom, unsigned int length);
-    unsigned char peek(unsigned int addr);
-    void poke(unsigned int addr, unsigned char value);
-    void step();
-    void reset();
-    int stackSize();
-    int getStack(int index);
-}
-
-void loadROM(const unsigned char *rom, unsigned int length) {
-    cpu.loadROM(0x400, rom, length);
-}
 
 void step() {
     cpu.tick();
@@ -33,9 +20,34 @@ void reset() {
 }
 
 int stackSize() {
-    return 10;
+    return cpu.stackSize();
 }
 
 int getStack(int index) {
-    return index * 3 + 1;
+    return cpu.getStack(index);
+}
+
+int returnSize() {
+    return cpu.returnSize();
+}
+
+int getReturn(int index) {
+    return cpu.getReturn(index);
+}
+
+unsigned int getPC() {
+    return cpu.getPC();
+}
+
+using namespace emscripten;
+EMSCRIPTEN_BINDINGS(emulator) {
+    function("peek", &peek);
+    function("poke", &poke);
+    function("step", &step);
+    function("reset", &reset);
+    function("stackSize", &stackSize);
+    function("getStack", &getStack);
+    function("returnSize", &returnSize);
+    function("getReturn", &getReturn);
+    function("getPC", &getPC);
 }

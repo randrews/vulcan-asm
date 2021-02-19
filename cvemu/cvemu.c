@@ -544,7 +544,7 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         cpu->next_pc = cpu_pop_call(cpu);
         break;
     case BRZ:
-        b = cpu_pop_data(cpu);
+        b = to_signed(cpu_pop_data(cpu));
         if (!cpu_pop_data(cpu)) { cpu->next_pc = cpu->pc + b; }
         break;
     case HLT:

@@ -13,6 +13,7 @@ private:
     int dp; // 256, Data stack pointer (0x00-0xff reserved, always points at low byte of top of stack)
     int sp; // 1024, Return stack pointer (256 cells higher)
     int bottom_dp; // 256, Exists only for debugging; set this in a setdp instruction
+    int top_sp; // 1024, Exists only for debugging; set this in a setdp instruction
     int halted; // false
     int next_pc; // 0
 
@@ -40,4 +41,10 @@ public:
     void loadROM(unsigned int start, const unsigned char *rom, unsigned int length);
     void reset();
     void tick();
+
+    int getPC();
+    int stackSize();
+    int getStack(int index);
+    int returnSize();
+    int getReturn(int index);
 };

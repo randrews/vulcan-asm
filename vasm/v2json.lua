@@ -2,7 +2,7 @@ vasm = require('vasm.vasm')
 
 local code, start, address_lines = vasm.assemble(io.lines(), true)
 
-local binary = '[' .. table.concat(code,',') .. ']'
+local binary = '[' .. code[0] .. ',' .. table.concat(code,',') .. ']'
 
 local al_hash = {}
 for a, l in pairs(address_lines) do
