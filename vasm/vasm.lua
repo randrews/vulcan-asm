@@ -34,6 +34,12 @@ function table:reduce(fn, sum)
     return sum
 end
 
+-- Used for an error handler that doesn't indicate position (because the cause is
+-- in the source, not the assembler)
+function input_error(err)
+    error(err, 0)
+end
+
 -- # Assembly parser
 
 -- Put this all in a function so we don't have a bunch of
@@ -162,7 +168,7 @@ function parse_assembly(iterator)
         local ast = statement:match(line)
 
         if ast == nil then
-            error('Parse error on line ' .. line_num .. ': ' .. string.format('%q', line))
+            input_error('Parse error on line ' .. line_num .. ': ' .. string.format('%q', line))
         end
 
         if #ast > 0 then
@@ -172,15 +178,15 @@ function parse_assembly(iterator)
             end
 
             if obj.argument and obj.argument[1] == 'string' and obj.directive ~= '.db' then
-                error('String argument outside .db directive on line ' .. line_num)
+                input_error('String argument outside .db directive on line ' .. line_num)
             end
 
             if obj.directive == '.equ' and (obj.argument == nil or obj.label == nil) then
-                error('.equ directive missing label or argument on line' .. line_num)
+                input_error('.equ directive missing label or argument on line' .. line_num)
             end
 
             if obj.directive == '.org' and obj.argument == nil then
-                error('.org directive missing argument on line ' .. line_num)
+                input_error('.org directive missing argument on line ' .. line_num)
             end
 
             table.insert(lines, obj)
@@ -224,12 +230,12 @@ function evaluate(expr, symbols, start_address)
         return expr
     elseif type(expr) == 'string' then
         if expr:sub(1,1) == '@' then
-            if not start_address then error('Cannot resolve relative label') end
+            if not start_address then input_error('Cannot resolve relative label') end
             local label_name = expr:sub(2)
             if symbols[label_name] then return symbols[label_name] - start_address
-            else error('Symbol not defined: ' .. label_name) end
+            else input_error('Symbol not defined: ' .. label_name) end
         elseif symbols[expr] then return symbols[expr]
-        else error('Symbol not defined: ' .. expr) end
+        else input_error('Symbol not defined: ' .. expr) end
     elseif expr[1] == 'expr' or expr[1] == 'term' then
         local val = evaluate(expr[2], symbols, start_address)
 
@@ -266,7 +272,7 @@ function evaluate(expr, symbols, start_address)
         end
         return string_bytes
     else
-        error('Unrecognized argument: type "' .. type(expr) .. '"')
+        input_error('Unrecognized argument: type "' .. type(expr) .. '"')
     end
 end
 
@@ -281,7 +287,7 @@ function solve_equs(lines)
         if line.directive == '.equ' then
             local success, ret = pcall(evaluate, line.argument, symbols)
             if success then symbols[line.label] = ret
-            else error('Cannot resolve .equ on line ' .. line.line .. ': ' .. ret) end
+            else input_error('Cannot resolve .equ on line ' .. line.line .. ': ' .. ret) end
         end
     end
 
@@ -358,7 +364,7 @@ function place_labels(lines, symbols)
             if success then
                 address = ret
             else
-                error('Unable to resolve .org on line ' .. line.line .. ': ' .. ret)
+                input_error('Unable to resolve .org on line ' .. line.line .. ': ' .. ret)
             end
         end
 
@@ -389,7 +395,7 @@ function calculate_args(lines, symbols)
             if success then
                 line.argument = ret
             else
-                error('Unable to evaluate argument on line ' .. line.line .. ': ' .. ret)
+                input_error('Unable to evaluate argument on line ' .. line.line .. ': ' .. ret)
             end
         end
     end
@@ -442,7 +448,7 @@ function generate_code(lines, start_addr, end_addr)
                 mem[line.address - start_addr + 2] = (line.argument >> 16) & 0xff
             end
         elseif line.opcode then
-            local instruction = opcodes.opcode_for(line.opcode) or error('Unrecognized opcode on line ' .. line.line .. ': ' .. line.opcode)
+            local instruction = opcodes.opcode_for(line.opcode) or input_error('Unrecognized opcode on line ' .. line.line .. ': ' .. line.opcode)
 
             instruction = (instruction << 2) + (line.length - 1)
             mem[line.address - start_addr] = instruction

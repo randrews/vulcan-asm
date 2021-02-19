@@ -317,6 +317,13 @@ function CPU:brz()
     end
 end
 
+function CPU:brnz()
+    local offset = self:pop_data()
+    if self:pop_data() ~= 0 then
+        self.next_pc = self.pc + offset
+    end
+end
+
 function CPU:gt()
     local b = self:pop_data()
     local a = self:pop_data()

@@ -1,0 +1,15 @@
+string_pattern = '"' str:([^\\"] / escape)* '"' { return ['string', ...str] }
+escape = '\\' esc:[trns0"\\] { return '\\' + esc }
+directive = '.org' / '.equ' / '.db'
+opcode = "arshift" / "store16" / "store24" / "load24" / "lshift" / "rshift" / "load16" / "setsdp" / "intoff" / "incsp" / "store" / "inton" / "decsp" / "setiv" / "pick" / "call" / "load" / "swap" / "jmpr" / "2dup" / "push" / "rand" / "mod" / "and" / "pop" / "div" / "sub" / "mul" / "nop" / "add" / "xor" / "dup" / "brz" / "jmp" / "hlt" / "agt" / "alt" / "ret" / "not" / "dp" / "lt" / "gt" / "sp" / "or"
+relative_label = '@' label:label { return '@' + label }
+label = first:[a-zA-Z_$] rest:[a-zA-Z_$0-9]* { return first + rest.join('') }
+
+number = dec_number / hex_number / bin_number / dec_zero
+dec_number = first:[1-9] rest:([0-9]*) { return parseInt(first + rest.join('')) }
+hex_number = '0x' digits:[0-9a-fA-F]+ { return parseInt(digits.join(''), 16) }
+bin_number = '0b' digits:[01]+ { return parseInt(digits.join(''), 2) }
+dec_zero = '0' { return 0 }
+
+space = [ \t]*
+comment = ";" .*

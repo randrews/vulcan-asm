@@ -544,8 +544,12 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         cpu->next_pc = cpu_pop_call(cpu);
         break;
     case BRZ:
-        b = cpu_pop_data(cpu);
+        b = to_signed(cpu_pop_data(cpu));
         if (!cpu_pop_data(cpu)) { cpu->next_pc = cpu->pc + b; }
+        break;
+    case BRNZ:
+        b = to_signed(cpu_pop_data(cpu));
+        if (cpu_pop_data(cpu)) { cpu->next_pc = cpu->pc + b; }
         break;
     case HLT:
         cpu->halted = 1;
@@ -604,6 +608,10 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
     case DECSP:
         cpu->sp -= cpu_pop_data(cpu);
         cpu_push_data(cpu, cpu->sp);
+        break;
+    case DEBUG:
+        cvemu_print_stack(L);
+        printf("--------------------\n");
         break;
     }
     cpu->pc = cpu->next_pc;

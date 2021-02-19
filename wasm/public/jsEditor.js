@@ -82,5 +82,6 @@ const editor = (el, highlight = vulcanSyntax, tab = '    ') => {
       highlight(el);
       setCaret(pos);
     }
+    setSynced(false)
   });
 };

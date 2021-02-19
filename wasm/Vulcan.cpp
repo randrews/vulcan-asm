@@ -1,5 +1,6 @@
 #include "Vulcan.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "../util/opcodes.h"
 
@@ -28,6 +29,7 @@ Vulcan& Vulcan::operator= (const Vulcan& other) {
         dp = other.dp;
         sp = other.sp;
         bottom_dp = other.bottom_dp;
+        top_sp = other.top_sp;
         halted = other.halted;
         next_pc = other.next_pc;
     }
@@ -66,6 +68,7 @@ void Vulcan::loadROM(unsigned int start, const unsigned char *rom, unsigned int 
 void Vulcan::reset() {
     dp = 256; // Data stack pointer (0x00-0xff reserved, always points at low byte of top of stack)
     bottom_dp = 256; // Exists only for debugging; set this in a setdp instruction
+    top_sp = 1024; // Exists only for debugging; set this in a setdp instruction
     sp = 1024; // Return stack pointer (256 cells higher)
     pc = 1024; // Program counter
     halted = 0; // Flag to stop execution
@@ -135,6 +138,7 @@ Opcode Vulcan::fetch() {
 
     if (opcode != HLT) {
         next_pc = pc + arg_length + 1;
+        printf("pc: %d arg: %d next: %d\n", pc, arg_length, next_pc);
     }
 
     return opcode;
@@ -252,8 +256,12 @@ void Vulcan::execute(Opcode instruction) {
         next_pc = pop_call();
         break;
     case BRZ:
-        b = pop_data();
+        b = to_signed(pop_data());
         if (!pop_data()) { next_pc = pc + b; }
+        break;
+    case BRNZ:
+        b = to_signed(pop_data());
+        if (pop_data()) { next_pc = pc + b; }
         break;
     case HLT:
         halted = 1;
@@ -305,6 +313,8 @@ void Vulcan::execute(Opcode instruction) {
     case SETSDP:
         dp = pop_data();
         sp = pop_data();
+        bottom_dp = dp;
+        top_sp = sp;
         break;
     case INCSP:
         sp += pop_data();
@@ -316,6 +326,30 @@ void Vulcan::execute(Opcode instruction) {
     }
     pc = next_pc;
 }
+
+///////////////////////////////////////////////////////////
+
+int Vulcan::getPC() {
+    return pc;
+}
+
+int Vulcan::stackSize() {
+    return (dp - bottom_dp) / 3;
+}
+
+int Vulcan::getStack(int index) {
+    return peek24(dp - 3 - index * 3);
+}
+
+int Vulcan::returnSize() {
+    return (top_sp - sp) / 3;
+}
+
+int Vulcan::getReturn(int index) {
+    return peek24(sp + index * 3);
+}
+
+///////////////////////////////////////////////////////////
 
 int to_signed(unsigned int word) {
     if (word & 0x800000) {
