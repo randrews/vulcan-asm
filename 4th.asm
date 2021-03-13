@@ -1,30 +1,53 @@
 .org 0x400 ; start here
-    jmp start
+    setiv oninterrupt
+    inton
+stop:
+    hlt
 
 
 
-; Print a string of a certain length
-nprint: ; ( addr len -- )
-    store24 nprint_len
-    push 0
-    store24 nprint_off
-nprint_loop:
-    load24 nprint_off
-    load24 nprint_len
-    sub
-    brz @nprint_done
+
+;;; ; Print a string of a certain length
+;;; nprint: ; ( addr len -- )
+;;;     store24 nprint_len
+;;;     push 0
+;;;     store24 nprint_off
+;;; nprint_loop:
+;;;     load24 nprint_off
+;;;     load24 nprint_len
+;;;     sub
+;;;     brz @nprint_done
+;;;     dup
+;;;     load24 nprint_off
+;;;     add
+;;;     load
+;;;     store 0x02
+;;;     load24 nprint_off
+;;;     add 1
+;;;     store24 nprint_off
+;;;     jmpr @nprint_loop
+;;; nprint_done:
+;;;     pop
+;;;     ret
+
+
+
+dupnz: ; if TOS is nonzero, dup it
     dup
-    load24 nprint_off
-    add
-    load
-    store 0x02
-    load24 nprint_off
-    add 1
-    store24 nprint_off
-    jmpr @nprint_loop
-nprint_done:
-    pop
+    brz @dupnz_done
+    dup
+dupnz_done:
     ret
+
+
+
+dupz: ; if TOS is zero, dup it
+    dup
+    brnz @dupz_done
+    dup
+dupz_done:
+    ret
+
 
 
 
@@ -32,19 +55,18 @@ nprint_done:
 print: ; ( addr -- )
     dup
     load
-    dup
+    call dupnz
     brz @print_done
     store 0x02
     add 1
     jmpr @print
 print_done:
     pop
-    pop
     ret
 
 
 
-; Print a carraige return
+; Print a carriage return
 cr: ; ( -- )
     push 10
     store 0x02
@@ -60,8 +82,7 @@ streq: ; ( str1 str2 -- bool )
     swap
     load
     sub
-    not
-    brz @streq_done_ne
+    brnz @streq_done_ne
     ; they're both equal, is either one zero?
     dup
     load
@@ -79,6 +100,43 @@ streq_done_ne:
     pop
     pop
     ret 0
+
+
+
+
+; Check whether two words (terminated by any non-word-character) are equal
+wordeq: ; ( str1 str2 -- bool )
+    ; check if both chars are nonword
+    2dup
+    load
+    call word_char
+    swap
+    load
+    call word_char
+    or
+    brz @wordeq_done_eq ; both are nonword so we're done
+    ; check if both chars are equal
+    2dup
+    load
+    swap
+    load
+    sub
+    brnz @wordeq_done_ne
+    ; they're both equal, inc both pointers
+    add 1
+    swap
+    add 1
+    jmpr @wordeq
+wordeq_done_eq:
+    pop
+    pop
+    ret 1
+wordeq_done_ne:
+    pop
+    pop
+    ret 0
+
+
 
 
 
@@ -105,7 +163,7 @@ tick_loop:
     dup ; ( ptr ptr tc tc )
     load ; ( ptr ptr tc *tc )
     brz @tick_missing_word
-    call streq ; ( ptr eq? )
+    call wordeq ; ( ptr eq? )
     brz @tick_retry
     pop ; ( ) This WAS the right entry!
     load24 tick_current
@@ -127,45 +185,15 @@ tick_current: .db 0
 
 
 
-
-;;;;;;;;;;;;;;;;;;
-
-
-
-oninterrupt:
-    dup
-    sub 65
-    brz @onkeypress
-    inton ; this isn't an interrupt we recognize, not much we can do here except leave it on the stack and continue on
-    hlt
-
-
-
-onkeypress:
-    pop ; we know the top value is a 65, because this is the isr for 65
-    dup
-    call word_char
-    brz @onkeypress_handleword 
-    push line_buf
-    load line_len
-    add
-    store
-    load line_len
-    add 1
-    store line_len
-onkeypress_done:
-    inton
-    ret
-onkeypress_handleword:
-    pop ; drop the newline or whatever it is
-    call handleword
-    jmpr @onkeypress_done
-
-
 ; returns whether this character is a word char (nonzero) or a separator between words (space, cr, tab)
 word_char: ; ( ch -- bool )
     dup
+    brz @word_char_no
+    dup
     sub 10 ; cr
+    brz @word_char_no
+    dup
+    sub 13 ; cr
     brz @word_char_no
     dup
     sub 32 ; spc
@@ -211,6 +239,7 @@ is_number_loop:
     add 1
     dup
     load
+    call word_char
     brz @is_number_done
     jmpr @is_number_loop
 is_number_bad:
@@ -220,6 +249,151 @@ is_number_done:
     load24 is_number_num
     ret 1
 is_number_num: .db 0
+
+
+
+
+;;;;;;;;;;;;;;;;;;
+
+
+
+oninterrupt:
+    dup
+    sub 65
+    brz @onkeypress
+    inton ; this isn't an interrupt we recognize, not much we can do here except leave it on the stack and continue on
+    hlt
+
+
+
+onkeypress:
+    pop ; we know the top value is a 65, because this is the isr for 65
+    dup
+    sub 10
+    brz @onkeypress_handleline
+    push line_buf
+    load line_len
+    add
+    store
+    load line_len
+    add 1
+    store line_len
+onkeypress_done:
+    inton
+    ret
+onkeypress_handleline:
+    pop ; drop the newline
+    ; null-term the line
+    push 0
+    push line_buf
+    load line_len
+    add
+    store
+    ; reset line_len
+    push 0
+    store line_len
+    ; handle the now null-termed line
+    call handleline
+    jmpr @onkeypress_done
+
+
+
+
+; Takes a pointer to the start of a word, returns a pointer to the
+; first nonword-char after it
+skip_word: ; ( ptr -- first-nonword )
+    dup
+    load ; ( ptr ch )
+    call word_char
+    brz @skip_word_done
+    add 1
+    jmpr @skip_word
+skip_word_done:
+    ret
+
+
+
+; Takes a pointer to a nonword-char, returns a pointer to the
+; first word-char after it, or the first zero / EOS
+skip_nonword: ; ( ptr -- first-word )
+    dup
+    load ; ( ptr ch )
+    call dupnz
+    brz @skip_nonword_done
+    call word_char
+    brnz @skip_nonword_done
+    add 1
+    jmpr @skip_nonword
+skip_nonword_done:
+    ret
+
+
+
+
+handleline: ; ( -- )
+    push line_buf
+    call skip_nonword
+    dup
+    store24 handleline_current
+    store24 handleline_start
+handleline_loop:
+    load24 handleline_start
+    call skip_word
+    store24 handleline_current
+    load24 handleline_start
+    call handleword ; Call the word
+    load24 handleline_current
+    load
+    brz @handleline_done ; this is an EOS, so we're done
+    ; Now on to the next word
+    load24 handleline_current
+    call skip_nonword
+    store24 handleline_start
+    jmpr @handleline_loop
+handleline_done:
+    ret
+handleline_current: .db 0
+handleline_start: .db 0
+
+
+
+
+
+handleword: ; ( <args for word> word-start-addr -- <word return stack> )
+    ; first check for a blank word and skip:
+    dup
+    load
+    brz @handleword_blank
+    ; Now call tick to try to find it in the dictionary
+    dup ; ( addr addr )
+    call tick ; ( addr entry-addr )
+    call dupnz
+    brnz @handleword_found ; found something
+    ; It wasn't in the dictionary, is it a number?
+    dup
+    call is_number
+    brnz @handleword_number
+    ; It wasn't a number either, drop the garbage:
+    pop
+    ; And complain:
+    call missing_word
+    ret
+handleword_found:
+    swap
+    pop
+    call 
+handleword_done:
+    ret
+handleword_blank:
+    pop
+    ret
+handleword_number:
+    swap
+    pop
+    ret
+
+;;;;;;;;;;;;;;;;;;
+
 
 
 
@@ -257,55 +431,6 @@ itoa_print_loop:
 itoa_end: .db 0
 itoa_arr: .db 0
 .org itoa_arr + 32 ; set aside some space
-
-
-handleword:
-    ; null-term the word
-    push 0
-    push line_buf
-    load line_len
-    add
-    store
-    ; reset line_len
-    push 0
-    store line_len
-    ; handle the now null-termed word
-    ; first check for a blank word and skip:
-    load line_buf
-    brz @handleword_done
-    ; Now call tick to try to find it in the dictionary
-    push line_buf
-    call tick
-    dup
-    brnz @handleword_found ; found something
-    ; It wasn't in the dictionary, is it a number?
-    pop
-    push line_buf
-    call is_number
-    brnz @handleword_done
-    call cr
-    ; It wasn't a number either, drop the garbage:
-    pop
-    ; And complain:
-    call missing_word
-    jmpr @handleword_done
-handleword_found:
-    call
-handleword_done:
-    inton
-    ret
-
-
-
-start:
-    setiv oninterrupt
-    inton
-    hlt
-
-
-
-
-;;;;;;;;;;;;;;;;;;
 
 
 
@@ -352,7 +477,6 @@ w_mod: mod
 missing_word:
     push missing_word_str
     call print
-    push line_buf
     call print
     call cr
     ret

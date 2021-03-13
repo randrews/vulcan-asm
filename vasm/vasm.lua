@@ -476,7 +476,7 @@ function assemble(iterator, debuginfo)
         for _, line in ipairs(lines) do
             address_lines[line.address] = line.line
         end
-        return generate_code(lines, symbols['$start'], symbols['$end']), symbols['$start'], address_lines
+        return generate_code(lines, symbols['$start'], symbols['$end']), symbols['$start'], address_lines, symbols
     else
         return generate_code(lines, symbols['$start'], symbols['$end']), symbols['$start']
     end

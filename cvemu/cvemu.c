@@ -30,6 +30,7 @@ int cpu_peek24(Cpu *cpu, unsigned int addr, lua_State *L);
 int cvemu_peek(lua_State *L);
 unsigned char cpu_peek(Cpu *cpu, unsigned int addr, lua_State *L);
 int cvemu_print_stack(lua_State *L);
+int cvemu_fetch_stack(lua_State *L);
 Opcode cpu_fetch(Cpu *cpu, lua_State *L);
 int cvemu_run(lua_State *L);
 void cpu_run(Cpu *cpu, lua_State *L);
@@ -41,6 +42,7 @@ int cvemu_interrupt(lua_State *L);
 int cvemu_pc(lua_State *L);
 int cvemu_sp(lua_State *L);
 int cvemu_dp(lua_State *L);
+int cvemu_set_pc(lua_State *L);
 
 /* Utils */
 int to_signed(int word);
@@ -63,7 +65,9 @@ int luaopen_cvemu(lua_State *lua){
         {"pc", cvemu_pc},
         {"sp", cvemu_sp},
         {"dp", cvemu_dp},
+        {"set_pc", cvemu_set_pc},
         {"print_stack", cvemu_print_stack},
+        {"stack", cvemu_fetch_stack},
         {"install_device", cvemu_install_device},
         {"run", cvemu_run},
         {"flags", cvemu_flags},
@@ -333,6 +337,13 @@ int cvemu_dp(lua_State *L) {
     return 1;
 }
 
+int cvemu_set_pc(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    unsigned int new_pc = luaL_checkinteger(L, 2);
+    cpu->pc = new_pc;
+    return 0;
+}
+
 int cvemu_peek(lua_State *L) {
     Cpu *cpu = checkCpu(L, 1);
     unsigned int addr = luaL_checkinteger(L, 2);
@@ -394,12 +405,31 @@ int cvemu_print_stack(lua_State *L) {
     if (cpu->dp == cpu->bottom_dp) {
         printf("<stack empty>\n");
     } else {
-        for (int i = cpu->bottom_dp; i <= cpu->dp; i+=3) {
+        for (int i = cpu->bottom_dp; i < cpu->dp; i+=3) {
             printf("%d:\t0x%x\n", i, cpu_peek24(cpu, i, 0));
         }
     }
     return 0;
 }
+
+
+int cvemu_fetch_stack(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    
+    if (cpu->dp < cpu->bottom_dp) {
+        luaL_error(L, "Stack has underflowed");
+    } else if (cpu->dp == cpu->bottom_dp) {
+        return 0; // Stack's empty, return nothing
+    } else {
+        int count = 0;
+        for (int i = cpu->bottom_dp; i < cpu->dp; i+=3) {
+            lua_pushinteger(L, cpu_peek24(cpu, i, 0));
+            count++;
+        }
+        return count;
+    }
+}
+
 
 Opcode cpu_fetch(Cpu *cpu, lua_State *L) {
     int instruction = cpu_peek(cpu, cpu->pc, L);
