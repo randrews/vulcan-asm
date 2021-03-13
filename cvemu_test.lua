@@ -195,8 +195,7 @@ local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
     load 1234
-    load16 1234
-    load24 1234
+    loadw 1234
     hlt
 ]]))
 cpu:poke(1234, 1)
@@ -204,7 +203,6 @@ cpu:poke(1235, 2)
 cpu:poke(1236, 3)
 cpu:run()
 assert(cpu:pop_data() == 0x030201)
-assert(cpu:pop_data() == 0x000201)
 assert(cpu:pop_data() == 1)
 
 -- Stores
@@ -213,20 +211,14 @@ Loader.asm(cpu, iterator([[
     .org 0x400
     push 0x1234
     store 1000
-    push 0x123456
-    store16 2000
     push 0xaabbcc
-    store24 3000
+    storew 3000
     hlt
 ]]))
 cpu:poke(1001, 0)
-cpu:poke(2002, 0)
 cpu:run()
 assert(cpu:peek(1000) == 0x34)
 assert(cpu:peek(1001) == 0x00)
-assert(cpu:peek(2000) == 0x56)
-assert(cpu:peek(2001) == 0x34)
-assert(cpu:peek(2002) == 0x00)
 assert(cpu:peek(3000) == 0xcc)
 assert(cpu:peek(3001) == 0xbb)
 assert(cpu:peek(3002) == 0xaa)
@@ -364,30 +356,31 @@ assert(arr[1] == 12)
 assert(arr[2] == 15)
 
 -- Range memory mapped output
-local arr = {1, 2, 3, 4, 5}
+local arr = {1, 2, 3, 4, 5, 6}
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
     push 0
     store 201
     push 0
-    store16 203
+    storew 203
     hlt
 ]]))
-cpu:install_device(200, 204, { poke = function(addr, val) arr[addr+1] = val end })
+cpu:install_device(200, 205, { poke = function(addr, val) arr[addr+1] = val end })
 cpu:run()
 assert(arr[1] == 1)
 assert(arr[2] == 0)
 assert(arr[3] == 3)
 assert(arr[4] == 0)
 assert(arr[5] == 0)
+assert(arr[6] == 0)
 
 -- Range memory mapped input
 local arr = {1, 2, 3, 4, 5}
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
-    load24 201
+    loadw 201
     hlt
 ]]))
 cpu:install_device(200, 204, { peek = function(addr) return arr[addr+1] end })
@@ -406,6 +399,51 @@ assert(not h and not i)
 cpu:run()
 h, i = cpu:flags()
 assert(h and i)
+
+-- Stack pointers
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 0x400
+    push 2000
+    setsdp 3000
+    hlt
+]]))
+cpu:run()
+assert(cpu:sp() == 2000)
+assert(cpu:dp() == 3000)
+
+-- Rotate stack
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 0x400
+    push 10
+    push 100
+    push 200
+    push 300
+    rot
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 100)
+assert(cpu:pop_data() == 300)
+assert(cpu:pop_data() == 200)
+assert(cpu:pop_data() == 10)
+
+-- Fetch pointers
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 0x400
+    push 10
+    pushr 20
+    sdp
+    hlt
+]]))
+cpu:run()
+-- starts at 256, we added 3 with the push, then added 6 more by running sdp
+assert(cpu:pop_data() == 265)
+-- starts at 1024, subtracted 3 with the pushr
+assert(cpu:pop_data() == 1021)
+assert(cpu:pop_data() == 10)
 
 -- -- Benchmark
 -- local cpu = CPU.new()

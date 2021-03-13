@@ -463,7 +463,7 @@ int to_signed(int word) {
 }
 
 void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
-    int a, b;
+    int a, b, c;
 
     switch(instruction) {
     case PUSH: break; // Fetch deals with this
@@ -560,6 +560,14 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         b = cpu_pop_data(cpu);
         cpu_push_data(cpu, cpu_peek24(cpu, cpu-> dp - (b + 1) * 3, 0));
         break;
+    case ROT:
+        c = cpu_pop_data(cpu);
+        b = cpu_pop_data(cpu);
+        a = cpu_pop_data(cpu);
+        cpu_push_data(cpu, b);
+        cpu_push_data(cpu, c);
+        cpu_push_data(cpu, a);
+        break;
     case JMP:
         cpu->next_pc = cpu_pop_data(cpu);
         break;
@@ -587,11 +595,7 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
     case LOAD:
         cpu_push_data(cpu, cpu_peek(cpu, cpu_pop_data(cpu), L));
         break;
-    case LOAD16:
-        b = cpu_pop_data(cpu);
-        cpu_push_data(cpu, cpu_peek(cpu, b, L) | cpu_peek(cpu, b+1, L) << 8);
-        break;
-    case LOAD24:
+    case LOADW:
         b = cpu_pop_data(cpu);
         cpu_push_data(cpu, cpu_peek(cpu, b, L) | cpu_peek(cpu, b+1, L) << 8 | cpu_peek(cpu, b+2, L) << 16);
         break;
@@ -600,13 +604,7 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         a = cpu_pop_data(cpu);
         cpu_poke(cpu, b, a, L);
         break;
-    case STORE16:
-        b = cpu_pop_data(cpu);
-        a = cpu_pop_data(cpu);
-        cpu_poke(cpu, b, a, L);
-        cpu_poke(cpu, b+1, a >> 8, L);
-        break;
-    case STORE24:
+    case STOREW:
         b = cpu_pop_data(cpu);
         a = cpu_pop_data(cpu);
         cpu_poke(cpu, b, a, L);
@@ -622,23 +620,20 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
     case SETIV:
         cpu->int_vector = cpu_pop_data(cpu);
         break;
-    case SP:
-        cpu_push_data(cpu, cpu->sp + cpu_pop_data(cpu));
-        break;
-    case DP:
+    case SDP:
         cpu_push_data(cpu, cpu->sp);
+        cpu_push_data(cpu, cpu->dp + 3);
         break;
     case SETSDP:
-        cpu->dp = cpu_pop_data(cpu);
-        cpu->sp = cpu_pop_data(cpu);
+        b = cpu_pop_data(cpu);
+        a = cpu_pop_data(cpu);
+        cpu->dp = b;
+        cpu->sp = a;
         break;
     case PUSHR:
-        //cpu->sp += cpu_pop_data(cpu);
         cpu_push_call(cpu, cpu_pop_data(cpu));
         break;
     case POPR:
-        // cpu->sp -= cpu_pop_data(cpu);
-        // cpu_push_data(cpu, cpu->sp);
         cpu_push_data(cpu, cpu_pop_call(cpu));
         break;
     case DEBUG:

@@ -218,6 +218,15 @@ function CPU:swap()
     self:push_data(b)
 end
 
+function CPU:rot()
+    local c = self:pop_data()
+    local b = self:pop_data()
+    local a = self:pop_data()
+    self:push_data(b)
+    self:push_data(c)
+    self:push_data(a)
+end
+
 function CPU:pick()
     local index = self:pop_data()
     self:push_data(self:peek24(self.dp - (index + 1) * 3))
@@ -357,27 +366,15 @@ function CPU:_load()
     self:push_data(self:peek(self:pop_data()))
 end
 
-function CPU:load16()
-    local addr = self:pop_data()
-    self:push_data(self:peek(addr+1) << 8 | self:peek(addr))
-end
-
-function CPU:load24()
+function CPU:loadw()
     local addr = self:pop_data()
     self:push_data(self:peek24(addr))
 end
 
-function CPU:store24()
+function CPU:storew()
     local addr = self:pop_data()
     local val = self:pop_data()
     self:poke24(addr, val)
-end
-
-function CPU:store16()
-    local addr = self:pop_data()
-    local val = self:pop_data()
-    self:poke(addr, val & 0xff)
-    self:poke(addr + 1, (val >> 8) & 0xff)
 end
 
 function CPU:store()
@@ -399,17 +396,16 @@ function CPU:setiv()
 end
 
 -- Call stack
-function CPU:_sp()
-    self:push_data(self.sp + self:pop_data())
-end
-
-function CPU:_dp()
-    self:push_data(self.dp)
+function CPU:sdp()
+    self:push_data(self.sp)
+    self:push_data(self.dp + 3)
 end
 
 function CPU:setsdp()
-    self.dp = self:pop_data()
-    self.sp = self:pop_data()
+    local b = self:pop_data()
+    local a = self:pop_data()
+    self.dp = b
+    self.sp = a
 end
 
 function CPU:pushr()
