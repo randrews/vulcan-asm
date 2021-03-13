@@ -43,7 +43,7 @@ typedef enum Opcode {
     SP = 39,
     DP = 40,
     SETSDP = 41,
-    INCSP = 42,
-    DECSP = 43,
+    PUSHR = 42,
+    POPR = 43,
     DEBUG = 44
 } Opcode;

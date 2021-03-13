@@ -632,12 +632,14 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         cpu->dp = cpu_pop_data(cpu);
         cpu->sp = cpu_pop_data(cpu);
         break;
-    case INCSP:
-        cpu->sp += cpu_pop_data(cpu);
+    case PUSHR:
+        //cpu->sp += cpu_pop_data(cpu);
+        cpu_push_call(cpu, cpu_pop_data(cpu));
         break;
-    case DECSP:
-        cpu->sp -= cpu_pop_data(cpu);
-        cpu_push_data(cpu, cpu->sp);
+    case POPR:
+        // cpu->sp -= cpu_pop_data(cpu);
+        // cpu_push_data(cpu, cpu->sp);
+        cpu_push_data(cpu, cpu_pop_call(cpu));
         break;
     case DEBUG:
         cvemu_print_stack(L);

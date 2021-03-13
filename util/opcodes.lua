@@ -58,8 +58,8 @@ add_opcode('setiv')
 add_opcode('sp')
 add_opcode('dp')
 add_opcode('setsdp')
-add_opcode('incsp')
-add_opcode('decsp')
+add_opcode('pushr')
+add_opcode('popr')
 add_opcode('debug')
 
 return {
