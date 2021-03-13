@@ -412,13 +412,12 @@ function CPU:setsdp()
     self.sp = self:pop_data()
 end
 
-function CPU:incsp()
-    self.sp = self.sp + self:pop_data()
+function CPU:pushr()
+    self:push_call(self:pop_data())
 end
 
-function CPU:decsp()
-    self.sp = self.sp - self:pop_data()
-    self:push_data(self.sp)
+function CPU:popr()
+    self:push_data(self:pop_call())
 end
 
 -- Convert a 24-bit unsigned value to a signed Lua number

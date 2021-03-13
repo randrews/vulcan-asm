@@ -6,32 +6,6 @@ stop:
 
 
 
-
-;;; ; Print a string of a certain length
-;;; nprint: ; ( addr len -- )
-;;;     store24 nprint_len
-;;;     push 0
-;;;     store24 nprint_off
-;;; nprint_loop:
-;;;     load24 nprint_off
-;;;     load24 nprint_len
-;;;     sub
-;;;     brz @nprint_done
-;;;     dup
-;;;     load24 nprint_off
-;;;     add
-;;;     load
-;;;     store 0x02
-;;;     load24 nprint_off
-;;;     add 1
-;;;     store24 nprint_off
-;;;     jmpr @nprint_loop
-;;; nprint_done:
-;;;     pop
-;;;     ret
-
-
-
 dupnz: ; if TOS is nonzero, dup it
     dup
     brz @dupnz_done
@@ -492,12 +466,10 @@ missing_word_str: .db "That word wasn't found: \0"
 
 
 
-you_entered: .db "You entered: \0"
-nprint_off: .db 0
-nprint_len: .db 0
+dictionary_end_ptr: .db dictionary_end ; holds the address of the current dictionary end sentinel
+line_len: .db 0
 line_buf: .db 0
 .org line_buf + 0x100
-line_len: .db 0
 
 dictionary:
 .db "foo\0"
@@ -520,4 +492,7 @@ dictionary:
 .db w_div
 .db "mod\0"
 .db w_mod
+dictionary_end:
 .db 0 ; sentinel for end of dictionary
+
+heap: .org dictionary + 0x4000 ; 16k set aside for words and definitions

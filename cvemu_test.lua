@@ -231,59 +231,53 @@ assert(cpu:peek(3000) == 0xcc)
 assert(cpu:peek(3001) == 0xbb)
 assert(cpu:peek(3002) == 0xaa)
 
--- Getting frame locals
+-- Pushing to return stack
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
-    call blah
-blah: push 7
-    decsp 3
-    store24
-    sp 0
-    load24
-    mul 2
+    push 10
+    push 4
+    push 3
+    pushr
+    pushr
     hlt
 ]]))
 cpu:run()
-assert(cpu:pop_data() == 14)
+assert(cpu:pop_call() == 4)
+assert(cpu:pop_call() == 3)
+assert(cpu:pop_data() == 10)
 
--- Top frame locals
+-- Popping from return stack
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
-    push 5
-    decsp 6
-    add 3
-    store24
-    push 12
-    sp 3
-    load24
+    push 10
+    pushr 20
+    pushr 4
+    push 3
+    popr
+    add
     hlt
 ]]))
 cpu:run()
-assert(cpu:pop_data() == 5)
-assert(cpu:pop_data() == 12)
+assert(cpu:pop_data() == 7)
+assert(cpu:pop_data() == 10)
+assert(cpu:pop_call() == 20)
 
 -- Calls after locals
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
-    push 5
-    decsp 6
-    add 3
-    store24
+    pushr 5
     call blah
-blah: push 3
-    decsp 6
-    add 3
-    store24
+blah: pushr 3
     hlt
 ]]))
 cpu:run()
-assert(cpu:sp() == 1024 - 15)
+assert(cpu:sp() == 1024 - 9)
 assert(cpu:peek24(1024 - 3) == 5) -- First local
-assert(cpu:peek24(1024 - 9) == 0x400 + 11) -- Skip a local, the return address
-assert(cpu:peek24(1024 - 12) == 3) -- First local in the 2nd frame
+assert(cpu:peek24(1024 - 6) == 0x400 + 6) -- the return address
+assert(cpu:peek24(1024 - 9) == 3) -- First local in the 2nd frame
 
 -- Comparing values
 local cpu = CPU.new()
@@ -413,16 +407,16 @@ cpu:run()
 h, i = cpu:flags()
 assert(h and i)
 
--- Benchmark
-local cpu = CPU.new()
-Loader.forge(cpu, iterator([[
-  : count ( max -- )
-  0 local sum !
-  0 for n
-  sum n + sum!
-  loop ;
-  10000 count
-]]))
-local start = os.clock()
-cpu:run()
-print(os.clock() - start)
+-- -- Benchmark
+-- local cpu = CPU.new()
+-- Loader.forge(cpu, iterator([[
+--   : count ( max -- )
+--   0 local sum !
+--   0 for n
+--   sum n + sum!
+--   loop ;
+--   10000 count
+-- ]]))
+-- local start = os.clock()
+-- cpu:run()
+-- print(os.clock() - start)
