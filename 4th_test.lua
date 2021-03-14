@@ -412,7 +412,7 @@ test_fn('handleline',
         all(given_memory(Symbols.line_buf, 'foo'),
             given_stack{ }),
         all(expect_stack{ },
-            expect_output("You called foo\n")))
+            expect_output('You called foo\n')))
 
 -- One word and some previous stack
 test_fn('handleline',
@@ -446,9 +446,16 @@ test_fn('handleline',
         all(expect_stack{ },
             expect_output("You called foo\n")))
 
+-- Passing stack to some things
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, '2 3 + + .'),
+            given_stack{ 5 }),
+        all(expect_stack{ },
+            expect_output('10')))
+
 -- Multiple words, leading and trailing space...
 test_fn('handleline',
         all(given_memory(Symbols.line_buf, '  \n\t\t155 10 20 + 34 * .   '),
             given_stack{ }),
         all(expect_stack{ 155 },
-            expect_output("1020")))
+            expect_output('1020')))

@@ -168,6 +168,8 @@ void cpu_reset(Cpu *cpu) {
     cpu->sp = 1024; // Return stack pointer (256 cells higher)
     cpu->pc = 1024; // Program counter
     cpu->halted = 0; // Flag to stop execution
+    cpu->int_enabled = 0; // Flag to disable interrupts
+    cpu->int_vector = 0; // Interrupt vector
     cpu->next_pc = -1; // Set after each fetch, opcodes can change it
 }
 

@@ -130,25 +130,25 @@ advance_entry_done:
 ; Find dictionary entry for word
 tick: ; ( ptr -- addr )
     push dictionary
-    store24 tick_current
+    storew tick_current
 tick_loop:
     dup ; ( ptr ptr )
-    load24 tick_current ; ( ptr ptr tc )
+    loadw tick_current ; ( ptr ptr tc )
     dup ; ( ptr ptr tc tc )
     load ; ( ptr ptr tc *tc )
     brz @tick_missing_word
     call wordeq ; ( ptr eq? )
     brz @tick_retry
     pop ; ( ) This WAS the right entry!
-    load24 tick_current
+    loadw tick_current
     call advance_entry
     sub 3
-    load24
+    loadw
     ret
 tick_retry:
-    load24 tick_current ; ( ptr tc )
+    loadw tick_current ; ( ptr tc )
     call advance_entry
-    store24 tick_current ; ( ptr )
+    storew tick_current ; ( ptr )
     jmpr @tick_loop
 tick_missing_word:
     pop
@@ -197,7 +197,7 @@ is_digit: ; ( ch -- bool )
 ; Tries to parse a number out of a string
 is_number: ; ( ptr -- num valid? )
     push 0
-    store24 is_number_num
+    storew is_number_num
 is_number_loop:
     dup
     load
@@ -206,10 +206,10 @@ is_number_loop:
     dup
     load
     sub 48
-    load24 is_number_num
+    loadw is_number_num
     mul 10
     add
-    store24 is_number_num
+    storew is_number_num
     add 1
     dup
     load
@@ -220,7 +220,7 @@ is_number_bad:
     ret 0
 is_number_done:
     pop
-    load24 is_number_num
+    loadw is_number_num
     ret 1
 is_number_num: .db 0
 
@@ -308,21 +308,21 @@ handleline: ; ( -- )
     push line_buf
     call skip_nonword
     dup
-    store24 handleline_current
-    store24 handleline_start
+    storew handleline_current
+    storew handleline_start
 handleline_loop:
-    load24 handleline_start
+    loadw handleline_start
     call skip_word
-    store24 handleline_current
-    load24 handleline_start
+    storew handleline_current
+    loadw handleline_start
     call handleword ; Call the word
-    load24 handleline_current
+    loadw handleline_current
     load
     brz @handleline_done ; this is an EOS, so we're done
     ; Now on to the next word
-    load24 handleline_current
+    loadw handleline_current
     call skip_nonword
-    store24 handleline_start
+    storew handleline_start
     jmpr @handleline_loop
 handleline_done:
     ret
@@ -373,24 +373,24 @@ handleword_number:
 
 itoa: ; ( num -- )
     push itoa_arr
-    store24 itoa_end
+    storew itoa_end
 itoa_loop:
     dup ; ( num num )
     mod 10
     dup
     add 48 ; ( num mod ch )
-    load24 itoa_end
+    loadw itoa_end
     store
-    load24 itoa_end
+    loadw itoa_end
     add 1
-    store24 itoa_end
+    storew itoa_end
     sub
     div 10
     dup
     brnz @itoa_loop
     pop
     ; Got the array of digits in reverse order, print them out:
-    load24 itoa_end
+    loadw itoa_end
     sub 1
 itoa_print_loop:
     dup
