@@ -414,6 +414,12 @@ test_fn('handleline',
         all(expect_stack{ },
             expect_output('You called foo\n')))
 
+-- A line with only whitespace
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, '  '),
+            given_stack{ 2, 3 }),
+        expect_stack{ 2, 3 })
+
 -- One word and some previous stack
 test_fn('handleline',
         all(given_memory(Symbols.line_buf, '+'),
@@ -459,3 +465,68 @@ test_fn('handleline',
             given_stack{ }),
         all(expect_stack{ 155 },
             expect_output('1020')))
+
+--------------------------------------------------
+
+test_fn('find_byte',
+        all(given_memory(0x10000, 'floop"'),
+            given_stack{ 34, 0x10000 }),
+        all(expect_stack{ 0x10005 }))
+
+test_fn('find_byte',
+        all(given_memory(0x10000, 'floop"'),
+            given_stack{ 65, 0x10000 }),
+        all(expect_stack{ 0 }))
+
+test_fn('find_byte',
+        all(given_memory(0x10000, 'Apple'),
+            given_stack{ 65, 0x10000 }),
+        all(expect_stack{ 0x10000 }))
+
+--------------------------------------------------
+
+test_fn('read_string',
+        all(given_memory(0x10000, 'floop"'),
+            given_stack{ 0x10000 }),
+        expect_stack{ 0x10000, 0x10005 })
+
+test_fn('read_string',
+        all(given_memory(0x10000, '  floop"'),
+            given_stack{ 0x10000 }),
+        expect_stack{ 0x10002, 0x10007 })
+
+test_fn('read_string',
+        all(given_memory(0x10000, '"'),
+            given_stack{ 0x10000 }),
+        expect_stack{ 0x10000, 0x10000 })
+
+test_fn('read_string',
+        all(given_memory(0x10000, 'nope'),
+            given_stack{ 0x10000 }),
+        expect_stack{ 0 })
+
+--------------------------------------------------
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, '." hello, world"'),
+            given_stack{ }),
+        all(expect_stack{ },
+            expect_output('hello, world')))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, '." hello, world   "   '),
+            given_stack{ }),
+        all(expect_stack{ },
+            expect_output('hello, world   ')))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, '5 ." hello, world   "'),
+            given_stack{ }),
+        all(expect_stack{ 5 },
+            expect_output('hello, world   ')))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, '5 ." hello, world: " 3 + .'),
+            given_stack{ }),
+        all(expect_stack{ },
+            expect_output('hello, world: 8')))

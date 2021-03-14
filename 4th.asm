@@ -196,8 +196,7 @@ is_digit: ; ( ch -- bool )
 
 ; Tries to parse a number out of a string
 is_number: ; ( ptr -- num valid? )
-    push 0
-    storew is_number_num
+    pushr 0
 is_number_loop:
     dup
     load
@@ -206,10 +205,10 @@ is_number_loop:
     dup
     load
     sub 48
-    loadw is_number_num
+    popr
     mul 10
     add
-    storew is_number_num
+    pushr
     add 1
     dup
     load
@@ -217,12 +216,13 @@ is_number_loop:
     brz @is_number_done
     jmpr @is_number_loop
 is_number_bad:
+    popr
+    pop
     ret 0
 is_number_done:
     pop
-    loadw is_number_num
+    popr
     ret 1
-is_number_num: .db 0
 
 
 
@@ -307,31 +307,98 @@ skip_nonword_done:
 handleline: ; ( -- )
     push line_buf
     call skip_nonword
-    dup
-    storew handleline_current
-    storew handleline_start
+    storew cursor ; cursor points at the beginning of a word
 handleline_loop:
-    loadw handleline_start
-    call skip_word
-    storew handleline_current
-    loadw handleline_start
+    loadw cursor
     call handleword ; Call the word
-    loadw handleline_current
+    loadw cursor
+    call skip_word ; Advance past this word
     load
-    brz @handleline_done ; this is an EOS, so we're done
+    brz @handleline_done ; after this word is an EOS, so we're done
     ; Now on to the next word
-    loadw handleline_current
+    loadw cursor
+    call skip_word
     call skip_nonword
-    storew handleline_start
+    storew cursor ; cursor is now the start of the next word
     jmpr @handleline_loop
 handleline_done:
     ret
-handleline_current: .db 0
-handleline_start: .db 0
 
 
 
+; Finds the first occurrence of val at or after start, or returns 0 if it encounters a null
+; terminator first
+find_byte: ; ( val start -- addr-or-zero )
+    dup
+    load
+    call dupnz
+    brz @find_byte_eos
+    pick 2
+    sub
+    call dupnz
+    brz @find_byte_found
+    pop
+    add 1
+    jmpr @find_byte
+find_byte_found:
+    swap
+    pop
+    ret
+find_byte_eos:
+    pop
+    pop
+    ret 0
 
+
+; Reads from the input line a string, starting with the first word character after cursor
+; and ending with the first quote (ascii 34). Places on the stack the address of the first word
+; character and the address of the quote, or just zero if there is no quote
+read_string: ; ( addr -- start end ), or if unclosed ( addr -- 0 )
+    call skip_nonword
+    dup
+    swap 34
+    call find_byte ; ( start end? ) Find where we should end, or zero
+    call dupnz
+    brz @read_string_unclosed
+    ret
+read_string_unclosed:
+    pop
+    ret 0
+
+
+
+dotquote:
+    loadw cursor
+    call skip_word ; advance past the ." itself
+    call read_string ; ( start end ) or ( 0 )
+    call dupnz
+    brz @dotquote_unclosed
+    pushr
+dotquote_loop:
+    dup
+    popr
+    dup
+    pushr
+    sub
+    brz @dotquote_done
+    dup
+    load
+    store 2
+    add 1
+    jmpr @dotquote_loop
+dotquote_done:
+    popr
+    pop
+    storew cursor
+    ret
+dotquote_unclosed:
+    push unclosed_error
+    call print
+    push 0
+    storew line_buf
+    push line_buf
+    storew cursor
+    ret
 
 handleword: ; ( <args for word> word-start-addr -- <word return stack> )
     ; first check for a blank word and skip:
@@ -465,9 +532,10 @@ missing_word_str: .db "That word wasn't found: \0"
 
 
 
-
+unclosed_error: .db "Unclosed string\0"
 dictionary_end_ptr: .db dictionary_end ; holds the address of the current dictionary end sentinel
 line_len: .db 0
+cursor: .db 0 ; During calls to handleword, this global points to the beginning of the word
 line_buf: .db 0
 .org line_buf + 0x100
 
@@ -492,6 +560,8 @@ dictionary:
 .db w_div
 .db "mod\0"
 .db w_mod
+.db ".\"\0"
+.db dotquote
 dictionary_end:
 .db 0 ; sentinel for end of dictionary
 
