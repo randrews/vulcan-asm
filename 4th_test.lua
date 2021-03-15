@@ -75,16 +75,34 @@ function expect_stack(expected)
 end
 
 function expect_output(expected)
-    return function(_s, actual) assert(expected == actual, string.format('%q != %q', expected, actual)) end
+    return function(_s, actual) assert(expected == actual, string.format('exp %q,  act %q', expected, actual)) end
 end
 
 function expect_memory(start, ...)
     local mem = { ... }
     return function(_s, _o, cpu)
         for i, b in ipairs(mem) do
+            if type(b) == 'string' then b = b:byte() end
             local actual = cpu:peek(start + i - 1)
-            assert(actual == b, string.format('%d != %d', b, actual))
+            assert(actual == b, string.format('%x: exp %d, act %d', start + i - 1, b, actual))
         end
+    end
+end
+
+function expect_string(start, str)
+    return function(_s, _o, cpu)
+        for i = 1, #str do
+            local actual = cpu:peek(start + i - 1)
+            assert(actual == str:byte(i), string.format('%x: exp %q, act %q (%d)', start + i - 1, str:sub(i,i), string.char(actual), actual))
+        end
+        assert(cpu:peek(start + #str - 1), string.format('%x exp 0, act %d', start + #str - 1, cpu:peek(start + #str - 1)))
+    end
+end
+
+function expect_word(addr, val)
+    return function(_s, _o, cpu)
+        local actual = cpu:peek24(addr)
+        assert(actual == val, string.format('exp %xh, act %xh', val, actual))
     end
 end
 
@@ -530,3 +548,95 @@ test_fn('handleline',
             given_stack{ }),
         all(expect_stack{ },
             expect_output('hello, world: 8')))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, '." unterminated...'),
+            given_stack{ }),
+        all(expect_stack{ },
+            expect_output('Unclosed string')))
+
+--------------------------------------------------
+
+test_fn('copy_region',
+        all(given_memory(0x10000, 'something'),
+            given_stack{ 0x10000, 0x1000a, 0x12000 }),
+        all(expect_stack{ },
+            expect_string(0x12000, 'something')))
+
+test_fn('copy_region',
+        all(given_memory(0x10000, 'something'),
+            given_memory(0x12000, 'foo'),
+            given_stack{ 0x10000, 0x10000, 0x12000 }),
+        all(expect_stack{ },
+            expect_string(0x12000, 'foo')))
+
+--------------------------------------------------
+
+test_fn('word_to_dict',
+        all(given_memory(0x10000, 'blah'),
+            given_stack{ 0x10000 }),
+        all(expect_stack{ Symbols.dictionary_end + 5 },
+            expect_memory(Symbols.dictionary_end, 'b', 'l', 'a', 'h', 0, 0, 0, 0, 0),
+            expect_word(Symbols.dictionary_end_ptr, Symbols.dictionary_end + 8)))
+
+test_fn('word_to_dict',
+        all(given_memory(0x10000, 'xyz'),
+            given_stack{ 0x10000 }),
+        all(expect_stack{ Symbols.dictionary_end + 4 },
+            expect_memory(Symbols.dictionary_end, 'x', 'y', 'z', 0, 0, 0, 0, 0),
+            expect_word(Symbols.dictionary_end_ptr, Symbols.dictionary_end + 7)))
+
+--------------------------------------------------
+
+-- These are actually tests of colon_word
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': '),
+            given_stack{ 0x10000 }),
+        all(expect_stack{ 0x10000 },
+            expect_output('Expected word, found end of input\n')))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': xyz'),
+            given_stack{ 0x12345 }),
+        all(expect_stack{ 0x12345 },
+            expect_memory(Symbols.dictionary_end, 'x', 'y', 'z', 0),
+            expect_word(Symbols.dictionary_end + 4, Symbols.heap_start),
+            expect_word(Symbols.handleword_hook, Symbols.compileword),
+            expect_word(Symbols.current_mode, 1)))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah 123'),
+            given_stack{ 0x12345 }),
+        all(expect_stack{ 0x12345 },
+            expect_memory(Symbols.heap_start, 3, 123, 0, 0),
+            expect_word(Symbols.heap_ptr, Symbols.heap_start + 4)))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah bar'),
+            given_stack{ 0x12345 }),
+        all(expect_stack{ 0x12345 },
+            expect_memory(Symbols.heap_start, 26 * 4 + 3), -- instruction byte
+            expect_word(Symbols.heap_start + 1, Symbols.bar),
+            expect_word(Symbols.heap_ptr, Symbols.heap_start + 4)))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah ;'),
+            given_stack{ 0x12345 }),
+        all(expect_stack{ 0x12345 },
+            expect_memory(Symbols.heap_start, 27 * 4), -- return instruction
+            expect_word(Symbols.heap_ptr, Symbols.heap_start + 1),
+            expect_word(Symbols.handleword_hook, Symbols.handleword),
+            expect_word(Symbols.current_mode, 0)))
+
+--------------------------------------------------
+
+-- Putting everything together
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah 10 * ; 5 blah .'),
+            given_stack{ 100 }),
+        all(expect_stack{ 100 },
+            expect_output('50'),
+            expect_word(Symbols.current_mode, 0)))
+
+-- todo: redefining words that already exist, dotquote in compilation mode

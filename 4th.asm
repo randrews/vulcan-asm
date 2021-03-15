@@ -1,3 +1,8 @@
+; Magic numbers:
+$CALL: .equ 26
+$PUSH: .equ 0
+$RET: .equ 27
+
 .org 0x400 ; start here
     setiv oninterrupt
     inton
@@ -126,36 +131,45 @@ advance_entry_done:
     ret
 
 
-
 ; Find dictionary entry for word
-tick: ; ( ptr -- addr )
-    push dictionary
-    storew tick_current
-tick_loop:
+find_in_dict: ; ( ptr dict -- addr )
+    storew find_in_dict_current
+find_in_dict_loop:
     dup ; ( ptr ptr )
-    loadw tick_current ; ( ptr ptr tc )
+    loadw find_in_dict_current ; ( ptr ptr tc )
     dup ; ( ptr ptr tc tc )
     load ; ( ptr ptr tc *tc )
-    brz @tick_missing_word
+    brz @find_in_dict_missing_word
     call wordeq ; ( ptr eq? )
-    brz @tick_retry
+    brz @find_in_dict_retry
     pop ; ( ) This WAS the right entry!
-    loadw tick_current
+    loadw find_in_dict_current
     call advance_entry
     sub 3
     loadw
     ret
-tick_retry:
-    loadw tick_current ; ( ptr tc )
+find_in_dict_retry:
+    loadw find_in_dict_current ; ( ptr tc )
     call advance_entry
-    storew tick_current ; ( ptr )
-    jmpr @tick_loop
-tick_missing_word:
+    storew find_in_dict_current ; ( ptr )
+    jmpr @find_in_dict_loop
+find_in_dict_missing_word:
     pop
     pop
     pop
     ret 0
-tick_current: .db 0
+find_in_dict_current: .db 0
+
+
+tick:
+    push dictionary
+    call find_in_dict
+    ret
+
+compile_tick:
+    push compile_dictionary
+    call find_in_dict
+    ret
 
 
 
@@ -310,7 +324,8 @@ handleline: ; ( -- )
     storew cursor ; cursor points at the beginning of a word
 handleline_loop:
     loadw cursor
-    call handleword ; Call the word
+    loadw handleword_hook
+    call ; Call the current hook to handle words (either handleword or compileword)
     loadw cursor
     call skip_word ; Advance past this word
     load
@@ -399,6 +414,196 @@ dotquote_unclosed:
     push line_buf
     storew cursor
     ret
+
+
+
+; Copies a region of memory to another region of memory. Copies start..(end-1) to dest..etc
+copy_region: ; ( start end dest -- )
+    pushr
+    swap ; ( end start ) [ dest ]
+copy_region_loop:
+    2dup
+    sub
+    brz @copy_region_done
+    dup
+    load ; ( end start byte ) [ dest ]
+    popr
+    dup
+    add 1
+    pushr ; ( end start byte dest ) [ dest+1 ]
+    store
+    add 1
+    jmpr @copy_region_loop
+copy_region_done:
+    popr
+    pop
+    pop
+    pop
+    ret
+
+
+
+; Reads a word and adds it to the dictionary with a null definition. Returns the address of
+; the definition
+word_to_dict: ; ( word-addr -- def-addr )
+    dup
+    call skip_word
+    2dup
+    loadw dictionary_end_ptr
+    call copy_region ; ( word-start word-end )
+    swap
+    sub
+    loadw dictionary_end_ptr
+    add ; ( dictionary-word-null )
+    ; Two overlapping word-writes to get five bytes zeroed:
+    dup
+    swap 0
+    storew
+    dup
+    add 2
+    swap 0
+    storew
+    ; Store the new end ptr to the last 0
+    dup
+    add 4
+    storew dictionary_end_ptr
+    ; Return the definition ptr
+    add 1
+    ret
+
+
+
+
+colon_word:
+    loadw cursor
+    call skip_word ; skip the colon itself
+    call skip_nonword ; skip the space before the word name
+    dup
+    load
+    call word_char
+    brz @colon_word_err ; Make sure we were actually given a name
+    dup
+    storew cursor ; tell handleline we've eaten these words
+    call word_to_dict ; stick the new word in the dictionary
+    loadw heap_ptr
+    swap
+    storew ; Store the current heap_ptr as the definition
+    call enter_compile_mode
+    ret
+colon_word_err:
+    pop
+    push expected_word_err
+    call print
+    call cr
+    ret
+
+
+
+semicolon_word:
+    push $RET
+    call compile_instruction
+    call enter_interpret_mode
+    ret
+
+
+enter_compile_mode:
+    push 1
+    store current_mode
+    push compileword
+    storew handleword_hook
+    ret
+
+
+
+enter_interpret_mode:
+    push 0
+    store current_mode
+    push handleword
+    storew handleword_hook
+    ret
+
+
+
+
+compileword:
+    ; first check for a blank word and skip:
+    dup
+    load
+    brz @compileword_blank
+    ; Now call compile_tick to try to find it in the dictionary of special compiled words
+    dup ; ( addr addr )
+    call compile_tick ; ( addr entry-addr )
+    call dupnz
+    brnz @compileword_compiled_found ; found something
+    ; wasn't there, call normal tick to try to find it in the dictionary
+    dup ; ( addr addr )
+    call tick ; ( addr entry-addr )
+    call dupnz
+    brnz @compileword_found ; found something
+    ; It wasn't in the dictionary, is it a number?
+    dup
+    call is_number
+    brnz @compileword_number
+    ; It wasn't a number either, drop the garbage:
+    pop
+    ; And complain:
+    call missing_word ; actually, we need to check for a compile-only word here
+    ret
+compileword_compiled_found:
+    swap
+    pop
+    call
+    ret
+compileword_found:
+    swap
+    pop
+    push $CALL
+    call compile_instruction_arg
+    ret
+compileword_blank:
+    pop
+    ret
+compileword_number:
+    swap
+    pop
+    push $PUSH 
+    call compile_instruction_arg
+    ret
+
+
+
+
+; NEEDS A TEST
+compile_instruction_arg: ; ( arg opcode -- )
+    lshift 2
+    or 3 ; tell it we have a three byte arg
+    loadw heap_ptr ; ( arg instr-byte heap_ptr )
+    dup
+    add 4
+    storew heap_ptr ; Increment the ptr ( arg instr-byte heap_ptr )
+    2dup
+    store
+    add 1
+    swap
+    pop ; ( arg heap_ptr+1 )
+    storew
+    ret
+
+
+
+
+; NEEDS A TEST
+compile_instruction: ; ( opcode -- )
+    lshift 2
+    loadw heap_ptr ; ( instr-byte heap_ptr )
+    dup
+    add 1
+    storew heap_ptr ; Increment the ptr ( instr-byte heap_ptr )
+    store
+    ret
+
+    
+
 
 handleword: ; ( <args for word> word-start-addr -- <word return stack> )
     ; first check for a blank word and skip:
@@ -521,7 +726,6 @@ missing_word:
     call print
     call cr
     ret
-missing_word_str: .db "That word wasn't found: \0"
 
 
 
@@ -532,12 +736,22 @@ missing_word_str: .db "That word wasn't found: \0"
 
 
 
+missing_word_str: .db "That word wasn't found: \0"
 unclosed_error: .db "Unclosed string\0"
+expected_word_err: .db "Expected word, found end of input\0"
 dictionary_end_ptr: .db dictionary_end ; holds the address of the current dictionary end sentinel
+heap_ptr: .db heap_start ; holds the address in which to start the next heap entry
+current_mode: .db 0 ; 0 for interpreter ("calculator") mode, 1 for compile mode
+handleword_hook: .db handleword ; The current function used to handle / compile words, switches based on mode
 line_len: .db 0
 cursor: .db 0 ; During calls to handleword, this global points to the beginning of the word
 line_buf: .db 0
 .org line_buf + 0x100
+
+compile_dictionary: ; words only available while compiling and which take precedence over the normal dict in that case
+.db ";\0"
+.db semicolon_word
+.db 0 ; sentinel for end of dictionary
 
 dictionary:
 .db "foo\0"
@@ -562,7 +776,9 @@ dictionary:
 .db w_mod
 .db ".\"\0"
 .db dotquote
+.db ":\0"
+.db colon_word
 dictionary_end:
 .db 0 ; sentinel for end of dictionary
 
-heap: .org dictionary + 0x4000 ; 16k set aside for words and definitions
+heap_start: .org dictionary + 0x4000 ; 16k set aside for words and definitions
