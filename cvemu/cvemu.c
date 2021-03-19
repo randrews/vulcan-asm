@@ -555,10 +555,6 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
     case DUP:
         cpu_push_data(cpu, cpu_peek24(cpu, cpu->dp - 3, 0));
         break;
-    case DUP2:
-        cpu_push_data(cpu, cpu_peek24(cpu, cpu->dp - 6, 0));
-        cpu_push_data(cpu, cpu_peek24(cpu, cpu->dp - 6, 0));
-        break;
     case SWAP:
         b = cpu_pop_data(cpu);
         a = cpu_pop_data(cpu);

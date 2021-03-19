@@ -133,8 +133,8 @@ end
 function CPU:decode(opcode)
     local name = opcodes.mnemonic_for(opcode)
     if not name then error('Unrecognized opcode ' .. opcode) end
-    if (name == 'and' or name == 'or' or name == 'not' or name == '2dup'
-        or name == 'call' or name == 'load' or name == 'sp' or name == 'dp') then
+    if (name == 'and' or name == 'or' or name == 'not' or name == 'call'
+        or name == 'load' or name == 'sp' or name == 'dp') then
         return '_' .. name
     end
     return name
@@ -209,11 +209,6 @@ end
 -- Stack manipulation
 function CPU:dup()
     self:push_data(self:peek24(self.dp - 3))
-end
-
-function CPU:_2dup()
-    self:push_data(self:peek24(self.dp-6))
-    self:push_data(self:peek24(self.dp-6))
 end
 
 function CPU:swap()

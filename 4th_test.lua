@@ -2,6 +2,7 @@ package.cpath = package.cpath .. ';./cvemu/?.so'
 CPU = require('cvemu')
 -- CPU = require('vemu.cpu')
 Loader = require('vemu.loader')
+Opcodes = require('util.opcodes')
 
 Symbols = nil
 
@@ -140,6 +141,12 @@ test_fn('dupz',
 test_fn('dupz',
         given_stack{ 5 },
         expect_stack{ 5 })
+
+--------------------------------------------------
+
+test_fn('dup2', 
+        given_stack{ 12, 34 },
+        expect_stack{ 12, 34, 12, 34 })
 
 --------------------------------------------------
 
@@ -624,7 +631,7 @@ test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': blah bar'),
             given_stack{ 0x12345 }),
         all(expect_stack{ 0x12345 },
-            expect_memory(Symbols.heap_start + 11, 26 * 4 + 3), -- instruction byte
+            expect_memory(Symbols.heap_start + 11, Opcodes.opcode_for('call') * 4 + 3), -- instruction byte
             expect_word(Symbols.heap_start + 12, Symbols.bar),
             expect_word(Symbols.heap_ptr, Symbols.heap_start + 15)))
 
@@ -632,7 +639,7 @@ test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': blah ;'),
             given_stack{ 0x12345 }),
         all(expect_stack{ 0x12345 },
-            expect_memory(Symbols.heap_start + 11, 27 * 4), -- return instruction
+            expect_memory(Symbols.heap_start + 11, Opcodes.opcode_for('ret') * 4), -- return instruction
             expect_word(Symbols.heap_ptr, Symbols.heap_start + 12),
             expect_word(Symbols.handleword_hook, Symbols.handleword),
             expect_word(Symbols.current_mode, 0)))

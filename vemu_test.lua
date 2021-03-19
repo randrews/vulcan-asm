@@ -96,7 +96,7 @@ assert(cpu:pop_data() == 4)
 
 -- Decoding instructions
 local cpu = CPU.new()
-assert(cpu:decode(21) == 'swap')
+assert(cpu:decode(20) == 'swap')
 
 -- Fetching instructions
 local cpu = CPU.new()
@@ -248,21 +248,6 @@ Loader.asm(cpu, iterator([[
 cpu:run()
 assert(cpu:pop_data() ~= 0)
 assert(cpu:pop_data() == 0)
-
--- 2dup
-local cpu = CPU.new()
-Loader.asm(cpu, iterator([[
-    .org 1024
-    nop 10
-    nop 20
-    2dup
-    hlt
-]]))
-cpu:run()
-assert(cpu:pop_data() == 20)
-assert(cpu:pop_data() == 10)
-assert(cpu:pop_data() == 20)
-assert(cpu:pop_data() == 10)
 
 -- pick
 local cpu = CPU.new()

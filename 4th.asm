@@ -1,7 +1,7 @@
 ; Magic numbers:
-$CALL: .equ 26
+$CALL: .equ 25
 $PUSH: .equ 0
-$RET: .equ 27
+$RET: .equ 26
 
 .org 0x400 ; start here
     setiv oninterrupt
@@ -28,6 +28,10 @@ dupz_done:
     ret
 
 
+dup2: ; ( a b -- a b a b )
+    pick 1
+    pick 1
+    ret
 
 
 ; Print a null-term string
@@ -56,7 +60,7 @@ cr: ; ( -- )
 ; Check whether two null terminated strings are equal
 streq: ; ( str1 str2 -- bool )
     ; check if two chars are equal
-    2dup
+    call dup2
     load
     swap
     load
@@ -86,7 +90,7 @@ streq_done_ne:
 ; Check whether two words (terminated by any non-word-character) are equal
 wordeq: ; ( str1 str2 -- bool )
     ; check if both chars are nonword
-    2dup
+    call dup2
     load
     call word_char
     swap
@@ -95,7 +99,7 @@ wordeq: ; ( str1 str2 -- bool )
     or
     brz @wordeq_done_eq ; both are nonword so we're done
     ; check if both chars are equal
-    2dup
+    call dup2
     load
     swap
     load
@@ -142,7 +146,7 @@ advance_entry_end:
 find_in_dict: ; ( ptr dict -- addr )
     call dupnz
     brz @find_in_dict_not_found
-    2dup
+    call dup2
     call wordeq ; ( ptr dict eq? )
     brz @find_in_dict_next
     swap
@@ -405,7 +409,7 @@ copy_region: ; ( start end dest -- )
     pushr
     swap ; ( end start ) [ dest ]
 copy_region_loop:
-    2dup
+    call dup2
     sub
     brz @copy_region_done
     dup
@@ -431,7 +435,7 @@ copy_region_done:
 word_to_dict: ; ( word-addr -- def-addr )
     dup
     call skip_word
-    2dup
+    call dup2
     loadw heap_ptr
     call copy_region ; ( word-start word-end )
     swap
@@ -568,7 +572,7 @@ compile_instruction_arg: ; ( arg opcode -- )
     dup
     add 4
     storew heap_ptr ; Increment the ptr ( arg instr-byte heap_ptr )
-    2dup
+    call dup2
     store
     add 1
     swap
@@ -633,7 +637,7 @@ handleword_number:
 ; (in other words, allocate an array on the heap)
 allot: ; ( num -- ptr )
     loadw heap_ptr
-    2dup
+    call dup2
     add
     storew heap_ptr
     swap
