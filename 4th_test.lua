@@ -199,8 +199,8 @@ test_fn('wordeq',
 -- First two dict entries are foo and bar. foo plus null plus
 -- 3-byte definition is dict + 7
 test_fn('advance_entry',
-        given_stack{ Symbols.dictionary },
-        expect_stack{ Symbols.dictionary + 7 })
+        given_stack{ Symbols.d_foo },
+        expect_stack{ Symbols.d_bar })
 
 --------------------------------------------------
 
@@ -246,6 +246,12 @@ test_fn('tick',
         all(given_memory(0x10000, '.'),
             given_stack{ 1, 2, 3, 0x10000 }),
         expect_stack{ 1, 2, 3, Symbols.itoa })
+
+-- Does it find the last thing in the dictionary?
+test_fn('tick',
+        all(given_memory(0x10000, ':'),
+            given_stack{ 1, 2, 3, 0x10000 }),
+        expect_stack{ 1, 2, 3, Symbols.colon_word })
 
 --------------------------------------------------
 
@@ -575,16 +581,11 @@ test_fn('copy_region',
 test_fn('word_to_dict',
         all(given_memory(0x10000, 'blah'),
             given_stack{ 0x10000 }),
-        all(expect_stack{ Symbols.dictionary_end + 5 },
-            expect_memory(Symbols.dictionary_end, 'b', 'l', 'a', 'h', 0, 0, 0, 0, 0),
-            expect_word(Symbols.dictionary_end_ptr, Symbols.dictionary_end + 8)))
-
-test_fn('word_to_dict',
-        all(given_memory(0x10000, 'xyz'),
-            given_stack{ 0x10000 }),
-        all(expect_stack{ Symbols.dictionary_end + 4 },
-            expect_memory(Symbols.dictionary_end, 'x', 'y', 'z', 0, 0, 0, 0, 0),
-            expect_word(Symbols.dictionary_end_ptr, Symbols.dictionary_end + 7)))
+        all(expect_stack{ Symbols.heap_start + 5 },
+            expect_memory(Symbols.heap_start, 'b', 'l', 'a', 'h', 0, 0, 0, 0),
+            expect_word(Symbols.dictionary, Symbols.heap_start),
+            expect_word(Symbols.heap_start + 8, Symbols.d_foo),
+            expect_word(Symbols.heap_ptr, Symbols.heap_start + 11)))
 
 --------------------------------------------------
 
@@ -599,8 +600,9 @@ test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': xyz'),
             given_stack{ 0x12345 }),
         all(expect_stack{ 0x12345 },
-            expect_memory(Symbols.dictionary_end, 'x', 'y', 'z', 0),
-            expect_word(Symbols.dictionary_end + 4, Symbols.heap_start),
+            expect_memory(Symbols.heap_start, 'x', 'y', 'z', 0),
+            expect_word(Symbols.heap_start + 4, Symbols.heap_start + 10),
+            expect_word(Symbols.heap_start + 7, Symbols.d_foo),
             expect_word(Symbols.handleword_hook, Symbols.compileword),
             expect_word(Symbols.current_mode, 1)))
 
@@ -608,23 +610,24 @@ test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': blah 123'),
             given_stack{ 0x12345 }),
         all(expect_stack{ 0x12345 },
-            expect_memory(Symbols.heap_start, 3, 123, 0, 0),
-            expect_word(Symbols.heap_ptr, Symbols.heap_start + 4)))
+            expect_memory(Symbols.heap_start, 'b', 'l', 'a', 'h', 0),
+            expect_memory(Symbols.heap_start + 11, 3, 123, 0, 0), -- 11 byte dict entry: 5 word + 3 def + 3 next ptr
+            expect_word(Symbols.heap_ptr, Symbols.heap_start + 15)))
 
 test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': blah bar'),
             given_stack{ 0x12345 }),
         all(expect_stack{ 0x12345 },
-            expect_memory(Symbols.heap_start, 26 * 4 + 3), -- instruction byte
-            expect_word(Symbols.heap_start + 1, Symbols.bar),
-            expect_word(Symbols.heap_ptr, Symbols.heap_start + 4)))
+            expect_memory(Symbols.heap_start + 11, 26 * 4 + 3), -- instruction byte
+            expect_word(Symbols.heap_start + 12, Symbols.bar),
+            expect_word(Symbols.heap_ptr, Symbols.heap_start + 15)))
 
 test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': blah ;'),
             given_stack{ 0x12345 }),
         all(expect_stack{ 0x12345 },
-            expect_memory(Symbols.heap_start, 27 * 4), -- return instruction
-            expect_word(Symbols.heap_ptr, Symbols.heap_start + 1),
+            expect_memory(Symbols.heap_start + 11, 27 * 4), -- return instruction
+            expect_word(Symbols.heap_ptr, Symbols.heap_start + 12),
             expect_word(Symbols.handleword_hook, Symbols.handleword),
             expect_word(Symbols.current_mode, 0)))
 
@@ -639,4 +642,8 @@ test_fn('handleline',
             expect_output('50'),
             expect_word(Symbols.current_mode, 0)))
 
--- todo: redefining words that already exist, dotquote in compilation mode
+print('Text ends at: ' .. Symbols.line_buf)
+print('Bytes available: ' .. 131072 - Symbols.heap_start)
+print('Code size: ' .. Symbols.line_buf - 0x400)
+
+-- todo: dotquote in compilation mode

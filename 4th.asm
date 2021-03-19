@@ -128,46 +128,46 @@ advance_entry: ; ( ptr -- next_ptr )
     jmpr @advance_entry
 advance_entry_done:
     add 4
+    call dupnz
+    brz @advance_entry_end
+    loadw
     ret
+advance_entry_end:
+    ret 0
+
+
 
 
 ; Find dictionary entry for word
 find_in_dict: ; ( ptr dict -- addr )
-    storew find_in_dict_current
-find_in_dict_loop:
-    dup ; ( ptr ptr )
-    loadw find_in_dict_current ; ( ptr ptr tc )
-    dup ; ( ptr ptr tc tc )
-    load ; ( ptr ptr tc *tc )
-    brz @find_in_dict_missing_word
-    call wordeq ; ( ptr eq? )
-    brz @find_in_dict_retry
-    pop ; ( ) This WAS the right entry!
-    loadw find_in_dict_current
-    call advance_entry
-    sub 3
+    call dupnz
+    brz @find_in_dict_not_found
+    2dup
+    call wordeq ; ( ptr dict eq? )
+    brz @find_in_dict_next
+    swap
+    pop
+    call skip_word
+    add 1
     loadw
     ret
-find_in_dict_retry:
-    loadw find_in_dict_current ; ( ptr tc )
+find_in_dict_next: ; ( ptr dict )
     call advance_entry
-    storew find_in_dict_current ; ( ptr )
-    jmpr @find_in_dict_loop
-find_in_dict_missing_word:
-    pop
-    pop
+    jmpr @find_in_dict
+find_in_dict_not_found:
     pop
     ret 0
-find_in_dict_current: .db 0
+
+
 
 
 tick:
-    push dictionary
+    loadw dictionary
     call find_in_dict
     ret
 
 compile_tick:
-    push compile_dictionary
+    loadw compile_dictionary
     call find_in_dict
     ret
 
@@ -449,26 +449,30 @@ word_to_dict: ; ( word-addr -- def-addr )
     dup
     call skip_word
     2dup
-    loadw dictionary_end_ptr
+    loadw heap_ptr
     call copy_region ; ( word-start word-end )
     swap
     sub
-    loadw dictionary_end_ptr
+    loadw heap_ptr
     add ; ( dictionary-word-null )
-    ; Two overlapping word-writes to get five bytes zeroed:
     dup
     swap 0
-    storew
-    dup
-    add 2
-    swap 0
-    storew
-    ; Store the new end ptr to the last 0
-    dup
-    add 4
-    storew dictionary_end_ptr
-    ; Return the definition ptr
+    store ; null terminate the string
     add 1
+    dup
+    swap 0
+    storew ; write the (null) ptr to the definition
+    dup
+    add 3 ; ( def-addr next-addr )
+    loadw dictionary
+    swap 
+    storew ; make this point to the first dict entry
+    loadw heap_ptr
+    storew dictionary
+    dup
+    add 6
+    storew heap_ptr ; move the heap ptr forward
+    ; Return the definition ptr
     ret
 
 
@@ -592,7 +596,7 @@ compile_instruction_arg: ; ( arg opcode -- )
 
 
 
-; NEEDS A TEST
+; TODO: NEEDS A TEST
 compile_instruction: ; ( opcode -- )
     lshift 2
     loadw heap_ptr ; ( instr-byte heap_ptr )
@@ -674,9 +678,6 @@ itoa_print_loop:
     brnz @itoa_print_loop
     pop
     ret
-itoa_end: .db 0
-itoa_arr: .db 0
-.org itoa_arr + 32 ; set aside some space
 
 
 
@@ -686,7 +687,6 @@ foo:
     call print
     call cr
     ret
-foo_str: .db "You called foo\0"
 
 
 
@@ -696,7 +696,6 @@ bar:
     call print
     call cr
     ret
-bar_str: .db "Bar was called, probably by you!\0"
 
 
 
@@ -739,46 +738,82 @@ missing_word:
 missing_word_str: .db "That word wasn't found: \0"
 unclosed_error: .db "Unclosed string\0"
 expected_word_err: .db "Expected word, found end of input\0"
-dictionary_end_ptr: .db dictionary_end ; holds the address of the current dictionary end sentinel
+foo_str: .db "You called foo\0"
+bar_str: .db "Bar was called, probably by you!\0"
+
+;;;;;;;;;;;;;;;;;;
+
+d_semicolon: .db ";\0"
+.db semicolon_word
+.db 0 ; sentinel for end of dictionary
+
+;;;;;;;;;;;;;;;;;;
+
+d_foo: .db "foo\0"
+.db foo
+.db d_bar
+
+d_bar: .db "bar\0"
+.db bar
+.db d_emit
+
+d_emit: .db "emit\0"
+.db putc
+.db d_dot
+
+d_dot: .db ".\0"
+.db itoa
+.db d_cr
+
+d_cr: .db "cr\0"
+.db cr
+.db d_plus
+
+d_plus: .db "+\0"
+.db w_add
+.db d_minus
+
+d_minus: .db "-\0"
+.db w_sub
+.db d_times
+
+d_times: .db "*\0"
+.db w_mul
+.db d_slash
+
+d_slash: .db "/\0"
+.db w_div
+.db d_mod
+
+d_mod: .db "mod\0"
+.db w_mod
+.db d_dotquote
+
+d_dotquote: .db ".\"\0"
+.db dotquote
+.db d_colon
+
+d_colon: .db ":\0"
+.db colon_word
+.db 0
+
+; Assorted support variables
 heap_ptr: .db heap_start ; holds the address in which to start the next heap entry
 current_mode: .db 0 ; 0 for interpreter ("calculator") mode, 1 for compile mode
 handleword_hook: .db handleword ; The current function used to handle / compile words, switches based on mode
 line_len: .db 0
 cursor: .db 0 ; During calls to handleword, this global points to the beginning of the word
+itoa_end: .db 0
+itoa_arr: .db 0
+.org itoa_arr + 32 ; set aside some space
+
+; pointer to head of dictionary
+dictionary: .db d_foo
+
+; words only available while compiling and which take precedence over the normal dict in that case
+compile_dictionary: .db d_semicolon
+
 line_buf: .db 0
 .org line_buf + 0x100
 
-compile_dictionary: ; words only available while compiling and which take precedence over the normal dict in that case
-.db ";\0"
-.db semicolon_word
-.db 0 ; sentinel for end of dictionary
-
-dictionary:
-.db "foo\0"
-.db foo
-.db "bar\0"
-.db bar
-.db "emit\0"
-.db putc
-.db ".\0"
-.db itoa
-.db "cr\0"
-.db cr
-.db "+\0"
-.db w_add
-.db "-\0"
-.db w_sub
-.db "*\0"
-.db w_mul
-.db "/\0"
-.db w_div
-.db "mod\0"
-.db w_mod
-.db ".\"\0"
-.db dotquote
-.db ":\0"
-.db colon_word
-dictionary_end:
-.db 0 ; sentinel for end of dictionary
-
-heap_start: .org dictionary + 0x4000 ; 16k set aside for words and definitions
+heap_start:
