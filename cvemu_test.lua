@@ -461,6 +461,24 @@ assert(cpu:pop_data() == 30)
 assert(cpu:pop_data() == 20)
 assert(cpu:pop_data() == 10)
 
+-- Peekr
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 0x400
+    push 5
+    pushr 10
+    pushr 20
+    peekr
+    popr
+    popr
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == 10)
+assert(cpu:pop_data() == 20)
+assert(cpu:pop_data() == 20)
+assert(cpu:pop_data() == 5)
+
 -- -- Benchmark
 -- local cpu = CPU.new()
 -- Loader.forge(cpu, iterator([[

@@ -173,27 +173,10 @@ compile_tick:
 
 
 
-; returns whether this character is a word char (nonzero) or a separator between words (space, cr, tab)
+; returns whether this character is a word char (nonzero) or a separator between words (space, cr, tab, control chars...)
 word_char: ; ( ch -- bool )
-    dup
-    brz @word_char_no
-    dup
-    sub 10 ; cr
-    brz @word_char_no
-    dup
-    sub 13 ; cr
-    brz @word_char_no
-    dup
-    sub 32 ; spc
-    brz @word_char_no
-    dup
-    sub 9 ; tab
-    brz @word_char_no
-    pop
-    ret 1
-word_char_no:
-    pop
-    ret 0
+    gt 32
+    ret
 
 
 
@@ -646,27 +629,57 @@ handleword_number:
 
 
 
+; Increment heap_ptr by a number of bytes and return the old heap ptr
+; (in other words, allocate an array on the heap)
+allot: ; ( num -- ptr )
+    loadw heap_ptr
+    2dup
+    add
+    storew heap_ptr
+    swap
+    pop
+    ret
+
+
+
+
+; Decrement heap_ptr by a number of bytes (in other words, free an array
+; allocated on the top of the heap)
+free: ; ( num -- )
+    loadw heap_ptr
+    swap
+    sub
+    storew heap_ptr
+    ret
+
+
+
 
 itoa: ; ( num -- )
-    push itoa_arr
-    storew itoa_end
+    push 32
+    call allot
+    dup
+    swap 0
+    store
+    add 1
+    pushr
 itoa_loop:
-    dup ; ( num num )
+    dup ; ( num num ) [ arr ]
     mod 10
     dup
     add 48 ; ( num mod ch )
-    loadw itoa_end
+    peekr ; ( num mod ch arr ) [ arr ]
     store
-    loadw itoa_end
+    popr ; ( num mod arr ) [ ]
     add 1
-    storew itoa_end
+    pushr ; ( num mod ) [ arr+1 ]
     sub
     div 10
     dup
     brnz @itoa_loop
     pop
     ; Got the array of digits in reverse order, print them out:
-    loadw itoa_end
+    popr
     sub 1
 itoa_print_loop:
     dup
@@ -674,9 +687,11 @@ itoa_print_loop:
     store 2
     sub 1
     dup
-    gt itoa_arr - 1
+    load
     brnz @itoa_print_loop
     pop
+    push 32
+    call free
     ret
 
 
@@ -795,6 +810,14 @@ d_dotquote: .db ".\"\0"
 
 d_colon: .db ":\0"
 .db colon_word
+.db d_allot
+
+d_allot: .db "allot\0"
+.db allot
+.db d_free
+
+d_free: .db "free\0"
+.db free
 .db 0
 
 ; Assorted support variables
@@ -803,9 +826,6 @@ current_mode: .db 0 ; 0 for interpreter ("calculator") mode, 1 for compile mode
 handleword_hook: .db handleword ; The current function used to handle / compile words, switches based on mode
 line_len: .db 0
 cursor: .db 0 ; During calls to handleword, this global points to the beginning of the word
-itoa_end: .db 0
-itoa_arr: .db 0
-.org itoa_arr + 32 ; set aside some space
 
 ; pointer to head of dictionary
 dictionary: .db d_foo

@@ -260,23 +260,23 @@ test_fn('word_char',
         expect_stack{ 1 })
 
 test_fn('word_char',
-        given_stack{ 9 },
+        given_stack{ 9 }, -- tab
         expect_stack{ 0 })
 
 test_fn('word_char',
-        given_stack{ 10 },
+        given_stack{ 10 }, -- lf
         expect_stack{ 0 })
 
 test_fn('word_char',
-        given_stack{ 13 },
+        given_stack{ 13 }, -- cr
         expect_stack{ 0 })
 
 test_fn('word_char',
-        given_stack{ 32 },
+        given_stack{ 32 }, -- space
         expect_stack{ 0 })
 
 test_fn('word_char',
-        given_stack{ 0 },
+        given_stack{ 0 }, -- null
         expect_stack{ 0 })
 
 --------------------------------------------------
@@ -315,11 +315,17 @@ test_fn('is_number',
 test_fn('itoa',
         given_stack{ 1234 },
         all(expect_output('1234'),
-            expect_stack{ }))
+            expect_stack{ },
+            expect_word(Symbols.heap_ptr, Symbols.heap_start)))
 
 test_fn('itoa',
         given_stack{ 7 },
         all(expect_output('7'),
+            expect_stack{ }))
+
+test_fn('itoa',
+        given_stack{ 0 },
+        all(expect_output('0'),
             expect_stack{ }))
 
 --------------------------------------------------
@@ -641,6 +647,24 @@ test_fn('handleline',
         all(expect_stack{ 100 },
             expect_output('50'),
             expect_word(Symbols.current_mode, 0)))
+
+--------------------------------------------------
+
+test_fn('allot',
+        all(given_stack{ 20, 10 }),
+        all(expect_stack{ 20, Symbols.heap_start },
+            expect_word(Symbols.heap_ptr, Symbols.heap_start + 10)))
+
+--------------------------------------------------
+
+-- This isn't something you should allow really, but it's a test of how
+-- free actually works, so...
+test_fn('free',
+        all(given_stack{ 20, 10 }),
+        all(expect_stack{ 20 },
+            expect_word(Symbols.heap_ptr, Symbols.heap_start - 10)))
+
+--------------------------------------------------
 
 print('Text ends at: ' .. Symbols.line_buf)
 print('Bytes available: ' .. 131072 - Symbols.heap_start)

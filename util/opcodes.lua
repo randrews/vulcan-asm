@@ -58,6 +58,7 @@ add_opcode('sdp')
 add_opcode('setsdp')
 add_opcode('pushr')
 add_opcode('popr')
+add_opcode('peekr')
 add_opcode('debug')
 
 return {

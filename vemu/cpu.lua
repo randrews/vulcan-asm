@@ -66,6 +66,11 @@ function CPU:pop_call()
     return val
 end
 
+function CPU:peek_call()
+    local val = self:peek24(self.sp)
+    return val
+end
+
 -- Devices support different callbacks:
 -- - peek is called with an offset, if a byte within the address range is read
 -- - poke is called with an offset and a new (byte) value, if a byte is written
@@ -414,6 +419,10 @@ end
 
 function CPU:popr()
     self:push_data(self:pop_call())
+end
+
+function CPU:peekr()
+    self:push_data(self:peek_call())
 end
 
 -- Convert a 24-bit unsigned value to a signed Lua number

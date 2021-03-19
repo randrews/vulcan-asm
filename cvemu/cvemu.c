@@ -21,6 +21,7 @@ int cvemu_push_call(lua_State *L);
 void cpu_push_call(Cpu *cpu, int addr);
 int cvemu_pop_call(lua_State *L);
 int cpu_pop_call(Cpu *cpu);
+int cpu_peek_call(Cpu *cpu);
 int cvemu_poke(lua_State *L);
 void cpu_poke(Cpu *cpu, unsigned int addr, unsigned char value, lua_State *L);
 int cvemu_poke24(lua_State *L);
@@ -287,6 +288,12 @@ int cpu_pop_call(Cpu *cpu) {
     // Warning! We're implicitly assuming the stacks don't overlap with device memory
     int val = cpu_peek24(cpu, cpu->sp, 0);
     cpu->sp += 3;
+    return val;
+}
+
+int cpu_peek_call(Cpu *cpu) {
+    // Warning! We're implicitly assuming the stacks don't overlap with device memory
+    int val = cpu_peek24(cpu, cpu->sp, 0);
     return val;
 }
 
@@ -637,6 +644,9 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         break;
     case POPR:
         cpu_push_data(cpu, cpu_pop_call(cpu));
+        break;
+    case PEEKR:
+        cpu_push_data(cpu, cpu_peek_call(cpu));
         break;
     case DEBUG:
         cvemu_print_stack(L);
