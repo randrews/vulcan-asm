@@ -384,8 +384,6 @@ dotquote_loop:
     add 1
     jmpr @dotquote_loop
 
-
-
 ; Copies a region of memory to another region of memory. Copies start..(end-1) to dest..etc
 copy_region: ; ( start end dest -- )
     pushr
@@ -428,7 +426,7 @@ word_to_dict: ; ( word-addr -- def-addr )
     dup
     add 3 ; ( def-addr next-addr )
     loadw dictionary
-    swap 
+    swap
     storew ; make this point to the first dict entry
     loadw heap_ptr
     storew dictionary
@@ -530,7 +528,7 @@ compileword_found:
 compileword_number:
     swap
     pop
-    push $PUSH 
+    push $PUSH
     call compile_instruction_arg
     ret
 
@@ -564,7 +562,7 @@ compile_instruction: ; ( opcode -- )
     store
     ret
 
-    
+
 
 
 handleword: ; ( <args for word> word-start-addr -- <word return stack> )
@@ -589,7 +587,7 @@ handleword: ; ( <args for word> word-start-addr -- <word return stack> )
 handleword_found:
     swap
     pop
-    call 
+    call
     ret
 handleword_number:
     swap
@@ -766,15 +764,14 @@ then_word:
     call resolve_c_addr
     ret
 
-; The s-quote equivalent in compile mode:
-compile_squote:
+
+; Compiles a string to the heap and pushes a pointer to it
+squote: ; ( -- addr )
     loadw cursor
     call skip_word ; advance past the s" itself
     call read_string ; ( start end ) or ( 0 )
     call dupnz
-    brz @compile_squote_unclosed
-    push $JMPR
-    call push_jump ; compile a jmpr to get us past the string
+    brz @end_ret
     pick 1
     pick 1
     loadw heap_ptr
@@ -789,19 +786,21 @@ compile_squote:
     swap 0
     store ; Null-terminate it
     add 1
-    dup
     storew heap_ptr ; Increment the heap ptr by len+1
+    popr
+    ret
+
+; The s-quote equivalent in compile mode:
+compile_squote:
+    push $JMPR
+    call push_jump ; compile a jmpr to get us past the string
+    call squote ; ( addr )
+    loadw heap_ptr
     call resolve_c_addr ; Jump to right after the null-terminator
     ; compile a push with the string start
-    popr
-    push $PUSH
+    push $PUSH ; ( addr $push )
     call compile_instruction_arg
     ret
-compile_squote_unclosed:
-    ret
-
-
-
 
 ; The dot-quote equivalent in compile mode:
 compile_dotquote:
@@ -890,6 +889,10 @@ d_mod: .db "mod\0"
 
 d_dotquote: .db ".\"\0"
 .db dotquote
+.db d_squote
+
+d_squote: .db "s\"\0"
+.db squote
 .db d_colon
 
 d_colon: .db ":\0"

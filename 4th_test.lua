@@ -735,7 +735,17 @@ test_fn('handleline',
             expect_memory(Symbols.heap_start + 11 + 4, 'H', 'e', 'l', 'l', 'o', 0), -- The string!
             expect_memory(Symbols.heap_start + 11 + 10, Opcodes.opcode_for('push') * 4 + 3), -- Push the addr of the string
             expect_word(Symbols.heap_start + 11 + 10 + 1, Symbols.heap_start + 11 + 4), -- The start of the string
-            expect_output(''))) -- And we printed it?
+            expect_output(''))) -- And we shouldn't print it
+
+--------------------------------------------------
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, 's" Hello"'),
+            given_stack{ 100 }),
+        all(expect_stack{ 100, Symbols.heap_start },
+            expect_memory(Symbols.heap_start, 'H', 'e', 'l', 'l', 'o', 0), -- The string!
+            expect_word(Symbols.heap_ptr, Symbols.heap_start + 6), -- The start of the string
+            expect_output('')))
 
 --------------------------------------------------
 
