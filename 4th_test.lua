@@ -712,7 +712,7 @@ test_fn('handleline',
 
 --------------------------------------------------
 
--- Compiling dot-quote
+-- Compiling quotation stuff
 test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': blah ." Hello" ; blah'),
             given_stack{ 100 }),
@@ -725,6 +725,17 @@ test_fn('handleline',
             expect_memory(Symbols.heap_start + 11 + 14, Opcodes.opcode_for('call') * 4 + 3), -- Call...
             expect_word(Symbols.heap_start + 11 + 14 + 1, Symbols.print), --- Print!
             expect_output('Hello'))) -- And we printed it?
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah s" Hello" ; blah'),
+            given_stack{ 100 }),
+        all(expect_stack{ 100, Symbols.heap_start + 11 + 4 },
+            expect_memory(Symbols.heap_start + 11, Opcodes.opcode_for('jmpr') * 4 + 3), -- Jump past the data
+            expect_word(Symbols.heap_start + 11 + 1, 10), -- 6 bytes string, 4 bytes the jmpr instruction itself
+            expect_memory(Symbols.heap_start + 11 + 4, 'H', 'e', 'l', 'l', 'o', 0), -- The string!
+            expect_memory(Symbols.heap_start + 11 + 10, Opcodes.opcode_for('push') * 4 + 3), -- Push the addr of the string
+            expect_word(Symbols.heap_start + 11 + 10 + 1, Symbols.heap_start + 11 + 4), -- The start of the string
+            expect_output(''))) -- And we printed it?
 
 --------------------------------------------------
 

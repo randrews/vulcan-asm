@@ -36,19 +36,32 @@ dup2: ; ( a b -- a b a b )
     pick 1
     ret
 
+; We often need to pop 1-2 times and then ret, in a brnz / brz.
+; Rather than repeat that everywhere, we'll abstract it and branch
+; to one of these three:
+end_pop3r: pop
+end_pop2r: popr
+end_pop2: pop
+end_pop1: pop
+end_ret: ret
+
+; ...And this is like that, but returns 0 or 1:
+end0_pop2: pop
+end0_pop1: pop
+end0_ret: ret 0
+end1_pop2: pop
+end1_pop1: pop
+end1_ret: ret 1
 
 ; Print a null-term string
 print: ; ( addr -- )
     dup
     load
     call dupnz
-    brz @print_done
+    brz @end_pop1
     store 0x02
     add 1
     jmpr @print
-print_done:
-    pop
-    ret
 
 
 
@@ -68,24 +81,16 @@ streq: ; ( str1 str2 -- bool )
     swap
     load
     sub
-    brnz @streq_done_ne
+    brnz @end0_pop2
     ; they're both equal, is either one zero?
     dup
     load
-    brz @streq_done_eq
+    brz @end1_pop2
     ; inc both pointers
     add 1
     swap
     add 1
     jmpr @streq
-streq_done_eq:
-    pop
-    pop
-    ret 1
-streq_done_ne:
-    pop
-    pop
-    ret 0
 
 
 
@@ -100,27 +105,19 @@ wordeq: ; ( str1 str2 -- bool )
     load
     call word_char
     or
-    brz @wordeq_done_eq ; both are nonword so we're done
+    brz @end1_pop2 ; both are nonword so we're done
     ; check if both chars are equal
     call dup2
     load
     swap
     load
     sub
-    brnz @wordeq_done_ne
+    brnz @end0_pop2
     ; they're both equal, inc both pointers
     add 1
     swap
     add 1
     jmpr @wordeq
-wordeq_done_eq:
-    pop
-    pop
-    ret 1
-wordeq_done_ne:
-    pop
-    pop
-    ret 0
 
 
 
@@ -136,11 +133,9 @@ advance_entry: ; ( ptr -- next_ptr )
 advance_entry_done:
     add 4
     call dupnz
-    brz @advance_entry_end
+    brz @end0_ret
     loadw
     ret
-advance_entry_end:
-    ret 0
 
 
 
@@ -148,7 +143,7 @@ advance_entry_end:
 ; Find dictionary entry for word
 find_in_dict: ; ( ptr dict -- addr )
     call dupnz
-    brz @find_in_dict_not_found
+    brz @end0_pop1 ; not found
     call dup2
     call wordeq ; ( ptr dict eq? )
     brz @find_in_dict_next
@@ -161,9 +156,6 @@ find_in_dict: ; ( ptr dict -- addr )
 find_in_dict_next: ; ( ptr dict )
     call advance_entry
     jmpr @find_in_dict
-find_in_dict_not_found:
-    pop
-    ret 0
 
 
 
@@ -283,11 +275,9 @@ skip_word: ; ( ptr -- first-nonword )
     dup
     load ; ( ptr ch )
     call word_char
-    brz @skip_word_done
+    brz @end_ret
     add 1
     jmpr @skip_word
-skip_word_done:
-    ret
 
 
 
@@ -297,13 +287,11 @@ skip_nonword: ; ( ptr -- first-word )
     dup
     load ; ( ptr ch )
     call dupnz
-    brz @skip_nonword_done
+    brz @end_ret
     call word_char
-    brnz @skip_nonword_done
+    brnz @end_ret
     add 1
     jmpr @skip_nonword
-skip_nonword_done:
-    ret
 
 
 
@@ -319,15 +307,13 @@ handleline_loop:
     loadw cursor
     call skip_word ; Advance past this word
     load
-    brz @handleline_done ; after this word is an EOS, so we're done
+    brz @end_ret ; after this word is an EOS, so we're done
     ; Now on to the next word
     loadw cursor
     call skip_word
     call skip_nonword
     storew cursor ; cursor is now the start of the next word
     jmpr @handleline_loop
-handleline_done:
-    ret
 
 
 
@@ -337,7 +323,7 @@ find_byte: ; ( val start -- addr-or-zero )
     dup
     load
     call dupnz
-    brz @find_byte_eos
+    brz @end0_pop2 ; eos
     pick 2
     sub
     call dupnz
@@ -349,15 +335,13 @@ find_byte_found:
     swap
     pop
     ret
-find_byte_eos:
-    pop
-    pop
-    ret 0
 
 
 ; Reads from the input line a string, starting with the first word character after cursor
 ; and ending with the first quote (ascii 34). Places on the stack the address of the first word
-; character and the address of the quote, or just zero if there is no quote
+; character and the address of the quote, or just zero if there is no quote. Additionally updates
+; the input cursor to point at the end quote
+; If there is no quote, it also prints an error message and aborts the input loop
 read_string: ; ( addr -- start end ), or if unclosed ( addr -- 0 )
     call skip_nonword
     dup
@@ -365,9 +349,17 @@ read_string: ; ( addr -- start end ), or if unclosed ( addr -- 0 )
     call find_byte ; ( start end? ) Find where we should end, or zero
     call dupnz
     brz @read_string_unclosed
+    dup
+    storew cursor
     ret
 read_string_unclosed:
     pop
+    push unclosed_error
+    call print
+    push 0
+    storew line_buf
+    push line_buf
+    storew cursor
     ret 0
 
 
@@ -377,7 +369,7 @@ dotquote:
     call skip_word ; advance past the ." itself
     call read_string ; ( start end ) or ( 0 )
     call dupnz
-    brz @dotquote_unclosed
+    brz @end_ret
     pushr
 dotquote_loop:
     dup
@@ -385,25 +377,12 @@ dotquote_loop:
     dup
     pushr
     sub
-    brz @dotquote_done
+    brz @end_pop2r
     dup
     load
     store 2
     add 1
     jmpr @dotquote_loop
-dotquote_done:
-    popr
-    pop
-    storew cursor
-    ret
-dotquote_unclosed:
-    push unclosed_error
-    call print
-    push 0
-    storew line_buf
-    push line_buf
-    storew cursor
-    ret
 
 
 
@@ -414,7 +393,7 @@ copy_region: ; ( start end dest -- )
 copy_region_loop:
     call dup2
     sub
-    brz @copy_region_done
+    brz @end_pop3r
     dup
     load ; ( end start byte ) [ dest ]
     popr
@@ -424,12 +403,6 @@ copy_region_loop:
     store
     add 1
     jmpr @copy_region_loop
-copy_region_done:
-    popr
-    pop
-    pop
-    pop
-    ret
 
 
 
@@ -523,7 +496,7 @@ compileword:
     ; first check for a blank word and skip:
     dup
     load
-    brz @compileword_blank
+    brz @end_pop1 ; blank?
     ; Now call compile_tick to try to find it in the dictionary of special compiled words
     dup ; ( addr addr )
     call compile_tick ; ( addr entry-addr )
@@ -554,9 +527,6 @@ compileword_found:
     push $CALL
     call compile_instruction_arg
     ret
-compileword_blank:
-    pop
-    ret
 compileword_number:
     swap
     pop
@@ -567,7 +537,6 @@ compileword_number:
 
 
 
-; NEEDS A TEST
 compile_instruction_arg: ; ( arg opcode -- )
     lshift 2
     or 3 ; tell it we have a three byte arg
@@ -586,7 +555,6 @@ compile_instruction_arg: ; ( arg opcode -- )
 
 
 
-; TODO: NEEDS A TEST
 compile_instruction: ; ( opcode -- )
     lshift 2
     loadw heap_ptr ; ( instr-byte heap_ptr )
@@ -603,7 +571,7 @@ handleword: ; ( <args for word> word-start-addr -- <word return stack> )
     ; first check for a blank word and skip:
     dup
     load
-    brz @handleword_blank
+    brz @end_pop1 ; blank?
     ; Now call tick to try to find it in the dictionary
     dup ; ( addr addr )
     call tick ; ( addr entry-addr )
@@ -622,22 +590,13 @@ handleword_found:
     swap
     pop
     call 
-handleword_done:
-    ret
-handleword_blank:
-    pop
     ret
 handleword_number:
     swap
     pop
     ret
 
-
-
 ;;;;;;;;;;;;;;;;;;
-
-
-
 
 ; Increment heap_ptr by a number of bytes and return the old heap ptr
 ; (in other words, allocate an array on the heap)
@@ -704,25 +663,17 @@ itoa_print_loop:
     call free
     ret
 
-
-
-
 foo:
     push foo_str
     call print
     call cr
     ret
 
-
-
-
 bar:
     push bar_str
     call print
     call cr
     ret
-
-
 
 putc:
     store 2
@@ -815,20 +766,17 @@ then_word:
     call resolve_c_addr
     ret
 
-
-; The dot-quote equivalent in compile mode:
-compile_dotquote:
+; The s-quote equivalent in compile mode:
+compile_squote:
     loadw cursor
-    call skip_word ; advance past the ." itself
+    call skip_word ; advance past the s" itself
     call read_string ; ( start end ) or ( 0 )
     call dupnz
-    brz @compile_dotquote_unclosed
+    brz @compile_squote_unclosed
     push $JMPR
-    call push_jump ; compile a jpmr to get us past the string
+    call push_jump ; compile a jmpr to get us past the string
     pick 1
     pick 1
-    dup
-    storew cursor ; Move cursor forward some
     loadw heap_ptr
     dup
     pushr ; save this, it's where the string starts
@@ -848,24 +796,23 @@ compile_dotquote:
     popr
     push $PUSH
     call compile_instruction_arg
+    ret
+compile_squote_unclosed:
+    ret
+
+
+
+
+; The dot-quote equivalent in compile mode:
+compile_dotquote:
+    call compile_squote
     ; compile a call to print
     push print
     push $CALL
     call compile_instruction_arg
     ret
-compile_dotquote_unclosed: ; TODO generic error method?
-    push unclosed_error
-    call print
-    push 0
-    storew line_buf
-    push line_buf
-    storew cursor
-    ret
 
 ;;;;;;;;;;;;;;;;;;
-
-
-
 
 missing_word_str: .db "That word wasn't found: \0"
 unclosed_error: .db "Unclosed string\0"
@@ -885,6 +832,10 @@ d_then: .db "then\0"
 
 d_else: .db "else\0"
 .db else_word
+.db d_compile_squote
+
+d_compile_squote: .db "s\"\0"
+.db compile_squote
 .db d_compile_dotquote
 
 d_compile_dotquote: .db ".\"\0"
