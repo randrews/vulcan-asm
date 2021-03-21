@@ -85,13 +85,32 @@ end
 
 function expect_memory(start, ...)
     local mem = { ... }
+    local expanded_mem = {}
+    for _, el in ipairs(mem) do
+        if type(el) == 'string' then table.insert(expanded_mem, el:byte())
+        elseif type(el) == 'table' then
+            for _, b in ipairs(el) do table.insert(expanded_mem, b) end
+        else
+            table.insert(expanded_mem, el)
+        end
+    end
+    
     return function(_s, _o, cpu)
-        for i, b in ipairs(mem) do
-            if type(b) == 'string' then b = b:byte() end
+        for i, b in ipairs(expanded_mem) do
             local actual = cpu:peek(start + i - 1)
             assert(actual == b, string.format('%x: exp %d, act %d', start + i - 1, b, actual))
         end
     end
+end
+
+function word(val)
+    val = val & 0xffffff
+    return { val & 0xff, (val & 0xff00) / 256, (val & 0xff0000) / 65536 }
+end
+
+function op(mnemonic, args)
+    if not args then args = 0 end
+    return Opcodes.opcode_for(mnemonic) * 4 + args
 end
 
 function expect_string(start, str)
@@ -108,6 +127,19 @@ function expect_word(addr, val)
     return function(_s, _o, cpu)
         local actual = cpu:peek24(addr)
         assert(actual == val, string.format('exp %xh, act %xh', val, actual))
+    end
+end
+
+function dump_memory(addr, len)
+    return function(_s, _o, cpu)
+        for a = addr, addr + len do
+            local b = cpu:peek(a)
+            local c = string.char(b)
+            local op = Opcodes.mnemonic_for(math.floor(b / 4))
+            local args = b & 3
+            if b < 32 then c = '' end
+            print(string.format('%xh: %xh (%d) %q %q/%d', a, b, b, c, op, args))
+        end
     end
 end
 
@@ -706,9 +738,10 @@ test_fn('handleline',
         all(expect_stack{ 100, 10 }))
 
 test_fn('handleline',
-        all(given_memory(Symbols.line_buf, ': blah if 10 else 5 then ; 20 blah 0 blah'),
+        all(given_memory(Symbols.line_buf, ': blah if else 5 then ; 0 blah'),
             given_stack{ 100 }),
-        all(expect_stack{ 100, 10, 5 }))
+        all(expect_stack{ 100, 5 },
+            expect_memory(Symbols.heap_start + 11, Opcodes.opcode_for('brz') * 4 + 3)))
 
 --------------------------------------------------
 
@@ -717,24 +750,21 @@ test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': blah ." Hello" ; blah'),
             given_stack{ 100 }),
         all(expect_stack{ 100 },
-            expect_memory(Symbols.heap_start + 11, Opcodes.opcode_for('jmpr') * 4 + 3), -- Jump past the data
-            expect_word(Symbols.heap_start + 11 + 1, 10), -- 6 bytes string, 4 bytes the jmpr instruction itself
-            expect_memory(Symbols.heap_start + 11 + 4, 'H', 'e', 'l', 'l', 'o', 0), -- The string!
-            expect_memory(Symbols.heap_start + 11 + 10, Opcodes.opcode_for('push') * 4 + 3), -- Push the addr of the string
-            expect_word(Symbols.heap_start + 11 + 10 + 1, Symbols.heap_start + 11 + 4), -- The start of the string
-            expect_memory(Symbols.heap_start + 11 + 14, Opcodes.opcode_for('call') * 4 + 3), -- Call...
-            expect_word(Symbols.heap_start + 11 + 14 + 1, Symbols.print), --- Print!
+            expect_memory(Symbols.heap_start + 11,
+                          op('jmpr', 3), word(10), -- Jump past the data, 6 bytes string, 4 bytes the jmpr instruction itself
+                          'H', 'e', 'l', 'l', 'o', 0, -- The string!
+                          op('push', 3), word(Symbols.heap_start + 11 + 4), -- Push the addr of the string
+                          op('call', 3), word(Symbols.print)), -- Call print
             expect_output('Hello'))) -- And we printed it?
 
 test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': blah s" Hello" ; blah'),
             given_stack{ 100 }),
         all(expect_stack{ 100, Symbols.heap_start + 11 + 4 },
-            expect_memory(Symbols.heap_start + 11, Opcodes.opcode_for('jmpr') * 4 + 3), -- Jump past the data
-            expect_word(Symbols.heap_start + 11 + 1, 10), -- 6 bytes string, 4 bytes the jmpr instruction itself
-            expect_memory(Symbols.heap_start + 11 + 4, 'H', 'e', 'l', 'l', 'o', 0), -- The string!
-            expect_memory(Symbols.heap_start + 11 + 10, Opcodes.opcode_for('push') * 4 + 3), -- Push the addr of the string
-            expect_word(Symbols.heap_start + 11 + 10 + 1, Symbols.heap_start + 11 + 4), -- The start of the string
+            expect_memory(Symbols.heap_start + 11,
+                          op('jmpr', 3), word(10), -- Jump past the data, 6 bytes string, 4 bytes the jmpr instruction itself
+                          'H', 'e', 'l', 'l', 'o', 0, -- The string!
+                          op('push', 3), word(Symbols.heap_start + 11 + 4)), -- Push the addr of the string
             expect_output(''))) -- And we shouldn't print it
 
 --------------------------------------------------
@@ -746,6 +776,23 @@ test_fn('handleline',
             expect_memory(Symbols.heap_start, 'H', 'e', 'l', 'l', 'o', 0), -- The string!
             expect_word(Symbols.heap_ptr, Symbols.heap_start + 6), -- The start of the string
             expect_output('')))
+
+--------------------------------------------------
+
+-- Infinite loops
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah begin ." foo" again ;'), -- Everyone's first basic program...
+        expect_memory(Symbols.heap_start + 11,
+                      op('jmpr', 3), word(8), -- The jmpr for the string
+                      'f', 'o', 'o', 0, -- The string itself
+                      op('push', 3), word(Symbols.heap_start + 11 + 4), -- The push for the string addr
+                      op('call', 3), word(Symbols.print), -- Call to print the string
+                      op('jmpr', 3), word(-16))) -- Jump back 16 bytes to the begin
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah 0 begin dup . 1 + dup 4 - if else exit then again ; blah'),
+            given_stack{ 100 }),
+        all(expect_output('0123')))
 
 --------------------------------------------------
 

@@ -693,6 +693,9 @@ w_div: div
 w_mod: mod
     ret
 
+w_dup: dup
+    ret
+
 missing_word:
     push missing_word_str
     call print
@@ -709,6 +712,16 @@ push_c_addr: ; ( addr -- )
     add 3
     storew c_stack_ptr
     storew
+    ret
+
+
+; Pushes an address of an unresolved pointer to the control stack
+pop_c_addr: ; ( -- addr )
+    loadw c_stack_ptr
+    sub 3
+    dup
+    storew c_stack_ptr
+    loadw
     ret
 
 
@@ -811,6 +824,24 @@ compile_dotquote:
     call compile_instruction_arg
     ret
 
+begin_word:
+    loadw heap_ptr
+    call push_c_addr
+    ret
+
+again_word:
+    call pop_c_addr
+    loadw heap_ptr
+    sub
+    push $JMPR
+    call compile_instruction_arg
+    ret
+
+exit_word:
+    push $RET
+    call compile_instruction
+    ret
+
 ;;;;;;;;;;;;;;;;;;
 
 missing_word_str: .db "That word wasn't found: \0"
@@ -839,6 +870,18 @@ d_compile_squote: .db "s\"\0"
 
 d_compile_dotquote: .db ".\"\0"
 .db compile_dotquote
+.db d_begin
+
+d_begin: .db "begin\0"
+.db begin_word
+.db d_again
+
+d_again: .db "again\0"
+.db again_word
+.db d_exit
+
+d_exit: .db "exit\0"
+.db exit_word
 .db d_semicolon
 
 d_semicolon: .db ";\0"
@@ -885,6 +928,10 @@ d_slash: .db "/\0"
 
 d_mod: .db "mod\0"
 .db w_mod
+.db d_dup
+
+d_dup: .db "dup\0"
+.db w_dup
 .db d_dotquote
 
 d_dotquote: .db ".\"\0"
