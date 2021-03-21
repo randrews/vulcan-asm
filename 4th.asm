@@ -693,6 +693,16 @@ w_div: div
 w_mod: mod
     ret
 
+w_eq: xor
+    not
+    ret
+
+w_gt: gt
+    ret
+
+w_lt: lt
+    ret
+
 w_dup: dup
     ret
 
@@ -842,6 +852,38 @@ exit_word:
     call compile_instruction
     ret
 
+until_word:
+    call pop_c_addr
+    loadw heap_ptr
+    sub
+    push $BRZ
+    call compile_instruction_arg
+    ret
+
+while_word:
+    ; Compile an unresolved brz
+    push $BRZ
+    call push_jump
+    ret
+
+repeat_word:
+    ; temporarily store while's thing
+    call pop_c_addr
+    pushr
+    ; Now top of c stack is the begin, so, jmpr to that
+    call pop_c_addr
+    loadw heap_ptr
+    sub
+    push $JMPR
+    call compile_instruction_arg
+    ; put while's thing back
+    popr
+    call push_c_addr
+    ; resolve while's brz:
+    loadw heap_ptr
+    call resolve_c_addr
+    ret
+
 ;;;;;;;;;;;;;;;;;;
 
 missing_word_str: .db "That word wasn't found: \0"
@@ -882,6 +924,18 @@ d_again: .db "again\0"
 
 d_exit: .db "exit\0"
 .db exit_word
+.db d_until
+
+d_until: .db "until\0"
+.db until_word
+.db d_while
+
+d_while: .db "while\0"
+.db while_word
+.db d_repeat
+
+d_repeat: .db "repeat\0"
+.db repeat_word
 .db d_semicolon
 
 d_semicolon: .db ";\0"
@@ -928,6 +982,18 @@ d_slash: .db "/\0"
 
 d_mod: .db "mod\0"
 .db w_mod
+.db d_eq
+
+d_eq: .db "=\0"
+.db w_eq
+.db d_lt
+
+d_lt: .db "<\0"
+.db w_lt
+.db d_gt
+
+d_gt: .db ">\0"
+.db w_gt
 .db d_dup
 
 d_dup: .db "dup\0"

@@ -113,6 +113,16 @@ function op(mnemonic, args)
     return Opcodes.opcode_for(mnemonic) * 4 + args
 end
 
+function inst(mnemonic, arg)
+    local o = op(mnemonic, 3)
+    local w = word(arg)
+    return { o, w[1], w[2], w[3] }
+end
+
+function call_inst(symbol)
+    return inst('call', Symbols[symbol])
+end
+
 function expect_string(start, str)
     return function(_s, _o, cpu)
         for i = 1, #str do
@@ -779,7 +789,7 @@ test_fn('handleline',
 
 --------------------------------------------------
 
--- Infinite loops
+-- Indefinite loops
 test_fn('handleline',
         given_memory(Symbols.line_buf, ': blah begin ." foo" again ;'), -- Everyone's first basic program...
         expect_memory(Symbols.heap_start + 11,
@@ -793,6 +803,30 @@ test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': blah 0 begin dup . 1 + dup 4 - if else exit then again ; blah'),
             given_stack{ 100 }),
         all(expect_output('0123')))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah 0 begin dup . 1 + dup 5 = until ; blah'),
+            given_stack{ 100 }),
+        all(expect_output('01234')))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah 0 begin dup 5 < while dup . 1 + repeat ; blah'),
+        all(expect_memory(Symbols.heap_start + 11,
+                          inst('push', 0),
+                          call_inst('w_dup'),
+                          inst('push', 5),
+                          call_inst('w_lt'),
+                          inst('brz', 24), -- 4-instr loop body + repeat + brz itself
+                          call_inst('w_dup'),
+                          call_inst('itoa'),
+                          inst('push', 1),
+                          call_inst('w_add'),
+                          inst('jmpr', -32),
+                          op('ret')
+            ),
+            expect_output('01234')
+        )
+)
 
 --------------------------------------------------
 
