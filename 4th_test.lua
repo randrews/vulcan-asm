@@ -71,6 +71,10 @@ function given_memory(at, contents)
     end
 end
 
+function given_word(at, word)
+    return function(cpu) cpu:poke24(at, word) end
+end
+
 function expect_stack(expected)
     return function(actual) assert(array_eq(expected, actual)) end
 end
@@ -664,12 +668,63 @@ test_fn('allot',
 
 --------------------------------------------------
 
--- This isn't something you should allow really, but it's a test of how
+-- This isn't something you should do really, free without an allot, but it's a test of how
 -- free actually works, so...
 test_fn('free',
         all(given_stack{ 20, 10 }),
         all(expect_stack{ 20 },
             expect_word(Symbols.heap_ptr, Symbols.heap_start - 10)))
+
+--------------------------------------------------
+
+-- Conditionals
+test_fn('if_word',
+        all(given_stack{ 100 }),
+        all(expect_stack{ 100 },
+            expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 3),
+            expect_memory(Symbols.heap_start, Opcodes.opcode_for('brz') * 4 + 3, 0, 0, 0),
+            expect_word(Symbols.c_stack, Symbols.heap_start + 1)))
+
+test_fn('resolve_c_addr',
+        all(given_word(Symbols.c_stack_ptr, Symbols.c_stack + 3),
+            given_word(Symbols.c_stack, 10000), -- Push a 10000 on to the c stack
+            given_stack{ 100, 10200 } -- We're going to resolve that to point relatively at 10200
+        ),
+        all(expect_stack{ 100 },
+            expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
+            expect_word(10000, 201))) -- 201 because the relative addr is from the instr byte, one behind the arg LB
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah if 10 then ; 0 blah'),
+            given_stack{ 100 }),
+        all(expect_stack{ 100 },
+            expect_memory(Symbols.heap_start + 11, Opcodes.opcode_for('brz') * 4 + 3)))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah if 10 then ; 20 blah'),
+            given_stack{ 100 }),
+        all(expect_stack{ 100, 10 }))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah if 10 else 5 then ; 20 blah 0 blah'),
+            given_stack{ 100 }),
+        all(expect_stack{ 100, 10, 5 }))
+
+--------------------------------------------------
+
+-- Compiling dot-quote
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah ." Hello" ; blah'),
+            given_stack{ 100 }),
+        all(expect_stack{ 100 },
+            expect_memory(Symbols.heap_start + 11, Opcodes.opcode_for('jmpr') * 4 + 3), -- Jump past the data
+            expect_word(Symbols.heap_start + 11 + 1, 10), -- 6 bytes string, 4 bytes the jmpr instruction itself
+            expect_memory(Symbols.heap_start + 11 + 4, 'H', 'e', 'l', 'l', 'o', 0), -- The string!
+            expect_memory(Symbols.heap_start + 11 + 10, Opcodes.opcode_for('push') * 4 + 3), -- Push the addr of the string
+            expect_word(Symbols.heap_start + 11 + 10 + 1, Symbols.heap_start + 11 + 4), -- The start of the string
+            expect_memory(Symbols.heap_start + 11 + 14, Opcodes.opcode_for('call') * 4 + 3), -- Call...
+            expect_word(Symbols.heap_start + 11 + 14 + 1, Symbols.print), --- Print!
+            expect_output('Hello'))) -- And we printed it?
 
 --------------------------------------------------
 

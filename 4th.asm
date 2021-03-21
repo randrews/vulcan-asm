@@ -1,7 +1,10 @@
 ; Magic numbers:
-$CALL: .equ 25
 $PUSH: .equ 0
+$JMPR: .equ 24
+$CALL: .equ 25
 $RET: .equ 26
+$BRZ: .equ 27
+$BRNZ: .equ 28
 
 .org 0x400 ; start here
     setiv oninterrupt
@@ -629,7 +632,10 @@ handleword_number:
     pop
     ret
 
+
+
 ;;;;;;;;;;;;;;;;;;
+
 
 
 
@@ -747,7 +753,114 @@ missing_word:
 
 
 
+; Pushes an address of an unresolved pointer to the control stack
+push_c_addr: ; ( addr -- )
+    loadw c_stack_ptr
+    dup
+    add 3
+    storew c_stack_ptr
+    storew
+    ret
 
+
+
+push_jump: ; ( opcode -- )
+    push 0
+    swap
+    call compile_instruction_arg
+    loadw heap_ptr
+    sub 3
+    call push_c_addr
+    ret
+
+
+; Resolve the top address on the control stack to the current top of stack address
+resolve_c_addr: ; ( heap-addr -- )
+    loadw c_stack_ptr
+    sub 3
+    dup ; ( heap cstack-3 cstack-3 )
+    storew c_stack_ptr
+    loadw ; ( heap arg-addr )
+    dup
+    sub 1 ; ( heap arg-addr instr-addr )
+    pick 2
+    swap
+    sub ; ( heap arg-addr offset )
+    swap
+    storew
+    pop
+    ret
+
+
+
+; A normal branch-if-zero to wherever the 'then' or 'else' ends up
+if_word:
+    push $BRZ
+    call push_jump
+    ret
+
+; An unconditional jump to the next 'then', followed by targeting the
+; previous 'if'
+else_word:
+    loadw heap_ptr
+    add 4
+    call resolve_c_addr
+    push $JMPR
+    call push_jump
+    ret
+
+; Resolve the last address to jump here
+then_word:
+    loadw heap_ptr
+    call resolve_c_addr
+    ret
+
+
+; The dot-quote equivalent in compile mode:
+compile_dotquote:
+    loadw cursor
+    call skip_word ; advance past the ." itself
+    call read_string ; ( start end ) or ( 0 )
+    call dupnz
+    brz @compile_dotquote_unclosed
+    push $JMPR
+    call push_jump ; compile a jpmr to get us past the string
+    pick 1
+    pick 1
+    dup
+    storew cursor ; Move cursor forward some
+    loadw heap_ptr
+    dup
+    pushr ; save this, it's where the string starts
+    call copy_region ; actually compile the string
+    swap
+    sub ; calculate the string length
+    loadw heap_ptr ; ( len string_start )
+    add
+    dup
+    swap 0
+    store ; Null-terminate it
+    add 1
+    dup
+    storew heap_ptr ; Increment the heap ptr by len+1
+    call resolve_c_addr ; Jump to right after the null-terminator
+    ; compile a push with the string start
+    popr
+    push $PUSH
+    call compile_instruction_arg
+    ; compile a call to print
+    push print
+    push $CALL
+    call compile_instruction_arg
+    ret
+compile_dotquote_unclosed: ; TODO generic error method?
+    push unclosed_error
+    call print
+    push 0
+    storew line_buf
+    push line_buf
+    storew cursor
+    ret
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -761,6 +874,22 @@ foo_str: .db "You called foo\0"
 bar_str: .db "Bar was called, probably by you!\0"
 
 ;;;;;;;;;;;;;;;;;;
+
+d_if: .db "if\0"
+.db if_word
+.db d_then
+
+d_then: .db "then\0"
+.db then_word
+.db d_else
+
+d_else: .db "else\0"
+.db else_word
+.db d_compile_dotquote
+
+d_compile_dotquote: .db ".\"\0"
+.db compile_dotquote
+.db d_semicolon
 
 d_semicolon: .db ";\0"
 .db semicolon_word
@@ -835,9 +964,15 @@ cursor: .db 0 ; During calls to handleword, this global points to the beginning 
 dictionary: .db d_foo
 
 ; words only available while compiling and which take precedence over the normal dict in that case
-compile_dictionary: .db d_semicolon
+compile_dictionary: .db d_if
 
+; A buffer for line input
 line_buf: .db 0
 .org line_buf + 0x100
+
+; A stack for compiling control structures
+c_stack_ptr: .db c_stack
+c_stack: .db 0
+.org c_stack + 96
 
 heap_start:

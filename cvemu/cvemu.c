@@ -383,7 +383,7 @@ unsigned char cpu_peek(Cpu *cpu, unsigned int addr, lua_State *L) {
 int cvemu_poke24(lua_State *L) {
     Cpu *cpu = checkCpu(L, 1);
     unsigned int addr = luaL_checkinteger(L, 2);
-    unsigned char value = luaL_checkinteger(L, 3) & 0xff;
+    unsigned int value = luaL_checkinteger(L, 3);
     cpu_poke24(cpu, addr, value, L);
 
     return 0;

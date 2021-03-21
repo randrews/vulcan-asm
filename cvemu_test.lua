@@ -33,6 +33,12 @@ local cpu = CPU.new()
 cpu:poke(37, 45)
 assert(cpu:peek(37) == 45)
 
+cpu:poke24(10000, 0x123456)
+assert(cpu:peek(10000) == 0x56)
+assert(cpu:peek(10001) == 0x34)
+assert(cpu:peek(10002) == 0x12)
+assert(cpu:peek24(10000) == 0x123456)
+
 -- Masking addresses to only the main memory range
 local cpu = CPU.new()
 cpu:poke(0xffffff, 47)
