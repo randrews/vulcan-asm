@@ -653,7 +653,7 @@ test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': '),
             given_stack{ 0x10000 }),
         all(expect_stack{ 0x10000 },
-            expect_output('Expected word, found end of input\n')))
+            expect_output('Expected name, found end of input\n')))
 
 test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': xyz'),
@@ -830,8 +830,49 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+-- Variables
+test_fn('handleline',
+        given_memory(Symbols.line_buf, 'variable blah'),
+        all(expect_stack{ },
+            expect_memory(Symbols.heap_start + 11,
+                          inst('push', Symbols.heap_start + 16),
+                          op('ret'),
+                          word(0)
+            )
+        )
+)
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, 'variable'),
+        expect_output('Expected name, found end of input\n'))
+
+-- get and set
+test_fn('handleline',
+        given_memory(Symbols.line_buf, 'variable foo foo @ . 5120 foo ! foo @ .'),
+        expect_output('05120'))
+
+-- byte set
+test_fn('handleline',
+        given_memory(Symbols.line_buf, 'variable foo foo @ . 261 foo c! foo @ .'),
+        expect_output('05'))
+
+-- byte get
+test_fn('handleline',
+        given_memory(Symbols.line_buf, 'variable foo foo @ . 5127 foo ! foo c@ .'),
+        expect_output('07'))
+
+-- inc
+test_fn('handleline',
+        given_memory(Symbols.line_buf, 'variable foo 17 foo ! 3 foo +! foo @ .'),
+        expect_output('20'))
+
+-- byte inc
+test_fn('handleline',
+        given_memory(Symbols.line_buf, 'variable foo 200 foo ! 60 foo c+! foo @ .'),
+        expect_output('4')) -- the byte increment doesn't roll to the second byte
+
+--------------------------------------------------
+
 print('Text ends at: ' .. Symbols.line_buf)
 print('Bytes available: ' .. 131072 - Symbols.heap_start)
 print('Code size: ' .. Symbols.line_buf - 0x400)
-
--- todo: dotquote in compilation mode

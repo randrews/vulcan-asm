@@ -438,30 +438,35 @@ word_to_dict: ; ( word-addr -- def-addr )
 
 
 
-
-colon_word:
+; Reads a word from input, makes a dictionary entry for it, and points that
+; definition at the current heap ptr
+new_dict_from_input:
     loadw cursor
-    call skip_word ; skip the colon itself
-    call skip_nonword ; skip the space before the word name
+    call skip_word ; skip the word that called us itself
+    call skip_nonword ; skip the space before the name
     dup
     load
     call word_char
-    brz @colon_word_err ; Make sure we were actually given a name
+    brz @new_dict_from_input_err ; Make sure we were actually given a name
     dup
     storew cursor ; tell handleline we've eaten these words
     call word_to_dict ; stick the new word in the dictionary
     loadw heap_ptr
     swap
     storew ; Store the current heap_ptr as the definition
-    call enter_compile_mode
     ret
-colon_word_err:
+new_dict_from_input_err:
     pop
     push expected_word_err
     call print
     call cr
     ret
 
+
+colon_word:
+    call new_dict_from_input
+    call enter_compile_mode
+    ret
 
 
 semicolon_word:
@@ -703,6 +708,36 @@ w_gt: gt
 w_lt: lt
     ret
 
+w_at: loadw
+    ret
+
+w_set: storew
+    ret
+
+w_inc:
+    dup
+    pushr
+    loadw
+    add
+    popr
+    storew
+    ret
+
+w_byte_at: load
+    ret
+
+w_byte_set: store
+    ret
+
+w_byte_inc:
+    dup
+    pushr
+    load
+    add
+    popr
+    store
+    ret
+
 w_dup: dup
     ret
 
@@ -884,11 +919,31 @@ repeat_word:
     call resolve_c_addr
     ret
 
+; This takes a name (new_dict_from_input, just like colon_word) and
+; creates a word for it that, when called, pushes the address of a variable to the stack.
+; That address is the byte right after the word itself, and there are three bytes reserved
+; there. It also initializes the variable to zero.
+variable_word:
+    call new_dict_from_input
+    loadw heap_ptr
+    add 5 ; 4 bytes for the push, 1 bytes for the ret
+    push $PUSH
+    call compile_instruction_arg
+    push $RET
+    call compile_instruction
+    loadw heap_ptr
+    dup
+    add 3
+    storew heap_ptr
+    swap 0
+    storew
+    ret
+
 ;;;;;;;;;;;;;;;;;;
 
 missing_word_str: .db "That word wasn't found: \0"
 unclosed_error: .db "Unclosed string\0"
-expected_word_err: .db "Expected word, found end of input\0"
+expected_word_err: .db "Expected name, found end of input\0"
 foo_str: .db "You called foo\0"
 bar_str: .db "Bar was called, probably by you!\0"
 
@@ -994,6 +1049,30 @@ d_lt: .db "<\0"
 
 d_gt: .db ">\0"
 .db w_gt
+.db d_at
+
+d_at: .db "@\0"
+.db w_at
+.db d_set
+
+d_set: .db "!\0"
+.db w_set
+.db d_inc
+
+d_inc: .db "+!\0"
+.db w_inc
+.db d_byte_at
+
+d_byte_at: .db "c@\0"
+.db w_byte_at
+.db d_byte_set
+
+d_byte_set: .db "c!\0"
+.db w_byte_set
+.db d_byte_inc
+
+d_byte_inc: .db "c+!\0"
+.db w_byte_inc
 .db d_dup
 
 d_dup: .db "dup\0"
@@ -1018,6 +1097,10 @@ d_allot: .db "allot\0"
 
 d_free: .db "free\0"
 .db free
+.db d_variable
+
+d_variable: .db "variable\0"
+.db variable_word
 .db 0
 
 ; Assorted support variables
