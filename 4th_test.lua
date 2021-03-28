@@ -162,14 +162,6 @@ end
 
 --------------------------------------------------
 
--- cpu, output, symbols = init_cpu('4th.asm')
--- readloop(cpu, 'foo\n')
--- assert(output.contents == 'You called foo\n')
--- st = { cpu:stack() }
--- assert(#st == 0)
-
---------------------------------------------------
-
 test_fn('dupnz',
         given_stack{ 3 },
         expect_stack{ 3, 3 })
@@ -193,16 +185,6 @@ test_fn('print',
 test_fn('cr',
         given_stack{ 7 },
         all(expect_output('\n'), expect_stack{ 7 }))
-
---------------------------------------------------
-
-test_fn('streq',
-        given_stack{ Symbols.foo_str, Symbols.bar_str },
-        expect_stack{ 0 })
-
-test_fn('streq',
-        given_stack{ Symbols.foo_str, Symbols.foo_str },
-        expect_stack{ 1 })
 
 --------------------------------------------------
 
@@ -632,18 +614,6 @@ test_fn('copy_string',
 
 --------------------------------------------------
 
-test_fn('word_to_dict',
-        all(given_memory(Symbols.pad, 'blah')),
-        all(expect_stack{ Symbols.heap_start + 5 },
-            expect_memory(Symbols.heap_start,
-                          'b', 'l', 'a', 'h', 0,
-                          word(0),
-                          word(Symbols.d_foo)),
-            expect_word(Symbols.dictionary, Symbols.heap_start),
-            expect_word(Symbols.heap_ptr, Symbols.heap_start + 11)))
-
---------------------------------------------------
-
 -- These are actually tests of colon_word
 test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': '),
@@ -658,8 +628,7 @@ test_fn('handleline',
             expect_memory(Symbols.heap_start, 'x', 'y', 'z', 0),
             expect_word(Symbols.heap_start + 4, Symbols.heap_start + 10),
             expect_word(Symbols.heap_start + 7, Symbols.d_foo),
-            expect_word(Symbols.handleword_hook, Symbols.compileword),
-            expect_word(Symbols.current_mode, 1)))
+            expect_word(Symbols.handleword_hook, Symbols.compileword)))
 
 test_fn('handleline',
         all(given_memory(Symbols.line_buf, ': blah 123'),
@@ -683,8 +652,7 @@ test_fn('handleline',
         all(expect_stack{ 0x12345 },
             expect_memory(Symbols.heap_start + 11, Opcodes.opcode_for('ret') * 4), -- return instruction
             expect_word(Symbols.heap_ptr, Symbols.heap_start + 12),
-            expect_word(Symbols.handleword_hook, Symbols.handleword),
-            expect_word(Symbols.current_mode, 0)))
+            expect_word(Symbols.handleword_hook, Symbols.handleword)))
 
 -- Defining multiple words
 test_fn('handleline',
@@ -701,7 +669,7 @@ test_fn('handleline',
             given_stack{ 100 }),
         all(expect_stack{ 100 },
             expect_output('50'),
-            expect_word(Symbols.current_mode, 0)))
+            expect_word(Symbols.handleword_hook, Symbols.handleword)))
 
 --------------------------------------------------
 

@@ -56,25 +56,25 @@ cr: ; ( -- )
 
 
 
-; Check whether two null terminated strings are equal
-streq: ; ( str1 str2 -- bool )
-    ; check if two chars are equal
-    pick 1
-    pick 1
-    load
-    swap
-    load
-    sub
-    brnz @end0_pop2
-    ; they're both equal, is either one zero?
-    dup
-    load
-    brz @end1_pop2
-    ; inc both pointers
-    add 1
-    swap
-    add 1
-    jmpr @streq
+;;;; ; Check whether two null terminated strings are equal
+;;;; streq: ; ( str1 str2 -- bool )
+;;;;     ; check if two chars are equal
+;;;;     pick 1
+;;;;     pick 1
+;;;;     load
+;;;;     swap
+;;;;     load
+;;;;     sub
+;;;;     brnz @end0_pop2
+;;;;     ; they're both equal, is either one zero?
+;;;;     dup
+;;;;     load
+;;;;     brz @end1_pop2
+;;;;     ; inc both pointers
+;;;;     add 1
+;;;;     swap
+;;;;     add 1
+;;;;     jmpr @streq
 
 
 
@@ -111,15 +111,8 @@ wordeq: ; ( str1 str2 -- bool )
 
 ; advance a pointer to the next dictionary entry
 advance_entry: ; ( ptr -- next_ptr )
-    dup
-    load ; ( ptr *ptr )
-    brz @advance_entry_done
-    add 1
-    jmpr @advance_entry
-advance_entry_done:
+    call skip_word
     add 4
-    call dupnz
-    brz @end0_ret
     loadw
     ret
 
@@ -254,7 +247,7 @@ onkeypress_handleline:
     jmpr @onkeypress_done
 
 
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; Takes a pointer to the start of a word, returns a pointer to the
 ; first nonword-char after it
@@ -286,10 +279,11 @@ handleline: ; ( -- )
     push line_buf
     storew cursor
 handleline_loop:
-    call word_to_pad
-    load pad
+    call word_to_heap
+    loadw heap_ptr
+    load
     brz @end_ret
-    push pad
+    loadw heap_ptr
     loadw handleword_hook
     call
     jmpr @handleline_loop
@@ -297,16 +291,32 @@ handleline_loop:
 
 
 ; Copies the first word starting at / after the cursor from line_buf
-; to the pad, and null-terminates it
-word_to_pad: ; ( -- )
+; to the destination, and null-terminates it
+word_to: ; ( dest -- )
     loadw cursor
     call skip_nonword
-    push pad
+    swap
     push word_char
     call copy_string
     pop
     storew cursor
     ret
+
+
+; Copies the first word starting at / after the cursor from line_buf
+; to the pad, and null-terminates it
+word_to_pad: ; ( -- )
+    push pad
+    jmp word_to
+
+; Copies the first word starting at / after the cursor from line_buf
+; to the bottom of the heap, and null-terminates it. This does NOT
+; advance heap_ptr! The idea is that this is immediately sent to tick
+; to recognize the word, which will be written over by whatever the
+; word does.
+word_to_heap: ; ( -- )
+    loadw heap_ptr
+    jmp word_to
 
 
 ; returns true if the character is either zero or a quotation mark
@@ -391,44 +401,33 @@ copy_string_done:
     pop
     ret
 
-; Makes a new dictionary entry for the word on the pad, with a null definition. Returns the
-; address of the definition
-word_to_dict: ; ( -- def-addr )
-    push pad
+
+; Assumes there's currently a word on the heap, writes two pointers after it: one to the (new) heap,
+; and one to the current dictionary head. Then makes the dictionary point at the start of that word.
+; This is usually used as: call word_to_heap, call new_dict, and you have added that word to the
+; dictionary pointing at the new heap start.
+new_dict:
     loadw heap_ptr
-    push word_char
-    call copy_string
-    swap
-    pop ; toss the src pointer
+    dup
+    load
+    brz @new_dict_error
+    call skip_word
     add 1
-    dup
-    swap 0
-    storew ; store the null definition ptr
-    dup
-    add 3
-    loadw dictionary
-    swap
-    storew ; store the ptr to the dictionary
-    loadw heap_ptr
-    storew dictionary ; make dictionary point to thie
-    dup
+    dup ; ( def_ptr def_ptr )
     add 6
-    storew heap_ptr ; move the heap ptr forward
-    ret
-
-
-
-; Takes the word currently at the start of the pad, makes a dictionary entry for it, and points that
-; definition at the current heap ptr
-new_dict_from_pad:
-    load pad
-    brz @new_dict_from_pad_err ; Make sure we were actually given a name
-    call word_to_dict ; stick the new word in the dictionary
+    pick 1
+    storew ; write the def address, ( def_ptr )
+    loadw dictionary
+    pick 1
+    add 3
+    storew ; point it at the dictionary
     loadw heap_ptr
-    swap
-    storew ; Store the current heap_ptr as the definition
+    storew dictionary ; point the dictionary at it
+    add 6
+    storew heap_ptr ; advance the heap ptr
     ret
-new_dict_from_pad_err:
+new_dict_error:
+    pop
     push expected_word_err
     call print
     call cr
@@ -436,36 +435,19 @@ new_dict_from_pad_err:
 
 
 colon_word:
-    call word_to_pad
-    call new_dict_from_pad
-    call enter_compile_mode
+    call word_to_heap
+    call new_dict
+    push compileword
+    storew handleword_hook
     ret
 
 
 semicolon_word:
     push $RET
     call compile_instruction
-    call enter_interpret_mode
-    ret
-
-
-enter_compile_mode:
-    push 1
-    store current_mode
-    push compileword
-    storew handleword_hook
-    ret
-
-
-
-enter_interpret_mode:
-    push 0
-    store current_mode
     push handleword
     storew handleword_hook
     ret
-
-
 
 
 compileword:
@@ -892,8 +874,8 @@ repeat_word:
 ; That address is the byte right after the word itself, and there are three bytes reserved
 ; there. It also initializes the variable to zero.
 variable_word:
-    call word_to_pad
-    call new_dict_from_pad
+    call word_to_heap
+    call new_dict
     loadw heap_ptr
     add 5 ; 4 bytes for the push, 1 bytes for the ret
     push $PUSH
@@ -1090,7 +1072,6 @@ d_variable: .db "variable\0"
 
 ; Assorted support variables
 heap_ptr: .db heap_start ; holds the address in which to start the next heap entry
-current_mode: .db 0 ; 0 for interpreter ("calculator") mode, 1 for compile mode
 handleword_hook: .db handleword ; The current function used to handle / compile words, switches based on mode
 line_len: .db 0
 cursor: .db 0 ; During calls to handleword, this global points to the beginning of the word
