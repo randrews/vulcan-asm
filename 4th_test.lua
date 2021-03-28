@@ -180,22 +180,6 @@ test_fn('dupnz',
 
 --------------------------------------------------
 
-test_fn('dupz',
-        given_stack{ 0 },
-        expect_stack{ 0, 0 })
-
-test_fn('dupz',
-        given_stack{ 5 },
-        expect_stack{ 5 })
-
---------------------------------------------------
-
-test_fn('dup2', 
-        given_stack{ 12, 34 },
-        expect_stack{ 12, 34, 12, 34 })
-
---------------------------------------------------
-
 test_fn('print',
         given_stack{ Symbols.foo_str },
         all(expect_output('You called foo'), expect_stack{ }))
@@ -484,6 +468,37 @@ test_fn('skip_word',
 
 --------------------------------------------------
 
+-- -- Pad stuff
+test_fn('word_to_pad',
+        all(given_memory(Symbols.line_buf, 'bloop'),
+            given_memory(Symbols.pad, 'aaaaaaaaaa'),
+            given_word(Symbols.cursor, Symbols.line_buf)),
+        all(expect_memory(Symbols.pad, 'b', 'l', 'o', 'o', 'p', 0),
+            expect_word(Symbols.cursor, Symbols.line_buf + 5)))
+
+-- With whitespace
+test_fn('word_to_pad',
+        all(given_memory(Symbols.line_buf, '    bloop    '),
+            given_word(Symbols.cursor, Symbols.line_buf)),
+        all(expect_memory(Symbols.pad, 'b', 'l', 'o', 'o', 'p', 0),
+            expect_word(Symbols.cursor, Symbols.line_buf + 9)))
+
+-- With no word
+test_fn('word_to_pad',
+        all(given_memory(Symbols.line_buf, 0),
+            given_word(Symbols.cursor, Symbols.line_buf)),
+        all(expect_memory(Symbols.pad, 0),
+            expect_word(Symbols.cursor, Symbols.line_buf)))
+
+-- With multiple words
+test_fn('word_to_pad',
+        all(given_memory(Symbols.line_buf, 'blip blop'),
+            given_word(Symbols.cursor, Symbols.line_buf)),
+        all(expect_memory(Symbols.pad, 'b', 'l', 'i', 'p', 0),
+            expect_word(Symbols.cursor, Symbols.line_buf + 4)))
+
+--------------------------------------------------
+
 -- An empty line
 test_fn('handleline',
         all(given_memory(Symbols.line_buf, 0),
@@ -551,42 +566,29 @@ test_fn('handleline',
 
 --------------------------------------------------
 
-test_fn('find_byte',
-        all(given_memory(0x10000, 'floop"'),
-            given_stack{ 34, 0x10000 }),
-        all(expect_stack{ 0x10005 }))
-
-test_fn('find_byte',
-        all(given_memory(0x10000, 'floop"'),
-            given_stack{ 65, 0x10000 }),
-        all(expect_stack{ 0 }))
-
-test_fn('find_byte',
-        all(given_memory(0x10000, 'Apple'),
-            given_stack{ 65, 0x10000 }),
-        all(expect_stack{ 0x10000 }))
+test_fn('until_double_quote', given_stack{ 12 }, expect_stack{ 1 })
+test_fn('until_double_quote', given_stack{ 34 }, expect_stack{ 0 })
+test_fn('until_double_quote', given_stack{ 0 }, expect_stack{ 0 })
 
 --------------------------------------------------
 
-test_fn('read_string',
-        all(given_memory(0x10000, 'floop"'),
-            given_stack{ 0x10000 }),
-        expect_stack{ 0x10000, 0x10005 })
+-- Copying strings to the pad
+test_fn('read_quote_string',
+        all(given_memory(Symbols.line_buf, 'foo bar"'),
+            given_stack{ Symbols.pad },
+            given_word(Symbols.cursor, Symbols.line_buf)),
+        all(expect_memory(Symbols.pad, 'foo bar'),
+            expect_word(Symbols.cursor, Symbols.line_buf + 8),
+            expect_stack{ Symbols.pad + 7 }))
 
-test_fn('read_string',
-        all(given_memory(0x10000, '  floop"'),
-            given_stack{ 0x10000 }),
-        expect_stack{ 0x10002, 0x10007 })
-
-test_fn('read_string',
-        all(given_memory(0x10000, '"'),
-            given_stack{ 0x10000 }),
-        expect_stack{ 0x10000, 0x10000 })
-
-test_fn('read_string',
-        all(given_memory(0x10000, 'nope'),
-            given_stack{ 0x10000 }),
-        expect_stack{ 0 })
+-- Unclosed strings
+test_fn('read_quote_string',
+        all(given_memory(Symbols.line_buf, 'foo bar'),
+            given_stack{ Symbols.pad },
+            given_word(Symbols.cursor, Symbols.line_buf)),
+        all(expect_word(Symbols.cursor, Symbols.line_buf),
+            expect_stack{ 0 },
+            expect_output('Unclosed string')))
 
 --------------------------------------------------
 
@@ -622,28 +624,22 @@ test_fn('handleline',
 
 --------------------------------------------------
 
-test_fn('copy_region',
+test_fn('copy_string',
         all(given_memory(0x10000, 'something'),
-            given_stack{ 0x10000, 0x1000a, 0x12000 }),
-        all(expect_stack{ },
+            given_stack{ 0x10000, 0x12000, Symbols.word_char }),
+        all(expect_stack{ 0x10009, 0x12009 },
             expect_string(0x12000, 'something')))
-
-test_fn('copy_region',
-        all(given_memory(0x10000, 'something'),
-            given_memory(0x12000, 'foo'),
-            given_stack{ 0x10000, 0x10000, 0x12000 }),
-        all(expect_stack{ },
-            expect_string(0x12000, 'foo')))
 
 --------------------------------------------------
 
 test_fn('word_to_dict',
-        all(given_memory(0x10000, 'blah'),
-            given_stack{ 0x10000 }),
+        all(given_memory(Symbols.pad, 'blah')),
         all(expect_stack{ Symbols.heap_start + 5 },
-            expect_memory(Symbols.heap_start, 'b', 'l', 'a', 'h', 0, 0, 0, 0),
+            expect_memory(Symbols.heap_start,
+                          'b', 'l', 'a', 'h', 0,
+                          word(0),
+                          word(Symbols.d_foo)),
             expect_word(Symbols.dictionary, Symbols.heap_start),
-            expect_word(Symbols.heap_start + 8, Symbols.d_foo),
             expect_word(Symbols.heap_ptr, Symbols.heap_start + 11)))
 
 --------------------------------------------------
@@ -689,6 +685,12 @@ test_fn('handleline',
             expect_word(Symbols.heap_ptr, Symbols.heap_start + 12),
             expect_word(Symbols.handleword_hook, Symbols.handleword),
             expect_word(Symbols.current_mode, 0)))
+
+-- Defining multiple words
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, ': blah 7 ; : test 5 ; blah test'),
+            given_stack{ 0x12345 }),
+        all(expect_stack{ 0x12345, 7, 5 }))
 
 --------------------------------------------------
 

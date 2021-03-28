@@ -12,28 +12,11 @@ $BRNZ: .equ 28
 stop:
     hlt
 
-
-
 dupnz: ; if TOS is nonzero, dup it
     dup
     brz @dupnz_done
     dup
 dupnz_done:
-    ret
-
-
-
-dupz: ; if TOS is zero, dup it
-    dup
-    brnz @dupz_done
-    dup
-dupz_done:
-    ret
-
-
-dup2: ; ( a b -- a b a b )
-    pick 1
-    pick 1
     ret
 
 ; We often need to pop 1-2 times and then ret, in a brnz / brz.
@@ -76,7 +59,8 @@ cr: ; ( -- )
 ; Check whether two null terminated strings are equal
 streq: ; ( str1 str2 -- bool )
     ; check if two chars are equal
-    call dup2
+    pick 1
+    pick 1
     load
     swap
     load
@@ -98,7 +82,8 @@ streq: ; ( str1 str2 -- bool )
 ; Check whether two words (terminated by any non-word-character) are equal
 wordeq: ; ( str1 str2 -- bool )
     ; check if both chars are nonword
-    call dup2
+    pick 1
+    pick 1
     load
     call word_char
     swap
@@ -107,7 +92,8 @@ wordeq: ; ( str1 str2 -- bool )
     or
     brz @end1_pop2 ; both are nonword so we're done
     ; check if both chars are equal
-    call dup2
+    pick 1
+    pick 1
     load
     swap
     load
@@ -144,7 +130,8 @@ advance_entry_done:
 find_in_dict: ; ( ptr dict -- addr )
     call dupnz
     brz @end0_pop1 ; not found
-    call dup2
+    pick 1
+    pick 1
     call wordeq ; ( ptr dict eq? )
     brz @find_in_dict_next
     swap
@@ -295,168 +282,153 @@ skip_nonword: ; ( ptr -- first-word )
 
 
 
-
 handleline: ; ( -- )
     push line_buf
-    call skip_nonword
-    storew cursor ; cursor points at the beginning of a word
+    storew cursor
 handleline_loop:
-    loadw cursor
+    call word_to_pad
+    load pad
+    brz @end_ret
+    push pad
     loadw handleword_hook
-    call ; Call the current hook to handle words (either handleword or compileword)
-    loadw cursor
-    call skip_word ; Advance past this word
-    load
-    brz @end_ret ; after this word is an EOS, so we're done
-    ; Now on to the next word
-    loadw cursor
-    call skip_word
-    call skip_nonword
-    storew cursor ; cursor is now the start of the next word
+    call
     jmpr @handleline_loop
 
 
 
-; Finds the first occurrence of val at or after start, or returns 0 if it encounters a null
-; terminator first
-find_byte: ; ( val start -- addr-or-zero )
-    dup
-    load
-    call dupnz
-    brz @end0_pop2 ; eos
-    pick 2
-    sub
-    call dupnz
-    brz @find_byte_found
+; Copies the first word starting at / after the cursor from line_buf
+; to the pad, and null-terminates it
+word_to_pad: ; ( -- )
+    loadw cursor
+    call skip_nonword
+    push pad
+    push word_char
+    call copy_string
     pop
-    add 1
-    jmpr @find_byte
-find_byte_found:
-    swap
-    pop
+    storew cursor
     ret
 
 
+; returns true if the character is either zero or a quotation mark
+until_double_quote: ; ( ch -- bool )
+    dup
+    xor 34 ; ascii double quote
+    brz @until_double_quote_false
+    swap 0
+    brz @until_double_quote_false
+    pop
+    ret 1
+until_double_quote_false:
+    pop
+    ret 0
+
 ; Reads from the input line a string, starting with the first word character after cursor
-; and ending with the first quote (ascii 34). Places on the stack the address of the first word
-; character and the address of the quote, or just zero if there is no quote. Additionally updates
-; the input cursor to point at the end quote
-; If there is no quote, it also prints an error message and aborts the input loop
-read_string: ; ( addr -- start end ), or if unclosed ( addr -- 0 )
+; and ending with a double quote. Copies it to the pad, null-terminates it, and
+; advances cursor to right after the closing quote. Leaves on the stack the address of the
+; null terminator, or a zero if the string is unclosed (in addition to printing an error)
+read_quote_string: ; ( dest -- end-addr )
+    loadw cursor
     call skip_nonword
+    swap
+    push until_double_quote
+    call copy_string ; ( src-end dest-end )
+    swap ; ( dest-end src-end )
     dup
-    swap 34
-    call find_byte ; ( start end? ) Find where we should end, or zero
-    call dupnz
+    load
     brz @read_string_unclosed
-    dup
+    add 1
     storew cursor
     ret
 read_string_unclosed:
-    pop
     push unclosed_error
     call print
     push 0
-    storew line_buf
+    store line_buf
     push line_buf
     storew cursor
-    ret 0
-
+    jmpr @end0_pop2
 
 
 dotquote:
-    loadw cursor
-    call skip_word ; advance past the ." itself
-    call read_string ; ( start end ) or ( 0 )
-    call dupnz
+    push pad
+    call read_quote_string
     brz @end_ret
-    pushr
-dotquote_loop:
-    dup
-    popr
-    dup
-    pushr
-    sub
-    brz @end_pop2r
-    dup
+    push pad
+    call print
+    ret
+
+; Copy a string to somewhere else, given a function to test whether a given
+; character is the end of the string. Calls test for each character and copies
+; each one for which it returns false, then adds a null terminator and returns
+; the addresses of the first character it didn't copy in both buffers: for src,
+; the address of the first test-true char; for dest, the address of the null
+; terminator.
+copy_string: ; ( src dest test -- src_end dest_end )
+    pushr ; push the test fn to the return stack
+copy_string_loop:
+    pick 1
     load
-    store 2
+    dup ; ( src dest ch ch )
+    peekr
+    call ; ( src dest ch valid? )
+    brnz @copy_string_valid
+    ; it's invalid, change it to write a zero instead
+    pop
+    push 0
+copy_string_valid:
+    ; it's valid, or we just made it a zero
+    dup ; ( src dest ch ch )
+    pick 2
+    store ; ( src dest ch )
+    brz @copy_string_done
     add 1
-    jmpr @dotquote_loop
-
-; Copies a region of memory to another region of memory. Copies start..(end-1) to dest..etc
-copy_region: ; ( start end dest -- )
-    pushr
-    swap ; ( end start ) [ dest ]
-copy_region_loop:
-    call dup2
-    sub
-    brz @end_pop3r
-    dup
-    load ; ( end start byte ) [ dest ]
-    popr
-    dup
-    add 1
-    pushr ; ( end start byte dest ) [ dest+1 ]
-    store
-    add 1
-    jmpr @copy_region_loop
-
-
-
-; Reads a word and adds it to the dictionary with a null definition. Returns the address of
-; the definition
-word_to_dict: ; ( word-addr -- def-addr )
-    dup
-    call skip_word
-    call dup2
-    loadw heap_ptr
-    call copy_region ; ( word-start word-end )
     swap
-    sub
+    add 1
+    swap
+    jmpr @copy_string_loop
+copy_string_done:
+    popr
+    pop
+    ret
+
+; Makes a new dictionary entry for the word on the pad, with a null definition. Returns the
+; address of the definition
+word_to_dict: ; ( -- def-addr )
+    push pad
     loadw heap_ptr
-    add ; ( dictionary-word-null )
-    dup
-    swap 0
-    store ; null terminate the string
+    push word_char
+    call copy_string
+    swap
+    pop ; toss the src pointer
     add 1
     dup
     swap 0
-    storew ; write the (null) ptr to the definition
+    storew ; store the null definition ptr
     dup
-    add 3 ; ( def-addr next-addr )
+    add 3
     loadw dictionary
     swap
-    storew ; make this point to the first dict entry
+    storew ; store the ptr to the dictionary
     loadw heap_ptr
-    storew dictionary
+    storew dictionary ; make dictionary point to thie
     dup
     add 6
     storew heap_ptr ; move the heap ptr forward
-    ; Return the definition ptr
     ret
 
 
 
-; Reads a word from input, makes a dictionary entry for it, and points that
+; Takes the word currently at the start of the pad, makes a dictionary entry for it, and points that
 ; definition at the current heap ptr
-new_dict_from_input:
-    loadw cursor
-    call skip_word ; skip the word that called us itself
-    call skip_nonword ; skip the space before the name
-    dup
-    load
-    call word_char
-    brz @new_dict_from_input_err ; Make sure we were actually given a name
-    dup
-    storew cursor ; tell handleline we've eaten these words
+new_dict_from_pad:
+    load pad
+    brz @new_dict_from_pad_err ; Make sure we were actually given a name
     call word_to_dict ; stick the new word in the dictionary
     loadw heap_ptr
     swap
     storew ; Store the current heap_ptr as the definition
     ret
-new_dict_from_input_err:
-    pop
+new_dict_from_pad_err:
     push expected_word_err
     call print
     call cr
@@ -464,7 +436,8 @@ new_dict_from_input_err:
 
 
 colon_word:
-    call new_dict_from_input
+    call word_to_pad
+    call new_dict_from_pad
     call enter_compile_mode
     ret
 
@@ -517,7 +490,7 @@ compileword:
     ; It wasn't a number either, drop the garbage:
     pop
     ; And complain:
-    call missing_word ; actually, we need to check for a compile-only word here
+    call missing_word
     ret
 compileword_compiled_found:
     swap
@@ -547,7 +520,8 @@ compile_instruction_arg: ; ( arg opcode -- )
     dup
     add 4
     storew heap_ptr ; Increment the ptr ( arg instr-byte heap_ptr )
-    call dup2
+    pick 1
+    pick 1
     store
     add 1
     swap
@@ -605,7 +579,8 @@ handleword_number:
 ; (in other words, allocate an array on the heap)
 allot: ; ( num -- ptr )
     loadw heap_ptr
-    call dup2
+    pick 1
+    pick 1
     add
     storew heap_ptr
     swap
@@ -682,6 +657,8 @@ putc:
     store 2
     ret
 
+pad_word: push pad
+    ret
 
 w_add: add
     ret
@@ -739,6 +716,11 @@ w_byte_inc:
     ret
 
 w_dup: dup
+    ret
+
+w_dup2:
+    pick 1
+    pick 1
     ret
 
 missing_word:
@@ -825,27 +807,13 @@ then_word:
 
 ; Compiles a string to the heap and pushes a pointer to it
 squote: ; ( -- addr )
-    loadw cursor
-    call skip_word ; advance past the s" itself
-    call read_string ; ( start end ) or ( 0 )
-    call dupnz
-    brz @end_ret
-    pick 1
-    pick 1
     loadw heap_ptr
     dup
-    pushr ; save this, it's where the string starts
-    call copy_region ; actually compile the string
-    swap
-    sub ; calculate the string length
-    loadw heap_ptr ; ( len string_start )
-    add
-    dup
-    swap 0
-    store ; Null-terminate it
+    call read_quote_string
+    call dupnz
+    brz @end_ret
     add 1
-    storew heap_ptr ; Increment the heap ptr by len+1
-    popr
+    storew heap_ptr
     ret
 
 ; The s-quote equivalent in compile mode:
@@ -919,12 +887,13 @@ repeat_word:
     call resolve_c_addr
     ret
 
-; This takes a name (new_dict_from_input, just like colon_word) and
+; This takes a name (word_to_pad / new_dict_from_pad, just like colon_word) and
 ; creates a word for it that, when called, pushes the address of a variable to the stack.
 ; That address is the byte right after the word itself, and there are three bytes reserved
 ; there. It also initializes the variable to zero.
 variable_word:
-    call new_dict_from_input
+    call word_to_pad
+    call new_dict_from_pad
     loadw heap_ptr
     add 5 ; 4 bytes for the push, 1 bytes for the ret
     push $PUSH
@@ -1009,6 +978,14 @@ d_bar: .db "bar\0"
 
 d_emit: .db "emit\0"
 .db putc
+.db d_pad
+
+d_pad: .db "pad\0"
+.db pad_word
+.db d_word
+
+d_word: .db "word\0"
+.db 0
 .db d_dot
 
 d_dot: .db ".\0"
@@ -1077,6 +1054,14 @@ d_byte_inc: .db "c+!\0"
 
 d_dup: .db "dup\0"
 .db w_dup
+.db d_dup2
+
+d_dup2: .db "dup2\0"
+.db w_dup2
+.db d_dupnz
+
+d_dupnz: .db "dup?\0"
+.db dupnz
 .db d_dotquote
 
 d_dotquote: .db ".\"\0"
@@ -1119,6 +1104,10 @@ compile_dictionary: .db d_if
 ; A buffer for line input
 line_buf: .db 0
 .org line_buf + 0x100
+
+; Scratch pad buffer
+pad: .db 0
+.org pad + 0x100
 
 ; A stack for compiling control structures
 c_stack_ptr: .db c_stack
