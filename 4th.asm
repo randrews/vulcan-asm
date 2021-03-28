@@ -713,6 +713,28 @@ missing_word:
     ret
 
 
+; The R stack is provided mostly for convenience, because it can't be the actual
+; CPU return stack for reasons. But since we never use it in compile mode and we
+; never use the c_stack except in compile mode, they're the same stack:
+w_peek_r:
+    loadw c_stack_ptr
+    sub 3
+    loadw
+    ret
+
+w_rdrop:
+    call pop_c_addr
+    pop
+    ret
+
+w_rpick: ; ( i -- c_stack[i] ) where the top of the R stack is '0 rpick'
+    loadw c_stack_ptr
+    swap
+    add 1
+    mul 3
+    sub
+    loadw
+    ret
 
 ; Pushes an address of an unresolved pointer to the control stack
 push_c_addr: ; ( addr -- )
@@ -722,7 +744,6 @@ push_c_addr: ; ( addr -- )
     storew c_stack_ptr
     storew
     ret
-
 
 ; Pushes an address of an unresolved pointer to the control stack
 pop_c_addr: ; ( -- addr )
@@ -891,6 +912,8 @@ variable_word:
     ret
 
 ;;;;;;;;;;;;;;;;;;
+
+data_start:
 
 missing_word_str: .db "That word wasn't found: \0"
 unclosed_error: .db "Unclosed string\0"
@@ -1068,6 +1091,26 @@ d_free: .db "free\0"
 
 d_variable: .db "variable\0"
 .db variable_word
+.db d_to_r
+
+d_to_r: .db ">r\0"
+.db push_c_addr
+.db d_from_r
+
+d_from_r: .db "r>\0"
+.db pop_c_addr
+.db d_peek_r
+
+d_peek_r: .db "r@\0"
+.db w_peek_r
+.db d_rdrop
+
+d_rdrop: .db "rdrop\0"
+.db w_rdrop
+.db d_rpick
+
+d_rpick: .db "rpick\0"
+.db w_rpick
 .db 0
 
 ; Assorted support variables

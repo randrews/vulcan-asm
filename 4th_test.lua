@@ -843,6 +843,38 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+-- R stack
+test_fn('handleline',
+        given_memory(Symbols.line_buf, '5 3 >r >r'),
+        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 6),
+            expect_memory(Symbols.c_stack, word(3), word(5))))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, '5 >r 3 r>'),
+        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
+            expect_stack{ 3, 5 }))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, '5 >r r@ r@'),
+        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 3),
+            expect_word(Symbols.c_stack, 5),
+            expect_stack{ 5, 5 }))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, '5 3 >r >r rdrop'),
+        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 3),
+            expect_word(Symbols.c_stack, 3),
+            expect_stack{ }))
+
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, '5 3 >r >r 1 rpick'),
+        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 6),
+            expect_memory(Symbols.c_stack, word(3), word(5)),
+            expect_stack{ 3 }))
+
+--------------------------------------------------
+
 print('Text ends at: ' .. Symbols.line_buf)
 print('Bytes available: ' .. 131072 - Symbols.heap_start)
-print('Code size: ' .. Symbols.line_buf - 0x400)
+print('Code size: ' .. Symbols.data_start - 0x400)
