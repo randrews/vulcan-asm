@@ -1,5 +1,6 @@
 ; Magic numbers:
 $PUSH: .equ 0
+$SWAP: .equ 20
 $JMPR: .equ 24
 $CALL: .equ 25
 $RET: .equ 26
@@ -911,6 +912,62 @@ variable_word:
     storew
     ret
 
+; Compiles a swap and two to_rs to initialize the loop, then stores the address
+; for loop / +loop to jump back to.
+do_word:
+    push $SWAP
+    call compile_instruction
+    push push_c_addr
+    push $CALL
+    pick 1
+    pick 1
+    call compile_instruction_arg
+    call compile_instruction_arg
+    loadw heap_ptr
+    call push_c_addr
+    ret
+
+; loop_word compiles a call to this; it increments the index by TOS and leaves a
+; flag indicating whether to jump back to the loop start
+test_loop: ; ( incr -- repeat? )
+    call pop_c_addr
+    add
+    call pop_c_addr ; ( index limit ), nothing on R
+    dup
+    call push_c_addr
+    pick 1
+    call push_c_addr ; ( index limit ), recreated R
+    swap
+    gt
+    ret
+
+; Increments the counter and tests whether to continue the loop
+loop_word:
+    push 1
+    push $PUSH
+    call compile_instruction_arg
+plusloop_word:
+    push test_loop
+    push $CALL
+    call compile_instruction_arg
+    call pop_c_addr
+    loadw heap_ptr
+    sub
+    push $BRNZ
+    call compile_instruction_arg
+    push unloop_word
+    push $CALL
+    call compile_instruction_arg
+    ret
+
+; Removes the loop counter things from the R stack
+unloop_word:
+    call pop_c_addr
+    pop
+    call pop_c_addr
+    pop
+    ret
+
 ;;;;;;;;;;;;;;;;;;
 
 data_start:
@@ -965,6 +1022,18 @@ d_while: .db "while\0"
 
 d_repeat: .db "repeat\0"
 .db repeat_word
+.db d_do
+
+d_do: .db "do\0"
+.db do_word
+.db d_loop
+
+d_loop: .db "loop\0"
+.db loop_word
+.db d_plusloop
+
+d_plusloop: .db "+loop\0"
+.db plusloop_word
 .db d_semicolon
 
 d_semicolon: .db ";\0"
@@ -1111,7 +1180,12 @@ d_rdrop: .db "rdrop\0"
 
 d_rpick: .db "rpick\0"
 .db w_rpick
+.db d_unloop
+
+d_unloop: .db "unloop\0"
+.db unloop_word
 .db 0
+
 
 ; Assorted support variables
 heap_ptr: .db heap_start ; holds the address in which to start the next heap entry

@@ -850,6 +850,11 @@ test_fn('handleline',
             expect_memory(Symbols.c_stack, word(3), word(5))))
 
 test_fn('handleline',
+        given_memory(Symbols.line_buf, '5 3 >r >r 1 r> r>'),
+        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
+            expect_stack{ 1, 5, 3 }))
+
+test_fn('handleline',
         given_memory(Symbols.line_buf, '5 >r 3 r>'),
         all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
             expect_stack{ 3, 5 }))
@@ -875,6 +880,68 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah 5 0 do 65 emit loop ; blah'),
+        all(expect_memory(Symbols.heap_start + 11,
+                          inst('push', 5), -- limit
+                          inst('push', 0), -- index
+                          op('swap'),
+                          inst('call', Symbols.push_c_addr),
+                          inst('call', Symbols.push_c_addr), -- >R both
+                          inst('push', 65),
+                          inst('call', Symbols.putc), -- Loop body
+                          inst('push', 1),
+                          inst('call', Symbols.test_loop), -- inc by 1 and test
+                          inst('brnz', -16) -- brnz back to the start of the loop body
+            ),
+            expect_output('AAAAA'),
+            expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
+            expect_stack{ }
+        ))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah 5 0 do 65 emit 2 +loop ; blah'),
+        all(expect_memory(Symbols.heap_start + 11,
+                          inst('push', 5), -- limit
+                          inst('push', 0), -- index
+                          op('swap'),
+                          inst('call', Symbols.push_c_addr),
+                          inst('call', Symbols.push_c_addr), -- >R both
+                          inst('push', 65),
+                          inst('call', Symbols.putc), -- Loop body
+                          inst('push', 2),
+                          inst('call', Symbols.test_loop), -- inc by 1 and test
+                          inst('brnz', -16) -- brnz back to the start of the loop body
+            ),
+            expect_output('AAA'),
+            expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
+            expect_stack{ }
+        ))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah 5 0 do 65 emit unloop exit loop ; blah'),
+        all(expect_memory(Symbols.heap_start + 11,
+                          inst('push', 5), -- limit
+                          inst('push', 0), -- index
+                          op('swap'),
+                          inst('call', Symbols.push_c_addr),
+                          inst('call', Symbols.push_c_addr), -- >R both
+                          inst('push', 65),
+                          inst('call', Symbols.putc), -- Loop body
+                          inst('call', Symbols.unloop_word), -- Loop body
+                          op('ret'),
+                          inst('push', 1),
+                          inst('call', Symbols.test_loop), -- inc by 1 and test
+                          inst('brnz', -21) -- Jump back over the check and loop body
+            ),
+            expect_output('A'), -- Because we exit the first time through, only one A
+            expect_word(Symbols.c_stack_ptr, Symbols.c_stack), -- But unloop cleans up after us
+            expect_stack{ }
+        ))
+
+--------------------------------------------------
+
 print('Text ends at: ' .. Symbols.line_buf)
 print('Bytes available: ' .. 131072 - Symbols.heap_start)
 print('Code size: ' .. Symbols.data_start - 0x400)
+print('Including dictionaries: ' .. Symbols.line_buf - 0x400)
