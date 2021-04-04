@@ -967,6 +967,10 @@ test_fn('handleline',
         given_memory(Symbols.line_buf, ': blah 5 0 ?do 65 emit loop ; blah'),
         expect_output('AAAAA')) -- The pretest shouldn't affect the actual loop period
 
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah 5 0 do 65 emit 1 if leave then loop ; blah'),
+        expect_output('A')) -- Leave bails us out after the first emit
+
 --------------------------------------------------
 
 print('Text ends at: ' .. Symbols.line_buf)

@@ -1004,6 +1004,14 @@ unloop_word:
     pop
     ret
 
+; Sets the loop index equal to the counter
+leave_word:
+    call pop_c_addr
+    pop
+    call w_peek_r
+    call push_c_addr
+    ret
+
 ;;;;;;;;;;;;;;;;;;
 
 data_start:
@@ -1224,8 +1232,11 @@ d_rpick: .db "rpick\0"
 
 d_unloop: .db "unloop\0"
 .db unloop_word
-.db 0
+.db d_leave
 
+d_leave: .db "leave\0"
+.db leave_word
+.db 0
 
 ; Assorted support variables
 heap_ptr: .db heap_start ; holds the address in which to start the next heap entry
