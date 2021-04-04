@@ -939,6 +939,34 @@ test_fn('handleline',
             expect_stack{ }
         ))
 
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah 5 20 ?do 65 emit loop ; blah'),
+        all(expect_memory(Symbols.heap_start + 11,
+                          inst('push', 5), -- limit
+                          inst('push', 20), -- index
+                          op('swap'),
+                          inst('call', Symbols.push_c_addr),
+                          inst('call', Symbols.push_c_addr), -- >R both
+                          inst('push', 0), -- The pretest doesn't increment the counter
+                          inst('call', Symbols.test_loop), -- pretest loop, so test if we should do it at all
+                          inst('brz', 24),
+                          inst('push', 65),
+                          inst('call', Symbols.putc), -- Loop body
+                          inst('push', 1),
+                          inst('call', Symbols.test_loop), -- inc by 1 and test
+                          inst('brnz', -16), -- Jump back over the check and loop body
+                          inst('call', Symbols.unloop_word), -- Unloop
+                          op('ret')
+            ),
+            expect_output(''), -- Because we exit before running it once
+            expect_word(Symbols.c_stack_ptr, Symbols.c_stack), -- But unloop still cleans up after us
+            expect_stack{ }
+        ))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah 5 0 ?do 65 emit loop ; blah'),
+        expect_output('AAAAA')) -- The pretest shouldn't affect the actual loop period
+
 --------------------------------------------------
 
 print('Text ends at: ' .. Symbols.line_buf)
