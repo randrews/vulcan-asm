@@ -1,6 +1,7 @@
 ; Magic numbers:
 $PUSH: .equ 0
 $SWAP: .equ 20
+$JMP: .equ 23
 $JMPR: .equ 24
 $CALL: .equ 25
 $RET: .equ 26
@@ -47,38 +48,11 @@ print: ; ( addr -- )
     add 1
     jmpr @print
 
-
-
 ; Print a carriage return
 cr: ; ( -- )
     push 10
     store 0x02
     ret
-
-
-
-;;;; ; Check whether two null terminated strings are equal
-;;;; streq: ; ( str1 str2 -- bool )
-;;;;     ; check if two chars are equal
-;;;;     pick 1
-;;;;     pick 1
-;;;;     load
-;;;;     swap
-;;;;     load
-;;;;     sub
-;;;;     brnz @end0_pop2
-;;;;     ; they're both equal, is either one zero?
-;;;;     dup
-;;;;     load
-;;;;     brz @end1_pop2
-;;;;     ; inc both pointers
-;;;;     add 1
-;;;;     swap
-;;;;     add 1
-;;;;     jmpr @streq
-
-
-
 
 ; Check whether two words (terminated by any non-word-character) are equal
 wordeq: ; ( str1 str2 -- bool )
@@ -435,21 +409,93 @@ new_dict_error:
     ret
 
 
-colon_word:
-    call word_to_heap
-    call new_dict
+; Set the current mode to interpret
+open_bracket_word:
+    push handleword
+    jmpr @set_handleword_hook
+close_bracket_word: ; Set the current mode to compile
     push compileword
+    jmpr @set_handleword_hook
+set_handleword_hook:
     storew handleword_hook
     ret
+
+; This is a runtime word used for defining the behavior of created
+; words. For example: ": foo create does> drop 12 ;" makes a word foo, used as:
+; "foo blah". That call creates another word, blah, which when it's
+; run pushes 12. So then, does> alters the head of the dictionary (because
+; that was just create'd), to set its definition pointer to right after
+; the does>, then compiles a push of the old value of the definition pointer.
+; The expected result of this: ": foo create 15 , does> drop 12 ;" is this:
+; > create a dictionary entry from the next word in input
+; > push a 15 and compile it (the compile-time behavior of the new word)
+; > push the address of label A
+; > jmp to does_at_runtime (which reassigns the def ptr to lbl A)
+; > return
+; > label A:
+; > popr the address of the 15 (where the heap originally was)
+; > drop the address of the 15
+; > push a 12 (runtime behavior of the new word)
+; > return
+does_word:
+    loadw heap_ptr
+    add 9 ; to account for the push itself, the call and the ret
+    push $PUSH
+    call compile_instruction_arg ; push the addr right after the does>
+    push does_at_runtime
+    push $JMP
+    call compile_instruction_arg ; jmp does_at_runtime
+    push $RET
+    call compile_instruction ; return
+    ret
+
+
+; Runtime behavior of does>
+; When we jmp here, the compile-time behavior has left the address
+; we want for the runtime behavior of the new word at the top of stack.
+; So, we need to reassign the def ptr of the new word to (eventually)
+; lead there. But we need to save what it originally was, first! So we
+; grab it and stick it in the R stack, then compile a whole new area
+; which pushes the old ptr and then jmps after the does> addr.
+does_at_runtime: ; ( does-addr -- )
+    loadw dictionary
+    call skip_word
+    add 1 ; find the definition address
+    dup
+    loadw
+    pushr ; stash old in the r stack
+    loadw heap_ptr
+    swap
+    storew ; point it at the new definition
+    popr
+    push $PUSH
+    call compile_instruction_arg ; compile pushing the old def ptr value
+    push $JMP
+    call compile_instruction_arg ; compile a jmp to after does>
+    ret
+
+create_word:
+    call word_to_heap
+    call new_dict
+    ret
+
+colon_word:
+    call create_word
+    jmp close_bracket_word
 
 
 semicolon_word:
     push $RET
     call compile_instruction
-    push handleword
-    storew handleword_hook
-    ret
+    jmp open_bracket_word
 
+comma_word:
+    loadw heap_ptr
+    dup
+    add 3
+    storew heap_ptr
+    storew
+    ret
 
 compileword:
     ; first check for a blank word and skip:
@@ -696,6 +742,9 @@ w_byte_inc:
     add
     popr
     store
+    ret
+
+w_drop: pop
     ret
 
 w_dup: dup
@@ -1082,6 +1131,14 @@ d_loop: .db "loop\0"
 
 d_plusloop: .db "+loop\0"
 .db plusloop_word
+.db d_open_bracket
+
+d_open_bracket: .db "[\0"
+.db open_bracket_word
+.db d_does
+
+d_does: .db "does>\0"
+.db does_word
 .db d_semicolon
 
 d_semicolon: .db ";\0"
@@ -1176,6 +1233,10 @@ d_byte_inc: .db "c+!\0"
 
 d_dup: .db "dup\0"
 .db w_dup
+.db d_drop
+
+d_drop: .db "drop\0"
+.db w_drop
 .db d_dup2
 
 d_dup2: .db "dup2\0"
@@ -1236,6 +1297,18 @@ d_unloop: .db "unloop\0"
 
 d_leave: .db "leave\0"
 .db leave_word
+.db d_close_bracket
+
+d_close_bracket: .db "]\0"
+.db close_bracket_word
+.db d_create
+
+d_create: .db "create\0"
+.db create_word
+.db d_comma
+
+d_comma: .db ",\0"
+.db comma_word
 .db 0
 
 ; Assorted support variables

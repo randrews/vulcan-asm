@@ -973,6 +973,102 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah [ 65 emit ] 5 ; blah blah'),
+        all(expect_stack{ 5, 5 },
+            expect_output('A'))) -- The part in brackets happens once, the push 5 happens twice
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah create 15 ; blah fnord'),
+        all(expect_stack{ 15 },
+            expect_memory(Symbols.heap_start + 11,
+                          inst('call', Symbols.create_word), -- After blah's header, we have a call to create
+                          inst('push', 15), -- and then the compile time behavior of the new word
+                          op('ret'), -- blah's return
+                          'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
+                          word(Symbols.heap_start + 11 + 21), -- pointer to the new heap
+                          -- and pointer to the next dictionary entry. By this point the front of the
+                          -- dictionary is blah, which has its entry at heap_start:
+                          word(Symbols.heap_start))))
+
+-- Testing create / does> without compile-time behavior
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah create does> drop 2 3 ; blah fnord fnord + fnord'),
+        -- Because we're creating a new word fnord and then running it twice, we get the
+        -- runtime behavior twice, so, (2 3 + 2 3)
+        all(expect_stack{ 5, 2, 3 },
+            -- Body of blah:
+            expect_memory(Symbols.heap_start + 11,
+                          inst('call', Symbols.create_word), -- After blah's header, we have a call to create
+                          inst('push', Symbols.heap_start + 11 + 13), -- push the address of after the does>
+                          inst('jmp', Symbols.does_at_runtime), -- And a call to does@runtime, to start compiling it
+                          op('ret'), -- blah's return
+                          inst('call', Symbols.w_drop),
+                          inst('push', 2), -- The runtime behavior of fnord (the "mold"):
+                          inst('push', 3),
+                          op('ret')), -- fnord's runtime return
+            -- Header of fnord:
+            expect_memory(Symbols.heap_start + 11 + 26,
+                          'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
+                          word(Symbols.heap_start + 11 + 26 + 12), -- pointer to the trampoline
+                          -- and pointer to the next dictionary entry. By this point the front of the
+                          -- dictionary is blah, which has its entry at heap_start:
+                          word(Symbols.heap_start)),
+            -- Body (trampoline) of fnord:
+            expect_memory(Symbols.heap_start + 11 + 26 + 12,
+                          inst('push', Symbols.heap_start + 11 + 26 + 12), -- Push the old value, which was right
+                          -- after the header (because of the null compile-time behavior)
+                          inst('jmp', Symbols.heap_start + 11 + 13)))) -- jmp to the runtime behavior, after the
+                          -- does> call
+
+
+-- Testing create / does> when there's compile-time behavior
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah create 15 , does> @ 3 ; blah fnord fnord + fnord'),
+        all(expect_stack{ 18, 15, 3 },
+            -- Body of blah:
+            expect_memory(Symbols.heap_start + 11,
+                          inst('call', Symbols.create_word), -- After blah's header, we have a call to create
+                          inst('push', 15),
+                          inst('call', Symbols.comma_word),
+                          inst('push', Symbols.heap_start + 11 + 21), -- push the address of after the does>
+                          inst('jmp', Symbols.does_at_runtime), -- And a call to does@runtime, to start compiling it
+                          op('ret'), -- blah's return
+                          inst('call', Symbols.w_at), -- After the does>; the runtime behavior of fnord (the "mold"):
+                          inst('push', 3),
+                          op('ret')), -- fnord's runtime return
+            -- Header of fnord:
+            expect_memory(Symbols.heap_start + 11 + 30,
+                          'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
+                          word(Symbols.heap_start + 11 + 30 + 15), -- pointer to the trampoline
+                          -- and pointer to the next dictionary entry. By this point the front of the
+                          -- dictionary is blah, which has its entry at heap_start:
+                          word(Symbols.heap_start)),
+            expect_memory(Symbols.heap_start + 11 + 30 + 12,
+                          word(15)), -- The compile time behavior compiled this 15
+            -- Body (trampoline) of fnord:
+            expect_memory(Symbols.heap_start + 11 + 30 + 15,
+                          inst('push', Symbols.heap_start + 11 + 30 + 12), -- Push the old value, which was right
+                          -- after the header, the 15 we compiled
+                          inst('jmp', Symbols.heap_start + 11 + 21)))) -- jmp to the runtime behavior, after the
+                          -- does> call
+
+--------------------------------------------------
+
+-- Finished words:
+-- if then else
+-- s" ." " cr . emit pad word
+-- begin again until while repeat do ?do loop +loop unloop leave
+-- ; exit
+-- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 dup?
+-- foo bar
+-- : allot free variable
+-- [ ] , does> create
+-- >r r> r@ rdrop rpick
+--
+-- Todo words:
+-- immediate postpone \ ( here asm #asm
+
 print('Text ends at: ' .. Symbols.line_buf)
 print('Bytes available: ' .. 131072 - Symbols.heap_start)
 print('Code size: ' .. Symbols.data_start - 0x400)
