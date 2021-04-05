@@ -1061,6 +1061,32 @@ leave_word:
     call push_c_addr
     ret
 
+; compile-time word, causes a call to the next word to be compiled instead
+; of actually being run. For example: compiling "postpone emit" should result in
+; push <emit>
+; push $CALL
+; call compile_instruction_arg
+; ...being compiled into the current def
+postpone_word:
+    call word_to_heap
+    loadw heap_ptr
+    call tick
+    call dupnz
+    brz @postpone_word_error
+    ; we have a word, it's valid, its call addr is at top of stack
+    push $PUSH
+    call compile_instruction_arg ; compile a push of that address
+    push $CALL
+    push $PUSH
+    call compile_instruction_arg ; compile a push of $CALL
+    push compile_instruction_arg
+    push $CALL
+    call compile_instruction_arg ; compile a push of compile_instruction_arg
+    ret
+postpone_word_error:
+    loadw heap_ptr
+    jmp missing_word_str
+
 ;;;;;;;;;;;;;;;;;;
 
 data_start:
@@ -1139,6 +1165,10 @@ d_open_bracket: .db "[\0"
 
 d_does: .db "does>\0"
 .db does_word
+.db d_postpone
+
+d_postpone: .db "postpone\0"
+.db postpone_word
 .db d_semicolon
 
 d_semicolon: .db ";\0"

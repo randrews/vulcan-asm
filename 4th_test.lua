@@ -1055,6 +1055,17 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah postpone emit ; blah'),
+        all(expect_memory(Symbols.heap_start + 11,
+                          inst('push', Symbols.putc),
+                          inst('push', Opcodes.opcode_for('call')),
+                          inst('call', Symbols.compile_instruction_arg)),
+            expect_memory(Symbols.heap_start + 11 + 13,
+                          inst('call', Symbols.putc))))
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
 -- s" ." " cr . emit pad word
@@ -1063,11 +1074,11 @@ test_fn('handleline',
 -- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 dup?
 -- foo bar
 -- : allot free variable
--- [ ] , does> create
+-- [ ] , does> create postpone
 -- >r r> r@ rdrop rpick
 --
 -- Todo words:
--- immediate postpone \ ( here asm #asm
+-- immediate \ ( here asm #asm
 
 print('Text ends at: ' .. Symbols.line_buf)
 print('Bytes available: ' .. 131072 - Symbols.heap_start)
