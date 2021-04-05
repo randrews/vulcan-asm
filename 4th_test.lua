@@ -1055,6 +1055,7 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+-- Emit is a non-immediate word so postpone compiles a thing that compiles a call to it
 test_fn('handleline',
         given_memory(Symbols.line_buf, ': blah postpone emit ; blah'),
         all(expect_memory(Symbols.heap_start + 11,
@@ -1063,6 +1064,29 @@ test_fn('handleline',
                           inst('call', Symbols.compile_instruction_arg)),
             expect_memory(Symbols.heap_start + 11 + 13,
                           inst('call', Symbols.putc))))
+
+-- Open-bracket is an immediate word so postpone just compiles a call to it (which is
+-- pointless because we're never in compile mode when we call blah, here)
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah postpone [ ;'),
+        all(expect_memory(Symbols.heap_start + 11,
+                          inst('call', Symbols.open_bracket_word),
+                          op('ret'))))
+
+--------------------------------------------------
+
+-- 'immediate' moves the most recent word from the runtime to compile-time dictionary:
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah 5 , ; immediate'),
+        all(expect_word(Symbols.dictionary, Symbols.d_foo), -- Runtime dictionary points at whatever it did before
+            expect_word(Symbols.compile_dictionary, Symbols.heap_start), -- Compile dictionary now points at blah
+            expect_memory(Symbols.heap_start,
+                          'b', 'l', 'a', 'h', 0, -- Name of blah
+                          word(Symbols.heap_start + 11), -- Definition ptr is unchanged
+                          word(Symbols.d_if), -- Next ptr points at the normal start of the compile dictionary
+                          inst('push', 5), -- Body of blah. Compiles a five.
+                          inst('call', Symbols.comma_word),
+                          op('ret'))))
 
 --------------------------------------------------
 
@@ -1074,11 +1098,11 @@ test_fn('handleline',
 -- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 dup?
 -- foo bar
 -- : allot free variable
--- [ ] , does> create postpone
+-- [ ] , does> create postpone immediate
 -- >r r> r@ rdrop rpick
 --
 -- Todo words:
--- immediate \ ( here asm #asm
+-- \ ( here asm #asm
 
 print('Text ends at: ' .. Symbols.line_buf)
 print('Bytes available: ' .. 131072 - Symbols.heap_start)

@@ -1061,19 +1061,25 @@ leave_word:
     call push_c_addr
     ret
 
-; compile-time word, causes a call to the next word to be compiled instead
-; of actually being run. For example: compiling "postpone emit" should result in
+; compile-time word, causes the next word to be compiled instead of it
+; being run. The corollary of that is that an immediate word, where we
+; would normally run it (because we're in compile mode) we compile a call
+; to it; a non-immediate word, we compile some code that will compile a
+; call to it. For example: compiling "postpone emit" should result in
 ; push <emit>
 ; push $CALL
 ; call compile_instruction_arg
-; ...being compiled into the current def
+; ...being compiled into the current defw because when run that will
+; compile a call to emit. But "postpone do" causes a call to "do" to be
+; compiled, because when run that will call "do" (whereas normally we'd
+; just call "do" right now because it's immediate).
 postpone_word:
     call word_to_heap
     loadw heap_ptr
     call tick
     call dupnz
-    brz @postpone_word_error
-    ; we have a word, it's valid, its call addr is at top of stack
+    brz @postpone_word_immediate
+    ; we have a word, it's a valid normal word, its call addr is at top of stack
     push $PUSH
     call compile_instruction_arg ; compile a push of that address
     push $CALL
@@ -1083,9 +1089,36 @@ postpone_word:
     push $CALL
     call compile_instruction_arg ; compile a push of compile_instruction_arg
     ret
+postpone_word_immediate:
+    ; Uh oh, this wasn't in the dictionary. Let's check the compile dictionary in
+    ; case it's an immediate word:
+    loadw heap_ptr
+    call compile_tick
+    call dupnz
+    brz @postpone_word_error
+    ; It was in the compile dictionary so we're going to compile a call to it.
+    push $CALL
+    call compile_instruction_arg
 postpone_word_error:
+    ; Oh dear, it wasn't in either dictionary, time to error out:
     loadw heap_ptr
     jmp missing_word_str
+
+; Immediate is a runtime word that moves the most recently defined word from the
+; runtime dictionary to the compile-time one.
+immediate_word:
+    loadw dictionary
+    dup ; save a copy, we'll need to set compile_dictionary to this later
+    call skip_word
+    add 4 ; now we're pointing at the next word, meaning, the new dictionary ptr:
+    dup
+    loadw
+    storew dictionary ; dictionary is now pointing at the right place
+    loadw compile_dictionary
+    swap
+    storew ; This definition is now pointing at the old compile_dictionary
+    storew compile_dictionary ; and compile_dictionary is pointing at it!
+    ret
 
 ;;;;;;;;;;;;;;;;;;
 
@@ -1339,6 +1372,10 @@ d_create: .db "create\0"
 
 d_comma: .db ",\0"
 .db comma_word
+.db d_immediate
+
+d_immediate: .db "immediate\0"
+.db immediate_word
 .db 0
 
 ; Assorted support variables
