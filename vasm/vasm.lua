@@ -482,6 +482,50 @@ function assemble(iterator, debuginfo)
     end
 end
 
+-- ## Preprocessor
+-- Takes an iterator over lines including preprocessor directives, and returns another iterator,
+-- which iterates over just normal lines
+function preprocess(iterator)
+    -- Today we'll just recognize one directive: the humble include
+    local space = lpeg.S(" \t")^0
+    local string_pattern = lpeg.P('"') * lpeg.C((lpeg.P(1)-lpeg.S('"\\'))^1) * '"'
+    local preprocess_pattern = space * '#' * lpeg.C('include') * space * string_pattern
+
+    -- We'll keep a stack of files that we're reading from, so files can include other files
+    local file_stack = { iterator }
+
+    local function fetch_line()
+        local line
+        repeat
+            line = (file_stack[#file_stack])() -- Fetch a line
+            if not line then -- If we're done with this file, then:
+                table.remove(file_stack) -- Remove this file from the stack
+                if #file_stack == 0 then return nil end -- If it was the last file then we're done overall
+                line = (file_stack[#file_stack])() -- Otherwise grab another line from the file that included us
+            end
+        until line
+        return line -- At this point either we have a line or we've returned nil (and killed the iterator)
+    end
+
+    return function()
+        local line = fetch_line()
+        local directive, file
+        repeat
+            -- Now we're going to try to parse the line. Is it a preprocessor directive?
+            if line then
+                directive, filename = preprocess_pattern:match(line)
+                if directive then
+                    table.insert(file_stack, (io.lines(filename))) -- Add it to the file stack
+                    line = fetch_line()
+                end
+            else
+                directive = nil -- A nil line can't be a directive...
+            end
+        until not directive
+        return line
+    end
+end
+
 return {
     statement=statement,
     parse_assembly=parse_assembly,
@@ -490,5 +534,6 @@ return {
     measure_instructions=measure_instructions,
     place_labels=place_labels,
     calculate_args=calculate_args,
+    preprocess=preprocess,
     assemble=assemble
 }

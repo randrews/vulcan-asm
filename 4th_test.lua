@@ -1,4 +1,5 @@
 package.cpath = package.cpath .. ';./cvemu/?.so'
+lfs = require('lfs')
 CPU = require('cvemu')
 -- CPU = require('vemu.cpu')
 Loader = require('vemu.loader')
@@ -6,14 +7,16 @@ Opcodes = require('util.opcodes')
 
 Symbols = nil
 
+lfs.chdir('4th')
+
 function init_cpu()
     local random_seed = os.time()
     math.randomseed(random_seed)
 
     local cpu = CPU.new(random_seed)
 
-    local iterator = io.open('4th.asm')
-    Symbols = Loader.asm(cpu, iterator:lines())
+    local iterator = io.lines('4th.asm')
+    Symbols = Loader.asm(cpu, iterator)
 
     local device = { contents = '' }
     cpu:install_device(2, 2,
@@ -40,7 +43,7 @@ function call(cpu, symbol)
 end
 
 function test_fn(name, setup, check)
-    local cpu, output = init_cpu('4th.asm')
+    local cpu, output = init_cpu()
     setup(cpu)
     call(cpu, name)
     st = { cpu:stack() }

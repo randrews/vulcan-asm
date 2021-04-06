@@ -1,7 +1,7 @@
 local VASM = require('vasm.vasm')
 
 function load_asm(cpu, iterator)
-    local bytes, start, address_lines, symbols = VASM.assemble(iterator, true)
+    local bytes, start, address_lines, symbols = VASM.assemble(VASM.preprocess(iterator), true)
 
     for offset, byte in pairs(bytes) do
         cpu:poke(start + offset, byte)

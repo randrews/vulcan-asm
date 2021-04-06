@@ -1,0 +1,9 @@
+; Magic numbers:
+$PUSH: .equ 0
+$SWAP: .equ 20
+$JMP: .equ 23
+$JMPR: .equ 24
+$CALL: .equ 25
+$RET: .equ 26
+$BRZ: .equ 27
+$BRNZ: .equ 28
