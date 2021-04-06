@@ -1306,7 +1306,7 @@ d_dup2: .db "dup2\0"
 .db w_dup2
 .db d_dupnz
 
-d_dupnz: .db "dup?\0"
+d_dupnz: .db "?dup\0"
 .db dupnz
 .db d_dotquote
 

@@ -1095,14 +1095,30 @@ test_fn('handleline',
 -- s" ." " cr . emit pad word
 -- begin again until while repeat do ?do loop +loop unloop leave
 -- ; exit
--- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 dup?
+-- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 dup? drop
 -- foo bar
 -- : allot free variable
 -- [ ] , does> create postpone immediate
 -- >r r> r@ rdrop rpick
 --
 -- Todo words:
--- \ ( here asm #asm
+-- \ ( here asm #asm key nop
+-- depth nip rot -rot swap tuck over ?dup pick rdepth
+-- sp@ sp! rp@ rp!
+-- arshift rshift lshift shr shl ror rol bic not xor or and false true clz
+-- u/mod /mod min max umin umax 2- 1- 2+ 1+ even abs negate
+-- u<= u>= u> u< <= >= 0< 0<> 0= <> !=
+-- number
+-- binary decimal hex base
+-- move fill constant buffer:
+-- type bl space spaces compare accept skipstring
+-- char [char] hold sign <# # #> u.
+-- .s u.s h.s hex.
+-- query tib token parse evaluate quit
+-- cell+ cells here
+-- execute recurse ' [']
+-- case of ?of endof endcase
+-- i j k
 
 print('Text ends at: ' .. Symbols.line_buf)
 print('Bytes available: ' .. 131072 - Symbols.heap_start)
