@@ -71,6 +71,10 @@ d_does: .db "does>\0"
 
 d_postpone: .db "postpone\0"
 .db postpone_word
+.db d_literal
+
+d_literal: .db "literal\0"
+.db literal_word
 .db d_semicolon
 
 d_semicolon: .db ";\0"

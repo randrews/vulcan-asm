@@ -111,14 +111,14 @@ postpone_word_immediate:
     loadw heap_ptr
     call compile_tick
     call dupnz
-    brz @postpone_word_error
-    ; It was in the compile dictionary so we're going to compile a call to it.
-    push $CALL
-    call compile_instruction_arg
-postpone_word_error:
+    brnz @postpone_word_found_immediate
     ; Oh dear, it wasn't in either dictionary, time to error out:
     loadw heap_ptr
     jmp missing_word_str
+postpone_word_found_immediate:
+    ; It was in the compile dictionary so we're going to compile a call to it.
+    push $CALL
+    jmp compile_instruction_arg
 
 ; Immediate is a runtime word that moves the most recently defined word from the
 ; runtime dictionary to the compile-time one.
@@ -134,4 +134,12 @@ immediate_word:
     swap
     storew ; This definition is now pointing at the old compile_dictionary
     storew compile_dictionary ; and compile_dictionary is pointing at it!
+    ret
+
+; Compile-time word that reads a word from the stack at compile time and pushes it
+; to the stack at runtime (which is to say, read a word at compile and compile a
+; $PUSH of that word
+literal_word:
+    push $PUSH
+    call compile_instruction_arg
     ret

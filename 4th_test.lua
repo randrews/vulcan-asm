@@ -1061,7 +1061,8 @@ test_fn('handleline',
 -- Emit is a non-immediate word so postpone compiles a thing that compiles a call to it
 test_fn('handleline',
         given_memory(Symbols.line_buf, ': blah postpone emit ; blah'),
-        all(expect_memory(Symbols.heap_start + 11,
+        all(expect_stack{ },
+            expect_memory(Symbols.heap_start + 11,
                           inst('push', Symbols.putc),
                           inst('push', Opcodes.opcode_for('call')),
                           inst('call', Symbols.compile_instruction_arg)),
@@ -1072,7 +1073,8 @@ test_fn('handleline',
 -- pointless because we're never in compile mode when we call blah, here)
 test_fn('handleline',
         given_memory(Symbols.line_buf, ': blah postpone [ ;'),
-        all(expect_memory(Symbols.heap_start + 11,
+        all(expect_stack{ },
+            expect_memory(Symbols.heap_start + 11,
                           inst('call', Symbols.open_bracket_word),
                           op('ret'))))
 
@@ -1081,7 +1083,8 @@ test_fn('handleline',
 -- 'immediate' moves the most recent word from the runtime to compile-time dictionary:
 test_fn('handleline',
         given_memory(Symbols.line_buf, ': blah 5 , ; immediate'),
-        all(expect_word(Symbols.dictionary, Symbols.d_foo), -- Runtime dictionary points at whatever it did before
+        all(expect_stack{ },
+            expect_word(Symbols.dictionary, Symbols.d_foo), -- Runtime dictionary points at whatever it did before
             expect_word(Symbols.compile_dictionary, Symbols.heap_start), -- Compile dictionary now points at blah
             expect_memory(Symbols.heap_start,
                           'b', 'l', 'a', 'h', 0, -- Name of blah
@@ -1089,6 +1092,36 @@ test_fn('handleline',
                           word(Symbols.d_if), -- Next ptr points at the normal start of the compile dictionary
                           inst('push', 5), -- Body of blah. Compiles a five.
                           inst('call', Symbols.comma_word),
+                          op('ret'))))
+
+--------------------------------------------------
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah 2 5 + ; blah'),
+        all(expect_stack{ 7 }))
+
+-- 'immediate' moves the most recent word from the runtime to compile-time dictionary:
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': 5+ 5 postpone literal postpone + ; immediate : blah 2 5+ ; blah'),
+        all(expect_stack{ 7 },
+            dump_memory(Symbols.heap_start, 32),
+            expect_memory(Symbols.heap_start,
+                          '5', '+', 0, -- Name of 5+
+                          word(Symbols.heap_start + 9), -- def ptr
+                          word(Symbols.d_if), -- next word ptr
+                          inst('push', 5), -- Push the 5
+                          inst('call', Symbols.literal_word), -- call literal to compile it
+                          inst('push', Symbols.w_add),
+                          inst('push', Opcodes.opcode_for('call')),
+                          inst('call', Symbols.compile_instruction_arg), -- compile a call to +
+                          op('ret')),
+            expect_memory(Symbols.heap_start + 30,
+                          'b', 'l', 'a', 'h', 0,
+                          word(Symbols.heap_start + 30 + 11),
+                          word(Symbols.d_foo), -- Standard header for blah
+                          inst('push', 2),
+                          inst('push', 5),
+                          inst('call', Symbols.w_add),
                           op('ret'))))
 
 --------------------------------------------------
@@ -1101,7 +1134,7 @@ test_fn('handleline',
 -- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 dup? drop
 -- foo bar
 -- : allot free variable
--- [ ] , does> create postpone immediate
+-- [ ] , does> create postpone immediate literal
 -- >r r> r@ rdrop rpick
 --
 -- Todo words:
