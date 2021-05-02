@@ -143,3 +143,19 @@ literal_word:
     push $PUSH
     call compile_instruction_arg
     ret
+
+; Compile a call to the head of the dictionary
+recurse_word:
+    loadw dictionary
+    call skip_word
+    add 1
+    loadw
+    push $CALL
+    jmp compile_instruction_arg
+
+compile_tick_word:
+    call word_to_heap
+    loadw heap_ptr
+    call tick
+    push $PUSH
+    jmp compile_instruction_arg

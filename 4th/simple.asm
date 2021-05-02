@@ -49,3 +49,5 @@ w_dup2:
     pick 1
     pick 1
     ret
+
+w_execute: jmp

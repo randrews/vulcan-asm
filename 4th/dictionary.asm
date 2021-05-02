@@ -75,6 +75,14 @@ d_postpone: .db "postpone\0"
 
 d_literal: .db "literal\0"
 .db literal_word
+.db d_recurse
+
+d_recurse: .db "recurse\0"
+.db recurse_word
+.db d_bracket_tick
+
+d_bracket_tick: .db "[']\0"
+.db compile_tick_word
 .db d_semicolon
 
 d_semicolon: .db ";\0"
@@ -246,6 +254,14 @@ d_create: .db "create\0"
 
 d_comma: .db ",\0"
 .db comma_word
+.db d_execute
+
+d_execute: .db "execute\0"
+.db w_execute
+.db d_tick
+
+d_tick: .db "'\0"
+.db tick_word
 .db d_immediate
 
 d_immediate: .db "immediate\0"

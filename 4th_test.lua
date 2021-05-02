@@ -1104,7 +1104,6 @@ test_fn('handleline',
 test_fn('handleline',
         given_memory(Symbols.line_buf, ': 5+ 5 postpone literal postpone + ; immediate : blah 2 5+ ; blah'),
         all(expect_stack{ 7 },
-            dump_memory(Symbols.heap_start, 32),
             expect_memory(Symbols.heap_start,
                           '5', '+', 0, -- Name of 5+
                           word(Symbols.heap_start + 9), -- def ptr
@@ -1126,6 +1125,47 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah 65 emit 1 - dup if recurse then ; 5 blah'),
+        all(expect_stack{ 0 },
+            expect_output('AAAAA')))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah recurse ;'),
+        expect_memory(Symbols.heap_start + 11,
+                      inst('call', Symbols.heap_start + 11),
+                      op('ret')))
+
+--------------------------------------------------
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "' foo"),
+        expect_stack{ Symbols.foo })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "' foo execute"),
+        all(expect_stack{ },
+            expect_output('You called foo\n')))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ": blah ' execute ; blah foo"),
+        all(expect_stack{ },
+            expect_output('You called foo\n')))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ": blah ['] foo execute ; blah"),
+        expect_output('You called foo\n'))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ": blah ['] foo execute ;"),
+        all(expect_stack{ },
+            expect_memory(Symbols.heap_start + 11,
+                          inst('push', Symbols.foo),
+                          inst('call', Symbols.w_execute),
+                          op('ret'))))
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
 -- s" ." " cr . emit pad word
@@ -1136,6 +1176,7 @@ test_fn('handleline',
 -- : allot free variable
 -- [ ] , does> create postpone immediate literal
 -- >r r> r@ rdrop rpick
+-- recurse execute ' [']
 --
 -- Todo words:
 -- \ ( here asm #asm key nop
@@ -1152,7 +1193,6 @@ test_fn('handleline',
 -- .s u.s h.s hex.
 -- query tib token parse evaluate quit
 -- cell+ cells here
--- execute recurse ' [']
 -- case of ?of endof endcase
 -- i j k
 
