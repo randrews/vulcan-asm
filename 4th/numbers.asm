@@ -1,5 +1,14 @@
-; Print the number on top of the stack, in decimal
+; Print the number on top of the stack, in decimal, with a
+; leading '-' if it's negative
 itoa: ; ( num -- )
+    dup
+    alt 0 ; We less than 0?
+    brz @itoa_pos
+    xor 0xffffff ; Less than zero, so negate it
+    add 1
+    push 45 ; 45 is '-', print a leading dash
+    store 2
+itoa_pos: ; ( num -- )
     push 32
     call allot
     dup

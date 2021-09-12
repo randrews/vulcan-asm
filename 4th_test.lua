@@ -332,6 +332,11 @@ test_fn('is_number',
             given_stack{ 0x10000 }),
         expect_stack{ 512, 1 })
 
+test_fn('is_number',
+        all(given_memory(0x10000, '-12\0'),
+            given_stack{ 0x10000 }),
+        expect_stack{ (-12 & 0xffffff), 1 })
+
 --------------------------------------------------
 
 test_fn('itoa',
@@ -350,14 +355,21 @@ test_fn('itoa',
         all(expect_output('0'),
             expect_stack{ }))
 
+test_fn('itoa',
+        given_stack{ (-15 & 0xffffff) },
+        all(expect_output('-15'),
+            expect_stack{ }))
+
 --------------------------------------------------
 
+-- First char in a new word
 test_fn('onkeypress',
         given_stack{ string.byte('f'), 65 },
         all(expect_stack{ },
             expect_memory(Symbols.line_buf, string.byte('f')),
             expect_memory(Symbols.line_len, 1)))
 
+-- Adding chars to a word
 test_fn('onkeypress',
         all(given_memory(Symbols.line_buf, 'fo'),
             given_memory(Symbols.line_len, 2),
@@ -366,6 +378,7 @@ test_fn('onkeypress',
             expect_memory(Symbols.line_buf, string.byte('f'), string.byte('o'), string.byte('o')),
             expect_memory(Symbols.line_len, 3)))
 
+-- Pressing enter runs handleline
 -- test_fn('onkeypress',
 --         all(given_memory(Symbols.line_buf, 'foo'),
 --             given_memory(Symbols.line_len, 3),
@@ -1166,6 +1179,46 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "-10"),
+        expect_stack{ (-10 & 0xffffff) })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "-0"),
+        expect_stack{ 0 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "-5 3 +"),
+        expect_stack{ (-2 & 0xffffff) })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "-5 -12 + ."),
+        expect_output('-17'))
+
+--------------------------------------------------
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "-10 negate"),
+        expect_stack{ 10 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "-10 abs 7 abs"),
+        expect_stack{ 10, 7 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "5 even 4 even"),
+        expect_stack{ 0, 1 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "5 2- 5 1- 5 2+ 5 1+"),
+        expect_stack{ 3, 4, 7, 6 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "5 2 lshift 8 1 rshift -40 2 arshift"),
+        expect_stack{ 20, 4, (-10 & 0xffffff) })
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
 -- s" ." " cr . emit pad word
@@ -1177,13 +1230,14 @@ test_fn('handleline',
 -- [ ] , does> create postpone immediate literal
 -- >r r> r@ rdrop rpick
 -- recurse execute ' [']
+-- negate abs even 2- 1- 2+ 1+ arshift rshift lshift
 --
 -- Todo words:
 -- \ ( here asm #asm key nop
 -- depth nip rot -rot swap tuck over ?dup pick rdepth
 -- sp@ sp! rp@ rp!
--- arshift rshift lshift shr shl ror rol bic not xor or and false true clz
--- u/mod /mod min max umin umax 2- 1- 2+ 1+ even abs negate
+-- shr shl ror rol bic not xor or and false true clz
+-- u/mod /mod min max umin umax
 -- u<= u>= u> u< <= >= 0< 0<> 0= <> !=
 -- number
 -- binary decimal hex base

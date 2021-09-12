@@ -51,6 +51,7 @@ onkeypress_handleline:
 #include "compiler_utils.asm"
 #include "runtime_words.asm"
 #include "compile_words.asm"
+#include "math.asm"
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

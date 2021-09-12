@@ -1,14 +1,36 @@
-; Tries to parse a number out of a string
+; Tries to parse a number out of a string. There's a helper function,
+; pos_is_number, that does a sequence of digits. This checks the first
+; character against '-', and then calls that, and negative-izes if
+; necessary.
 is_number: ; ( ptr -- num valid? )
+    dup
+    load ; ( ptr first-ch )
+    xor 45 ; 45 is '-', ( ptr not-dash )
+    brnz @pos_is_number ; We're done here, it's positive
+    add 1
+    call pos_is_number ; ( pos-num valid? )
+    dup
+    brz @is_number_bad
+    swap
+    xor 0xffffff
+    add 1
+    swap
+is_number_bad:
+    ret
+
+; The positive-only version of parsing a number. Negative-ness is
+; handled by is_number, at this point we can assume that we just have
+; a sequence of positive digits.
+pos_is_number: ; ( ptr -- num valid? )
     pushr 0
-is_number_loop:
+pos_is_number_loop:
     dup
     load
     call is_digit
-    brz @is_number_bad
+    brz @pos_is_number_bad
     dup
     load
-    sub 48
+    sub 48 ; '0' ascii
     popr
     mul 10
     add
@@ -17,13 +39,13 @@ is_number_loop:
     dup
     load
     call word_char
-    brz @is_number_done
-    jmpr @is_number_loop
-is_number_bad:
+    brz @pos_is_number_done
+    jmpr @pos_is_number_loop
+pos_is_number_bad:
     popr
     pop
     ret 0
-is_number_done:
+pos_is_number_done:
     pop
     popr
     ret 1

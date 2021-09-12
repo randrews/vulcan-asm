@@ -266,4 +266,44 @@ d_tick: .db "'\0"
 
 d_immediate: .db "immediate\0"
 .db immediate_word
+.db d_negate
+
+d_negate: .db "negate\0"
+.db w_negate
+.db d_abs
+
+d_abs: .db "abs\0"
+.db w_abs
+.db d_even
+
+d_even: .db "even\0"
+.db w_even
+.db d_2minus
+
+d_2minus: .db "2-\0"
+.db w_2minus
+.db d_1minus
+
+d_1minus: .db "1-\0"
+.db w_1minus
+.db d_2plus
+
+d_2plus: .db "2+\0"
+.db w_2plus
+.db d_1plus
+
+d_1plus: .db "1+\0"
+.db w_1plus
+.db d_arshift
+
+d_arshift: .db "arshift\0"
+.db w_arshift
+.db d_rshift
+
+d_rshift: .db "rshift\0"
+.db w_rshift
+.db d_lshift
+
+d_lshift: .db "lshift\0"
+.db w_lshift
 .db 0

@@ -51,3 +51,24 @@ w_dup2:
     ret
 
 w_execute: jmp
+
+w_2minus: sub 2
+    ret
+
+w_1minus: sub 1
+    ret
+
+w_2plus: add 2
+    ret
+
+w_1plus: add 1
+    ret
+
+w_arshift: arshift
+    ret
+
+w_rshift: rshift
+    ret
+
+w_lshift: lshift
+    ret
