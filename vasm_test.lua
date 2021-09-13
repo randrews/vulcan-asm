@@ -136,8 +136,11 @@ test([[jmp start + 2]], [[("opcode" "jmp" "argument" ("expr" ("term" "start") "+
 -- Relative labels in expressions
 test([[brz @loop]], [[("opcode" "brz" "argument" ("expr" ("term" "@loop")))]])
 
--- Relative offsets in expressions
-test([[brz $+6]], [[("opcode" "brz" "argument" ("expr" ("term" ("line-offset" 6))))]])
+-- Absolute line offsets in expressions
+test([[jmp $+6]], [[("opcode" "jmp" "argument" ("expr" ("term" ("line-offset" "absolute" 6))))]])
+
+-- Absolute line offsets in expressions
+test([[brz @+2]], [[("opcode" "brz" "argument" ("expr" ("term" ("line-offset" "relative" 2))))]])
 
 -- Comments
 test([[hlt ; whatever]], [[("opcode" "hlt")]])
@@ -487,7 +490,7 @@ loop: sub 1
 brz @loop
 ]], [[(1 -2)]])
 
--- Referring to line offsets
+-- Referring to absolute line offsets
 -- (first and last are literals; 2nd is the address of line 1;
 -- 3rd is the address of last line)
 test_calculate([[
@@ -496,6 +499,31 @@ brz $-1
 brz $+1
 add 2
 ]], [[(1 0 10 2)]])
+
+-- Relative line offsets
+-- (first and last are literals; 2nd is relative address of line 4;
+-- 3rd is the address of last line)
+test_calculate([[
+sub 1
+brz @+2
+brz @-2
+add 2
+]], [[(1 8 -6 2)]])
+
+-- Line offsets, complicated:
+-- - The first line is 2 bytes long.
+-- - Second line points at last line, its addr is 2
+-- - Third line _is a line_ even though it has zero length, its addr
+--   is the same as line 2
+-- - Fourth line also has zero length
+-- - Last line's addr is 256
+test_calculate([[
+add 0
+jmpr @+3
+foo: .equ 10
+.org 0x100
+add 5
+]], [[(0 254 10 256 5)]])
 
 -- # Full assembler tests
 

@@ -1,4 +1,5 @@
 ; A bunch of very basic, simple words:
+; TODO: these can go inline in the dictionary itself, but tests will need to be refactored
 pad_word: push pad
     ret
 
@@ -51,24 +52,3 @@ w_dup2:
     ret
 
 w_execute: jmp
-
-w_2minus: sub 2
-    ret
-
-w_1minus: sub 1
-    ret
-
-w_2plus: add 2
-    ret
-
-w_1plus: add 1
-    ret
-
-w_arshift: arshift
-    ret
-
-w_rshift: rshift
-    ret
-
-w_lshift: lshift
-    ret

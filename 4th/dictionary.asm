@@ -3,89 +3,89 @@
 
 d_if: .db "if\0"
 .db if_word
-.db d_then
+.db $+1
 
-d_then: .db "then\0"
+.db "then\0"
 .db then_word
-.db d_else
+.db $+1
 
-d_else: .db "else\0"
+.db "else\0"
 .db else_word
-.db d_compile_squote
+.db $+1
 
-d_compile_squote: .db "s\"\0"
+.db "s\"\0"
 .db compile_squote
-.db d_compile_dotquote
+.db $+1
 
-d_compile_dotquote: .db ".\"\0"
+.db ".\"\0"
 .db compile_dotquote
-.db d_begin
+.db $+1
 
-d_begin: .db "begin\0"
+.db "begin\0"
 .db begin_word
-.db d_again
+.db $+1
 
-d_again: .db "again\0"
+.db "again\0"
 .db again_word
-.db d_exit
+.db $+1
 
-d_exit: .db "exit\0"
+.db "exit\0"
 .db exit_word
-.db d_until
+.db $+1
 
-d_until: .db "until\0"
+.db "until\0"
 .db until_word
-.db d_while
+.db $+1
 
-d_while: .db "while\0"
+.db "while\0"
 .db while_word
-.db d_repeat
+.db $+1
 
-d_repeat: .db "repeat\0"
+.db "repeat\0"
 .db repeat_word
-.db d_do
+.db $+1
 
-d_do: .db "do\0"
+.db "do\0"
 .db do_word
-.db d_pretest_do
+.db $+1
 
-d_pretest_do: .db "?do\0"
+.db "?do\0"
 .db pretest_do_word
-.db d_loop
+.db $+1
 
-d_loop: .db "loop\0"
+.db "loop\0"
 .db loop_word
-.db d_plusloop
+.db $+1
 
-d_plusloop: .db "+loop\0"
+.db "+loop\0"
 .db plusloop_word
-.db d_open_bracket
+.db $+1
 
-d_open_bracket: .db "[\0"
+.db "[\0"
 .db open_bracket_word
-.db d_does
+.db $+1
 
-d_does: .db "does>\0"
+.db "does>\0"
 .db does_word
-.db d_postpone
+.db $+1
 
-d_postpone: .db "postpone\0"
+.db "postpone\0"
 .db postpone_word
-.db d_literal
+.db $+1
 
-d_literal: .db "literal\0"
+.db "literal\0"
 .db literal_word
-.db d_recurse
+.db $+1
 
-d_recurse: .db "recurse\0"
+.db "recurse\0"
 .db recurse_word
-.db d_bracket_tick
+.db $+1
 
-d_bracket_tick: .db "[']\0"
+.db "[']\0"
 .db compile_tick_word
-.db d_semicolon
+.db $+1
 
-d_semicolon: .db ";\0"
+.db ";\0"
 .db semicolon_word
 .db 0 ; sentinel for end of dictionary
 
@@ -94,216 +94,233 @@ d_semicolon: .db ";\0"
 
 d_foo: .db "foo\0"
 .db foo
-.db d_bar
+.db $+1
 
 d_bar: .db "bar\0"
 .db bar
-.db d_emit
+.db $+1
 
-d_emit: .db "emit\0"
+.db "emit\0"
 .db putc
-.db d_pad
+.db $+1
 
-d_pad: .db "pad\0"
+.db "pad\0"
 .db pad_word
-.db d_word
+.db $+1
 
-d_word: .db "word\0"
+.db "word\0"
 .db 0
-.db d_dot
+.db $+1
 
-d_dot: .db ".\0"
+.db ".\0"
 .db itoa
-.db d_cr
+.db $+1
 
-d_cr: .db "cr\0"
+.db "cr\0"
 .db cr
-.db d_plus
+.db $+1
 
-d_plus: .db "+\0"
+.db "+\0"
 .db w_add
-.db d_minus
+.db $+1
 
-d_minus: .db "-\0"
+.db "-\0"
 .db w_sub
-.db d_times
+.db $+1
 
-d_times: .db "*\0"
+.db "*\0"
 .db w_mul
-.db d_slash
+.db $+1
 
-d_slash: .db "/\0"
+.db "/\0"
 .db w_div
-.db d_mod
+.db $+1
 
-d_mod: .db "mod\0"
+.db "mod\0"
 .db w_mod
-.db d_eq
+.db $+1
 
-d_eq: .db "=\0"
+.db "=\0"
 .db w_eq
-.db d_lt
+.db $+1
 
-d_lt: .db "<\0"
+.db "<\0"
 .db w_lt
-.db d_gt
+.db $+1
 
-d_gt: .db ">\0"
+.db ">\0"
 .db w_gt
-.db d_at
+.db $+1
 
-d_at: .db "@\0"
+.db "@\0"
 .db w_at
-.db d_set
+.db $+1
 
-d_set: .db "!\0"
+.db "!\0"
 .db w_set
-.db d_inc
+.db $+1
 
-d_inc: .db "+!\0"
+.db "+!\0"
 .db w_inc
-.db d_byte_at
+.db $+1
 
-d_byte_at: .db "c@\0"
+.db "c@\0"
 .db w_byte_at
-.db d_byte_set
+.db $+1
 
-d_byte_set: .db "c!\0"
+.db "c!\0"
 .db w_byte_set
-.db d_byte_inc
+.db $+1
 
-d_byte_inc: .db "c+!\0"
+.db "c+!\0"
 .db w_byte_inc
-.db d_dup
+.db $+1
 
-d_dup: .db "dup\0"
+.db "dup\0"
 .db w_dup
-.db d_drop
+.db $+1
 
-d_drop: .db "drop\0"
+.db "drop\0"
 .db w_drop
-.db d_dup2
+.db $+1
 
-d_dup2: .db "dup2\0"
+.db "dup2\0"
 .db w_dup2
-.db d_dupnz
+.db $+1
 
-d_dupnz: .db "?dup\0"
+.db "?dup\0"
 .db dupnz
-.db d_dotquote
+.db $+1
 
-d_dotquote: .db ".\"\0"
+.db ".\"\0"
 .db dotquote
-.db d_squote
+.db $+1
 
-d_squote: .db "s\"\0"
+.db "s\"\0"
 .db squote
-.db d_colon
+.db $+1
 
-d_colon: .db ":\0"
+.db ":\0"
 .db colon_word
-.db d_allot
+.db $+1
 
-d_allot: .db "allot\0"
+.db "allot\0"
 .db allot
-.db d_free
+.db $+1
 
-d_free: .db "free\0"
+.db "free\0"
 .db free
-.db d_variable
+.db $+1
 
-d_variable: .db "variable\0"
+.db "variable\0"
 .db variable_word
-.db d_to_r
+.db $+1
 
-d_to_r: .db ">r\0"
+.db ">r\0"
 .db push_c_addr
-.db d_from_r
+.db $+1
 
-d_from_r: .db "r>\0"
+.db "r>\0"
 .db pop_c_addr
-.db d_peek_r
+.db $+1
 
-d_peek_r: .db "r@\0"
+.db "r@\0"
 .db w_peek_r
-.db d_rdrop
+.db $+1
 
-d_rdrop: .db "rdrop\0"
+.db "rdrop\0"
 .db w_rdrop
-.db d_rpick
+.db $+1
 
-d_rpick: .db "rpick\0"
+.db "rpick\0"
 .db w_rpick
-.db d_unloop
+.db $+1
 
-d_unloop: .db "unloop\0"
+.db "unloop\0"
 .db unloop_word
-.db d_leave
+.db $+1
 
-d_leave: .db "leave\0"
+.db "leave\0"
 .db leave_word
-.db d_close_bracket
+.db $+1
 
-d_close_bracket: .db "]\0"
+.db "]\0"
 .db close_bracket_word
-.db d_create
+.db $+1
 
-d_create: .db "create\0"
+.db "create\0"
 .db create_word
-.db d_comma
+.db $+1
 
-d_comma: .db ",\0"
+.db ",\0"
 .db comma_word
-.db d_execute
+.db $+1
 
-d_execute: .db "execute\0"
+.db "execute\0"
 .db w_execute
-.db d_tick
+.db $+1
 
-d_tick: .db "'\0"
+.db "'\0"
 .db tick_word
-.db d_immediate
+.db $+1
 
-d_immediate: .db "immediate\0"
+.db "immediate\0"
 .db immediate_word
-.db d_negate
+.db $+1
 
-d_negate: .db "negate\0"
+.db "negate\0"
 .db w_negate
-.db d_abs
+.db $+1
 
-d_abs: .db "abs\0"
+.db "abs\0"
 .db w_abs
-.db d_even
+.db $+1
 
-d_even: .db "even\0"
-.db w_even
-.db d_2minus
+.db "even\0"
+.db $+2
+.db $+4
+and 1
+not
+ret
 
-d_2minus: .db "2-\0"
-.db w_2minus
-.db d_1minus
+.db "2-\0"
+.db $+2
+.db $+3
+sub 2
+ret
 
-d_1minus: .db "1-\0"
-.db w_1minus
-.db d_2plus
+.db "1-\0"
+.db $+2
+.db $+3
+sub 1
+ret
 
-d_2plus: .db "2+\0"
-.db w_2plus
-.db d_1plus
+.db "2+\0"
+.db $+2
+.db $+3
+add 2
+ret
 
-d_1plus: .db "1+\0"
-.db w_1plus
-.db d_arshift
+.db "1+\0"
+.db $+2
+.db $+3
+add 1
+ret
 
-d_arshift: .db "arshift\0"
-.db w_arshift
-.db d_rshift
+.db "arshift\0"
+.db $+2
+.db $+3
+arshift
+ret
 
-d_rshift: .db "rshift\0"
-.db w_rshift
-.db d_lshift
+.db "rshift\0"
+.db $+2
+.db $+3
+rshift
+ret
 
-d_lshift: .db "lshift\0"
-.db w_lshift
+.db "lshift\0"
+.db $+2
 .db 0
+lshift
+ret

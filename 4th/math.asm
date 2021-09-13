@@ -5,11 +5,6 @@ w_negate: xor 0xffffff
 w_abs:
     dup
     alt 0
-    brz @w_abs_end
+    brz @+2
     jmp w_negate
-w_abs_end: ret
-
-w_even:
-    and 1
-    not
     ret
