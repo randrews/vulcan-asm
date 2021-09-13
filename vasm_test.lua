@@ -136,6 +136,9 @@ test([[jmp start + 2]], [[("opcode" "jmp" "argument" ("expr" ("term" "start") "+
 -- Relative labels in expressions
 test([[brz @loop]], [[("opcode" "brz" "argument" ("expr" ("term" "@loop")))]])
 
+-- Relative offsets in expressions
+test([[brz $+6]], [[("opcode" "brz" "argument" ("expr" ("term" ("line-offset" 6))))]])
+
 -- Comments
 test([[hlt ; whatever]], [[("opcode" "hlt")]])
 
@@ -483,6 +486,16 @@ test_calculate([[
 loop: sub 1
 brz @loop
 ]], [[(1 -2)]])
+
+-- Referring to line offsets
+-- (first and last are literals; 2nd is the address of line 1;
+-- 3rd is the address of last line)
+test_calculate([[
+sub 1
+brz $-1
+brz $+1
+add 2
+]], [[(1 0 10 2)]])
 
 -- # Full assembler tests
 

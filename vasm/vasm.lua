@@ -75,7 +75,10 @@ function statement_pattern()
 
     -- To make relative jumps easier, we'll also allow an '@' at the start of a label, and interpret
     -- that as meaning "relative to the first byte of this instruction:"
-    local relative_label = lpeg.C(lpeg.P('@') * label_char * (label_char + lpeg.R('09'))^0)
+    local relative_label = lpeg.C(lpeg.P('@') * (label_char * (label_char + lpeg.R('09'))^0))
+
+    -- We'll also have a special form, $+nnn (and $-nnn) which is the first byte of the an earlier or later line:
+    local line_offset = lpeg.P('$') * lpeg.Ct(lpeg.Cc('line-offset') * (lpeg.P('+') * number + lpeg.P('-') * (number / function(n) return n * -1 end)))
 
     -- ## Opcodes
     -- An opcode is any one of several possible strings.
@@ -108,7 +111,7 @@ function statement_pattern()
         'EXPR';
         EXPR = lpeg.Ct( lpeg.Cc('expr') * lpeg.V('TERM') * (lpeg.C( lpeg.S('+-') ) * lpeg.V('TERM'))^0 ),
         TERM = lpeg.Ct( lpeg.Cc('term') * lpeg.V('FACT') * (lpeg.C( lpeg.S('/*%') ) * lpeg.V('FACT'))^0 ),
-        FACT = (space * '(' * lpeg.V('EXPR') * ')') + (space * (number + relative_label + label) * space)
+        FACT = (space * '(' * lpeg.V('EXPR') * ')') + (space * (number + relative_label + line_offset + label) * space)
     }
 
     -- Likewise, .db would get tedious quick without a string syntax, so, let's define one of those. An escape
@@ -219,29 +222,35 @@ end
 --   child, then use the operator to combine it with the following one, and so on.
 -- - If the node is a parsed string (table with the first element being 'string'), it
 --   turns the second element into an array of bytes (parsing out escape sequences) and returns it.
+-- - If the node is a line offset (table with the first element being 'line-offset'), it
+--   attempts to look up the start of the given line in the table of lines
 --
 -- This works because the parser handles all the order-of-operations stuff in parsing, so
 -- we don't need to care what actual type of node it is, expr or term.
 --
 -- One tricky point is that we call `math.floor` when dividing, because Lua has all floating-
 -- point math but Vulcan only has fixed-point, truncating division.
-function evaluate(expr, symbols, start_address)
+function evaluate(expr, symbols, start_address, lines, line_num)
     if type(expr) == 'number' then
         return expr
     elseif type(expr) == 'string' then
         if expr:sub(1,1) == '@' then
             if not start_address then input_error('Cannot resolve relative label') end
             local label_name = expr:sub(2)
-            if symbols[label_name] then return symbols[label_name] - start_address
-            else input_error('Symbol not defined: ' .. label_name) end
+            if label_name:sub(1,1) == '-' or label_name:sub(1,1) == '+' then -- relative offset
+                return start_address + tonumber(label_name)
+            else
+                if symbols[label_name] then return symbols[label_name] - start_address
+                else input_error('Symbol not defined: ' .. label_name) end
+            end
         elseif symbols[expr] then return symbols[expr]
         else input_error('Symbol not defined: ' .. expr) end
     elseif expr[1] == 'expr' or expr[1] == 'term' then
-        local val = evaluate(expr[2], symbols, start_address)
+        local val = evaluate(expr[2], symbols, start_address, lines, line_num)
 
         for i = 3, #expr, 2 do
             local operator = expr[i]
-            local rhs = evaluate(expr[i+1], symbols, start_address)
+            local rhs = evaluate(expr[i+1], symbols, start_address, lines, line_num)
             if operator == '+' then
                 val = val + rhs
             elseif operator == '-' then
@@ -271,6 +280,17 @@ function evaluate(expr, symbols, start_address)
             end
         end
         return string_bytes
+    elseif expr[1] == 'line-offset' then
+        if line_num then
+            local target_line_num = line_num + expr[2]
+            if lines and line_num and lines[target_line_num] and lines[target_line_num].address then
+                return lines[target_line_num].address
+            else
+                input_error("Can't calculate start of line " .. target_line_num)
+            end
+        else
+            input_error("Can't calculate line offset")
+        end
     else
         input_error('Unrecognized argument: type "' .. type(expr) .. '"')
     end
@@ -389,9 +409,9 @@ end
 -- If the line has an argument, evaluate it based on the symbol table, and change it to
 -- a number.
 function calculate_args(lines, symbols)
-    for _, line in ipairs(lines) do
+    for line_num, line in ipairs(lines) do
         if line.argument then
-            local success, ret = pcall(evaluate, line.argument, symbols, line.address)
+            local success, ret = pcall(evaluate, line.argument, symbols, line.address, lines, line_num)
             if success then
                 line.argument = ret
             else
