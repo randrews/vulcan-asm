@@ -1,14 +1,15 @@
 require './font'
 
 local reg = {
-    mode = 3, -- Bottom three bits are mode: 0x1 is low text / high gfx, 0x2 is low low-res / high high-res, 0x4 is low direct high paletted
+    mode = 6, -- Bottom three bits are mode: 0x1 is low text / high gfx, 0x2 is low low-res / high high-res, 0x4 is low direct high paletted
     screen = 0x0000, -- byte address, start of screen
     palette = 0x10000 - 0x100, -- Palette is last page
     font = 0x10000 - 0x100 - 0x2000, -- Font address is 2k behind palette
-    height = 30, -- Number of total rows
-    width = 40, -- number of bytes per row (only 128 displayed ever, this includes scrolling margin)
+    height = 60, -- Number of total rows
+    width = 80, -- number of bytes per row (only 128 displayed ever, this includes scrolling margin)
     row_offset = 0, -- Offset in rows between screen start and start of display.
-    col_offset = 0 -- Offset in pixels / bytes between start of row and start of display. stride=192, col_offset=32 gives a 128-wide display with 32 margin on either side to scroll to
+    col_offset = 0, -- Offset in pixels / bytes between start of row and start of display. stride=192, col_offset=32 gives a 128-wide display with 32 margin on either side to scroll to
+    dirty = true -- This is not a real register, this is just whether we need to redraw the font buffer or not
 }
 
 local mem = {}
@@ -28,22 +29,30 @@ mem[reg.palette] = 0x0
 --     mem[reg.screen + x + y * reg.width] = 0
 -- end
 
+for i = 0, 50 do
+    local x, y = 5 + i, 25
+    mem[reg.screen + x + (y - 1) * reg.width] = 0
+    mem[reg.screen + x + y * reg.width] = 65
+end
+
 -- mem[reg.palette + 1] = 0xff
 -- for i = 0, 160 do
 --     mem[reg.screen + reg.width * (reg.height - 1) + i] = 1
 -- end
 
-load_font(mem, reg.font)
-
 local low_gfx_buf = love.graphics.newCanvas(128, 128)
 local high_gfx_buf = love.graphics.newCanvas(160, 120)
 local low_text_buf = love.graphics.newCanvas(320, 240)
 local high_text_buf = love.graphics.newCanvas(640, 480)
+local font_buf = love.graphics.newCanvas(128, 128)
 
 low_gfx_buf:setFilter('nearest')
 high_gfx_buf:setFilter('nearest')
 low_text_buf:setFilter('nearest')
 high_text_buf:setFilter('nearest')
+font_buf:setFilter('nearest')
+
+load_font(mem, reg.font)
 
 love.math.setRandomSeed(love.timer.getTime())
 love.window.setMode(640, 480, { resizable = true })
@@ -60,6 +69,11 @@ function to_rgb(byte)
 end
 
 function love.draw()
+    if reg.dirty then
+        redraw_font_buf()
+        reg.dirty = false
+    end
+
     local buf
     if bit.band(reg.mode, 1) == 0 then -- Text mode
         buf = draw_text_mode()
@@ -79,6 +93,31 @@ function love.draw()
 
     love.graphics.pop()
     love.graphics.print(fps, 10, 10)
+end
+
+function redraw_font_buf()
+    for ch = 0, 0xff do
+        redraw_font_ch(ch)
+    end
+end
+
+function redraw_font_ch(ch)
+    love.graphics.setCanvas(font_buf)
+    love.graphics.setColor(0, 0, 0, 0)
+    love.graphics.setBlendMode('replace') -- This, like canvases, is not part of graphics state, so we have to manually reset it.
+    love.graphics.rectangle('fill', (ch % 16) * 8 + 0.5, math.floor(ch / 16) * 8 + 0.5, 8, 8) -- Clear the char back to transparent
+    love.graphics.setBlendMode('alpha')
+
+    for y = 0, 7 do
+        local row = mem[reg.font + ch * 8 + y]
+        for x = 0, 7 do
+            if bit.band(row, 0x80) ~= 0 then love.graphics.setColor(1, 1, 1, 1)
+            else love.graphics.setColor(0, 0, 0, 0) end
+            love.graphics.points((ch % 16) * 8 + x + 0.5, math.floor(ch / 16) * 8 + y + 0.5)
+            row = bit.band(bit.lshift(row, 1), 0xff)
+        end
+    end
+    love.graphics.setCanvas(nil)
 end
 
 function select_buf()
@@ -128,15 +167,12 @@ function draw_text_mode()
 end
 
 function draw_char(char, px, py, fg, bg)
-    for y = 0, 7 do
-        local row = mem[reg.font + char * 8 + y]
-        for x = 0, 7 do
-            if bit.band(row, 0x80) ~= 0 then love.graphics.setColor(unpack(fg))
-            else love.graphics.setColor(unpack(bg)) end
-            love.graphics.points(px + x + 0.5, py + y + 0.5)
-            row = bit.band(bit.lshift(row, 1), 0xff)
-        end
-    end
+    local quad = love.graphics.newQuad((char % 16) * 8, math.floor(char / 16) * 8, 8, 8, font_buf)
+    
+    love.graphics.setColor(unpack(bg))
+    love.graphics.rectangle('fill', px + 0.5, py + 0.5, 8, 8)
+    love.graphics.setColor(unpack(fg))
+    love.graphics.draw(font_buf, quad, px + 0.5, py + 0.5)
 end
 
 function draw_graphics_mode()
@@ -169,6 +205,11 @@ function love.update(dt)
     timer = timer + dt
     if timer > 0.1 then
         timer = 0
+        local b = mem[reg.font + 65 * 8]
+        if b == 0 then b = 1
+        else b = (b * 2) % 256 end
+        mem[reg.font + 65 * 8] = b
+        redraw_font_ch(65)
         --reg.col_offset = reg.col_offset + 1
         --reg.row_offset = reg.row_offset + 1
     end
