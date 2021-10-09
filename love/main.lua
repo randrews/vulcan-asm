@@ -1,4 +1,5 @@
 require './font'
+require './cpu'
 
 local reg = {
     mode = 6, -- Bottom three bits are mode: 0x1 is low text / high gfx, 0x2 is low low-res / high high-res, 0x4 is low direct high paletted
