@@ -2,6 +2,7 @@ package.cpath = package.cpath .. ';./cvemu/?.so'
 CPU = require('cvemu')
 -- CPU = require('vemu.cpu')
 Loader = require('vemu.loader')
+lfs = require('lfs')
 
 function init_cpu(code)
     local random_seed = os.time()
@@ -38,10 +39,13 @@ function readloop(cpu)
 end
 
 local ARGV = {...}
-if not ARGV[1] then
-    error('No ROM supplied! Pass a .asm or .f filename as an argument')
+local rom_file = ARGV[1]
+if not rom_file then
+    print('No ROM filename supplied! Using 4th as a default')
+    lfs.chdir('4th')
+    rom_file = '4th.asm'
 end
 
-local cpu = init_cpu(ARGV[1])
+local cpu = init_cpu(rom_file)
 cpu:run()
 readloop(cpu)
