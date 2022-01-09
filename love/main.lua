@@ -200,6 +200,12 @@ function draw_graphics_mode()
     return buf
 end
 
+local thread = love.thread.newThread('cpu_thread.lua')
+local channel = {
+    zeropage = love.thread.getChannel('zeropage'),
+    vram = love.thread.getChannel('vram')
+}
+
 function love.update(dt)
     fps = math.floor(1.0 / dt)
     timer = timer + dt
@@ -213,11 +219,16 @@ function love.update(dt)
         --reg.col_offset = reg.col_offset + 1
         --reg.row_offset = reg.row_offset + 1
     end
+
+    local zero_msg = channel.zeropage:pop()
+    while zero_msg do
+        print('rw=' .. tostring(zero_msg[1]) .. ', addr=' .. zero_msg[2])
+        zero_msg = channel.zeropage:pop()
+    end
 end
 
 function love.keypressed(key, scan, isrepeat)
     love.event.quit()
 end
 
-local thread = love.thread.newThread('cpu_thread.lua')
 thread:start()
