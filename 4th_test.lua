@@ -801,7 +801,7 @@ test_fn('handleline',
                           inst('push', 0),
                           call_inst('w_dup'),
                           inst('push', 5),
-                          call_inst('w_lt'),
+                          call_inst('w_alt'),
                           inst('brz', 24), -- 4-instr loop body + repeat + brz itself
                           call_inst('w_dup'),
                           call_inst('itoa'),
@@ -1138,6 +1138,7 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+-- Recurse compiles a call to the current word
 test_fn('handleline',
         given_memory(Symbols.line_buf, ': blah 65 emit 1 - dup if recurse then ; 5 blah'),
         all(expect_stack{ 0 },
@@ -1151,20 +1152,24 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+-- Tick looks up a word in the dictionary and pushes its code pointer
 test_fn('handleline',
         given_memory(Symbols.line_buf, "' foo"),
         expect_stack{ Symbols.foo })
 
+-- Execute calls the address on top of the stack
 test_fn('handleline',
         given_memory(Symbols.line_buf, "' foo execute"),
         all(expect_stack{ },
             expect_output('You called foo\n')))
 
+-- Compile-time tick still looks at the input for its word
 test_fn('handleline',
         given_memory(Symbols.line_buf, ": blah ' execute ; blah foo"),
         all(expect_stack{ },
             expect_output('You called foo\n')))
 
+-- Bracket-tick looks at the code to be compiled for its word
 test_fn('handleline',
         given_memory(Symbols.line_buf, ": blah ['] foo execute ; blah"),
         expect_output('You called foo\n'))
@@ -1179,6 +1184,7 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+-- Negative numbers
 test_fn('handleline',
         given_memory(Symbols.line_buf, "-10"),
         expect_stack{ (-10 & 0xffffff) })
@@ -1194,6 +1200,22 @@ test_fn('handleline',
 test_fn('handleline',
         given_memory(Symbols.line_buf, "-5 -12 + ."),
         expect_output('-17'))
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "-5 3 >"),
+        expect_stack{ 0 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "-5 -3 <"),
+        expect_stack{ 1 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "-5 3 u<"),
+        expect_stack{ 0 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "-5 3 u>"),
+        expect_stack{ 1 })
 
 --------------------------------------------------
 
@@ -1219,26 +1241,87 @@ test_fn('handleline',
 
 --------------------------------------------------
 
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "5 7 3 nip"),
+        expect_stack{ 5, 3 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "1 2 3 4 rot"),
+        expect_stack{ 1, 3, 4, 2 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "1 2 3 4 -rot"),
+        expect_stack{ 1, 4, 2, 3 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "1 2 3 swap"),
+        expect_stack{ 1, 3, 2 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "1 2 3 tuck"),
+        expect_stack{ 1, 3, 2, 3 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "1 2 3 over"),
+        expect_stack{ 1, 2, 3, 2 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "1 2 ?dup"),
+        expect_stack{ 1, 2, 2 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "1 0 ?dup"),
+        expect_stack{ 1, 0 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "1 2 3 1 pick"),
+        expect_stack{ 1, 2, 3, 2 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "1 2 3 depth"),
+        expect_stack{ 1, 2, 3, 3 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "depth"),
+        expect_stack{ 0 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "rdepth"),
+        expect_stack{ 0 })
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "3 2 1 >r >r >r rdepth"),
+        expect_stack{ 3 })
+
+--------------------------------------------------
+
+test_fn('handleline',
+        given_memory(Symbols.line_buf, "here 5 , here"),
+        expect_stack{ Symbols.heap_start, Symbols.heap_start + 3 })
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
 -- s" ." " cr . emit pad word
 -- begin again until while repeat do ?do loop +loop unloop leave
 -- ; exit
--- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 dup? drop
+-- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 ?dup drop
 -- foo bar
 -- : allot free variable
 -- [ ] , does> create postpone immediate literal
 -- >r r> r@ rdrop rpick
 -- recurse execute ' [']
 -- negate abs even 2- 1- 2+ 1+ arshift rshift lshift
+-- nip rot -rot swap tuck over pick depth rdepth
+-- here
+-- u> u<
 --
 -- Todo words:
--- \ ( here asm #asm key nop
--- depth nip rot -rot swap tuck over ?dup pick rdepth
--- sp@ sp! rp@ rp!
--- shr shl ror rol bic not xor or and false true clz
+-- \ ( asm #asm key nop
+-- ror rol bic not xor or and false true clz
 -- u/mod /mod min max umin umax
--- u<= u>= u> u< <= >= 0< 0<> 0= <> !=
+-- u<= u>= <= >= 0< 0<> 0= <> !=
 -- number
 -- binary decimal hex base
 -- move fill constant buffer:

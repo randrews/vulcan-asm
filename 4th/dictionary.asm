@@ -145,10 +145,18 @@ d_bar: .db "bar\0"
 .db $+1
 
 .db "<\0"
-.db w_lt
+.db w_alt
 .db $+1
 
 .db ">\0"
+.db w_agt
+.db $+1
+
+.db "u<\0"
+.db w_lt
+.db $+1
+
+.db "u>\0"
 .db w_gt
 .db $+1
 
@@ -275,6 +283,76 @@ d_bar: .db "bar\0"
 .db "abs\0"
 .db w_abs
 .db $+1
+
+.db "nip\0"
+.db $+2
+.db $+4
+swap
+pop
+ret
+
+.db "rot\0"
+.db $+2
+.db $+3
+rot
+ret
+
+.db "-rot\0"
+.db $+2
+.db $+4
+rot
+rot
+ret
+
+.db "swap\0"
+.db $+2
+.db $+3
+swap
+ret
+
+.db "tuck\0"
+.db $+2
+.db $+5
+dup
+rot
+rot
+ret
+
+.db "over\0"
+.db $+2
+.db $+3
+pick 1
+ret
+
+.db "pick\0"
+.db $+2
+.db $+3
+pick
+ret
+
+.db "depth\0"
+.db $+2
+.db $+7
+sdp ; TODO this depends on a 0x100-based stack; if we ever do `setsdp` this will be wrong
+swap
+pop
+sub 256 + 3 * 2 ; The two additional cells are the two new ones `sdp` added
+div 3
+ret
+
+.db "rdepth\0"
+.db $+2
+.db $+5
+loadw c_stack_ptr
+sub c_stack
+div 3
+ret
+
+.db "here\0"
+.db $+2
+.db $+3
+loadw heap_ptr
+ret
 
 .db "even\0"
 .db $+2

@@ -28,6 +28,12 @@ w_gt: gt
 w_lt: lt
     ret
 
+w_agt: agt
+    ret
+
+w_alt: alt
+    ret
+
 w_at: loadw
     ret
 
