@@ -1135,6 +1135,49 @@ test{"here 5 , here", stack = { Symbols.heap_start, Symbols.heap_start + 3 }}
 
 --------------------------------------------------
 
+-- Backslash comments
+test_line("5 6 \\ 7 8",
+          expect_stack{ 5, 6 },
+          expect_word(Symbols.c_stack, Symbols.handleword))
+
+test_fn('handleline',
+        all(given_memory(Symbols.line_buf, '1 2 3'),
+            given_word(Symbols.handleword_hook, Symbols.linecomment),
+            given_word(Symbols.c_stack, Symbols.handleword),
+            given_word(Symbols.c_stack_ptr, Symbols.c_stack + 3)),
+        all(expect_stack{ 1, 2, 3 }))
+
+-- Backslash comments in compile mode
+-- Should leave us in line comment mode but with the c stack containing
+-- compileword (because it never runs the semicolon)
+test_fn('handleline',
+        given_memory(Symbols.line_buf, ': blah \\ 1 2 ;'),
+        all(expect_word(Symbols.c_stack, Symbols.compileword),
+            expect_word(Symbols.handleword_hook, Symbols.linecomment)))
+
+-- Runtime paren comments
+test{'1 2 ( 3 4 5 ) 6', stack = { 1, 2, 6 }}
+
+-- Compile-time paren comments
+test{': blah ( -- crap ) 1 2 ( 3 4 5 ) 6 ; blah', stack = { 1, 2, 6 }}
+
+-- Multiline comments
+-- (it's still in the comment mode after the line)
+test_line('1 2 ( 3 4', expect_stack{ 1, 2 }, expect_word(Symbols.handleword_hook, Symbols.parencomment))
+
+-- Mismatched parens
+-- (the extra close is a nop, rather than underflowing the C stack)
+test{'1 2 ) 4', stack = { 1, 2, 4 }}
+
+-- Nested comments
+test{'1 2 ( 3 ( 4 ) ) 5', stack = { 1, 2, 5 }}
+
+-- Nested comments
+-- (it's still in the comment mode after the line)
+test_line('1 2 ( 3 ( 4 ) 5', expect_stack{ 1, 2 }, expect_word(Symbols.handleword_hook, Symbols.parencomment))
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
 -- s" ." " cr . emit pad word
@@ -1150,9 +1193,10 @@ test{"here 5 , here", stack = { Symbols.heap_start, Symbols.heap_start + 3 }}
 -- nip rot -rot swap tuck over pick depth rdepth
 -- here
 -- u> u< <= >= 0> 0< 0= != u<= u>=
+-- \ ( )
 --
 -- Todo words:
--- \ ( asm #asm key nop
+-- asm #asm key nop
 -- ror rol bic not xor or and false true clz
 -- u/mod /mod min max umin umax
 -- number

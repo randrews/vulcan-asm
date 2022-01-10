@@ -59,7 +59,13 @@ onkeypress_handleline:
 ; We might have been left in either mode by the previous line, so we'll just loop through the
 ; words, copy each one to the heap (ignoring whitespace), and call whatever the current handler is.
 handleline: ; ( -- )
-    push line_buf
+    ; Check if we were in line comment mode from last line
+    loadw handleword_hook
+    xor linecomment
+    brnz @+3
+    call pop_c_addr ; We were, so pop the old handler hook and use it
+    storew handleword_hook
+    push line_buf ; Start the cursor at the start of the line
     storew cursor
 handleline_loop:
     call word_to_heap
@@ -150,6 +156,31 @@ handleword_number:
     swap
     pop
     ret
+
+; Word handler for line-comment mode (backslash to end of line). It doesn't do a whole lot...
+linecomment: ; ( word-start-addr -- )
+    pop
+    ret
+
+; Word handler for paren-comment mode (anything in parens).
+parencomment: ; ( word-start-addr -- )
+    ; first check for a blank word and skip:
+    dup
+    load
+    brz @end_pop1 ; blank?
+    ; Now call tick to try to find it in the dictionary
+    call tick ; ( entry-addr )
+    ; If it is another open paren, do it again:
+    dup
+    xor open_paren_word ; ( entry-addr diff )
+    brnz @+3
+    pop
+    jmp open_paren_word
+    ; If it is the close-paren stub, we call it:
+    xor close_paren_stub ; ( diff )
+    brnz @+2
+    jmp close_paren_word
+    ret ; Else just leave
 
 ; Called when we expected to find something in the dictionary and didn't
 missing_word:

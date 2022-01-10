@@ -85,6 +85,18 @@ d_if: .db "if\0"
 .db compile_tick_word
 .db $+1
 
+.db "\\\0"
+.db backslash_word
+.db $+1
+
+.db "(\0"
+.db open_paren_word
+.db $+1
+
+.db ")\0"
+.db close_paren_stub
+.db $+1
+
 .db ";\0"
 .db semicolon_word
 .db 0 ; sentinel for end of dictionary
@@ -408,6 +420,18 @@ ret
 .db $+3
 loadw heap_ptr
 ret
+
+.db "\\\0"
+.db backslash_word
+.db $+1
+
+.db "(\0"
+.db open_paren_word
+.db $+1
+
+.db ")\0"
+.db close_paren_stub
+.db $+1
 
 .db "even\0"
 .db $+2

@@ -88,7 +88,7 @@ push_c_addr: ; ( addr -- )
     storew
     ret
 
-; Pushes an address of an unresolved pointer to the control stack
+; Pops the top of the control stack back to the data stack
 pop_c_addr: ; ( -- addr )
     loadw c_stack_ptr
     sub 3
