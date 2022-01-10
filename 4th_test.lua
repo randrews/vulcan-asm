@@ -163,6 +163,16 @@ function all(...)
     end
 end
 
+function test_line(line, ...)
+    test_fn('handleline', given_memory(Symbols.line_buf, line), all(...))
+end
+
+-- example: test{'blah', stack = { 1 }, out = 'foo'}
+function test(opts)
+    test_fn('handleline', given_memory(Symbols.line_buf, opts[1]),
+            all(expect_stack(opts.stack or {}), expect_output(opts.out or '')))
+end
+
 --------------------------------------------------
 
 test_fn('dupnz',
@@ -504,11 +514,7 @@ test_fn('handleline',
         expect_stack{ })
 
 -- A line with one word on it
-test_fn('handleline',
-        all(given_memory(Symbols.line_buf, 'foo'),
-            given_stack{ }),
-        all(expect_stack{ },
-            expect_output('You called foo\n')))
+test{'foo', out = 'You called foo\n'}
 
 -- A line with only whitespace
 test_fn('handleline',
@@ -542,11 +548,7 @@ test_fn('handleline',
             expect_output('10')))
 
 -- A line with trailing whitespace
-test_fn('handleline',
-        all(given_memory(Symbols.line_buf, 'foo   '),
-            given_stack{ }),
-        all(expect_stack{ },
-            expect_output("You called foo\n")))
+test{'foo   ', out = "You called foo\n"}
 
 -- Passing stack to some things
 test_fn('handleline',
@@ -556,11 +558,9 @@ test_fn('handleline',
             expect_output('10')))
 
 -- Multiple words, leading and trailing space...
-test_fn('handleline',
-        all(given_memory(Symbols.line_buf, '  \n\t\t155 10 20 + 34 * .   '),
-            given_stack{ }),
-        all(expect_stack{ 155 },
-            expect_output('1020')))
+test_line('  \n\t\t155 10 20 + 34 * .   ',
+          expect_stack{ 155 },
+          expect_output('1020'))
 
 --------------------------------------------------
 
@@ -590,35 +590,11 @@ test_fn('read_quote_string',
 
 --------------------------------------------------
 
-test_fn('handleline',
-        all(given_memory(Symbols.line_buf, '." hello, world"'),
-            given_stack{ }),
-        all(expect_stack{ },
-            expect_output('hello, world')))
-
-test_fn('handleline',
-        all(given_memory(Symbols.line_buf, '." hello, world   "   '),
-            given_stack{ }),
-        all(expect_stack{ },
-            expect_output('hello, world   ')))
-
-test_fn('handleline',
-        all(given_memory(Symbols.line_buf, '5 ." hello, world   "'),
-            given_stack{ }),
-        all(expect_stack{ 5 },
-            expect_output('hello, world   ')))
-
-test_fn('handleline',
-        all(given_memory(Symbols.line_buf, '5 ." hello, world: " 3 + .'),
-            given_stack{ }),
-        all(expect_stack{ },
-            expect_output('hello, world: 8')))
-
-test_fn('handleline',
-        all(given_memory(Symbols.line_buf, '." unterminated...'),
-            given_stack{ }),
-        all(expect_stack{ },
-            expect_output('Unclosed string')))
+test{'." hello, world"', out = 'hello, world'}
+test{'." hello, world   "   ', out = 'hello, world   '}
+test{'5 ." hello, world   "', out = 'hello, world   ', stack = { 5 }}
+test{'5 ." hello, world: " 3 + .', out = 'hello, world: 8'}
+test{'." unterminated...', out = 'Unclosed string'}
 
 --------------------------------------------------
 
@@ -776,528 +752,382 @@ test_fn('handleline',
 --------------------------------------------------
 
 -- Indefinite loops
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah begin ." foo" again ;'), -- Everyone's first basic program...
-        expect_memory(Symbols.heap_start + 11,
-                      op('jmpr', 3), word(8), -- The jmpr for the string
-                      'f', 'o', 'o', 0, -- The string itself
-                      op('push', 3), word(Symbols.heap_start + 11 + 4), -- The push for the string addr
-                      op('call', 3), word(Symbols.print), -- Call to print the string
-                      op('jmpr', 3), word(-16))) -- Jump back 16 bytes to the begin
+test_line(': blah begin ." foo" again ;', -- Everyone's first basic program...
+          expect_memory(Symbols.heap_start + 11,
+                        op('jmpr', 3), word(8), -- The jmpr for the string
+                        'f', 'o', 'o', 0, -- The string itself
+                        op('push', 3), word(Symbols.heap_start + 11 + 4), -- The push for the string addr
+                        op('call', 3), word(Symbols.print), -- Call to print the string
+                        op('jmpr', 3), word(-16))) -- Jump back 16 bytes to the begin
 
-test_fn('handleline',
-        all(given_memory(Symbols.line_buf, ': blah 0 begin dup . 1 + dup 4 - if else exit then again ; blah'),
-            given_stack{ 100 }),
-        all(expect_output('0123')))
+test{': blah 0 begin dup . 1 + dup 4 - if else exit then again ; blah', stack = { 4 }, out = '0123'}
+test{': blah 0 begin dup . 1 + dup 5 = until ; blah', stack = { 5 }, out = '01234'}
 
-test_fn('handleline',
-        all(given_memory(Symbols.line_buf, ': blah 0 begin dup . 1 + dup 5 = until ; blah'),
-            given_stack{ 100 }),
-        all(expect_output('01234')))
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah 0 begin dup 5 < while dup . 1 + repeat ; blah'),
-        all(expect_memory(Symbols.heap_start + 11,
-                          inst('push', 0),
-                          call_inst('w_dup'),
-                          inst('push', 5),
-                          call_inst('w_alt'),
-                          inst('brz', 24), -- 4-instr loop body + repeat + brz itself
-                          call_inst('w_dup'),
-                          call_inst('itoa'),
-                          inst('push', 1),
-                          call_inst('w_add'),
-                          inst('jmpr', -32),
-                          op('ret')
-            ),
-            expect_output('01234')
-        )
-)
+test_line(': blah 0 begin dup 5 < while dup . 1 + repeat ; blah',
+          expect_memory(Symbols.heap_start + 11,
+                        inst('push', 0),
+                        call_inst('w_dup'),
+                        inst('push', 5),
+                        call_inst('w_alt'),
+                        inst('brz', 24), -- 4-instr loop body + repeat + brz itself
+                        call_inst('w_dup'),
+                        call_inst('itoa'),
+                        inst('push', 1),
+                        call_inst('w_add'),
+                        inst('jmpr', -32),
+                        op('ret')),
+          expect_stack{ 5 }, -- This leaves the counter on the stack
+          expect_output('01234'))
 
 --------------------------------------------------
 
 -- Variables
-test_fn('handleline',
-        given_memory(Symbols.line_buf, 'variable blah'),
-        all(expect_stack{ },
-            expect_memory(Symbols.heap_start + 11,
-                          inst('push', Symbols.heap_start + 16),
-                          op('ret'),
-                          word(0)
-            )
-        )
-)
+test_line('variable blah',
+          expect_stack{ },
+          expect_memory(Symbols.heap_start + 11,
+                        inst('push', Symbols.heap_start + 16),
+                        op('ret'),
+                        word(0)))
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, 'variable'),
-        expect_output('Expected name, found end of input\n'))
+test{'variable', out = 'Expected name, found end of input\n'}
 
 -- get and set
-test_fn('handleline',
-        given_memory(Symbols.line_buf, 'variable foo foo @ . 5120 foo ! foo @ .'),
-        expect_output('05120'))
+test{'variable foo foo @ . 5120 foo ! foo @ .', out = '05120'}
 
 -- byte set
-test_fn('handleline',
-        given_memory(Symbols.line_buf, 'variable foo foo @ . 261 foo c! foo @ .'),
-        expect_output('05'))
+test{'variable foo foo @ . 261 foo c! foo @ .', out = '05'}
 
 -- byte get
-test_fn('handleline',
-        given_memory(Symbols.line_buf, 'variable foo foo @ . 5127 foo ! foo c@ .'),
-        expect_output('07'))
+test{'variable foo foo @ . 5127 foo ! foo c@ .', out = '07'}
 
 -- inc
-test_fn('handleline',
-        given_memory(Symbols.line_buf, 'variable foo 17 foo ! 3 foo +! foo @ .'),
-        expect_output('20'))
+test{'variable foo 17 foo ! 3 foo +! foo @ .', out = '20'}
 
 -- byte inc
-test_fn('handleline',
-        given_memory(Symbols.line_buf, 'variable foo 200 foo ! 60 foo c+! foo @ .'),
-        expect_output('4')) -- the byte increment doesn't roll to the second byte
+-- the byte increment doesn't roll to the second byte
+test{'variable foo 200 foo ! 60 foo c+! foo @ .', out = '4'}
 
 --------------------------------------------------
 
 -- R stack
-test_fn('handleline',
-        given_memory(Symbols.line_buf, '5 3 >r >r'),
-        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 6),
-            expect_memory(Symbols.c_stack, word(3), word(5))))
+test_line('5 3 >r >r',
+          expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 6),
+          expect_memory(Symbols.c_stack, word(3), word(5)))
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, '5 3 >r >r 1 r> r>'),
-        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
-            expect_stack{ 1, 5, 3 }))
+test_line('5 3 >r >r 1 r> r>',
+          expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
+          expect_stack{ 1, 5, 3 })
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, '5 >r 3 r>'),
-        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
-            expect_stack{ 3, 5 }))
+test_line('5 >r 3 r>',
+          expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
+          expect_stack{ 3, 5 })
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, '5 >r r@ r@'),
-        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 3),
-            expect_word(Symbols.c_stack, 5),
-            expect_stack{ 5, 5 }))
+test_line('5 >r r@ r@',
+          expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 3),
+          expect_word(Symbols.c_stack, 5),
+          expect_stack{ 5, 5 })
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, '5 3 >r >r rdrop'),
-        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 3),
-            expect_word(Symbols.c_stack, 3),
-            expect_stack{ }))
+test_line('5 3 >r >r rdrop',
+          expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 3),
+          expect_word(Symbols.c_stack, 3),
+          expect_stack{ })
 
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, '5 3 >r >r 1 rpick'),
-        all(expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 6),
-            expect_memory(Symbols.c_stack, word(3), word(5)),
-            expect_stack{ 3 }))
+test_line('5 3 >r >r 1 rpick',
+          expect_word(Symbols.c_stack_ptr, Symbols.c_stack + 6),
+          expect_memory(Symbols.c_stack, word(3), word(5)),
+          expect_stack{ 3 })
 
 --------------------------------------------------
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah 5 0 do 65 emit loop ; blah'),
-        all(expect_memory(Symbols.heap_start + 11,
-                          inst('push', 5), -- limit
-                          inst('push', 0), -- index
-                          op('swap'),
-                          inst('call', Symbols.push_c_addr),
-                          inst('call', Symbols.push_c_addr), -- >R both
-                          inst('push', 65),
-                          inst('call', Symbols.putc), -- Loop body
-                          inst('push', 1),
-                          inst('call', Symbols.test_loop), -- inc by 1 and test
-                          inst('brnz', -16) -- brnz back to the start of the loop body
-            ),
-            expect_output('AAAAA'),
-            expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
-            expect_stack{ }
-        ))
+test_line(': blah 5 0 do 65 emit loop ; blah',
+          expect_memory(Symbols.heap_start + 11,
+                        inst('push', 5), -- limit
+                        inst('push', 0), -- index
+                        op('swap'),
+                        inst('call', Symbols.push_c_addr),
+                        inst('call', Symbols.push_c_addr), -- >R both
+                        inst('push', 65),
+                        inst('call', Symbols.putc), -- Loop body
+                        inst('push', 1),
+                        inst('call', Symbols.test_loop), -- inc by 1 and test
+                        inst('brnz', -16) -- brnz back to the start of the loop body
+          ),
+          expect_output('AAAAA'),
+          expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
+          expect_stack{ })
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah 5 0 do 65 emit 2 +loop ; blah'),
-        all(expect_memory(Symbols.heap_start + 11,
-                          inst('push', 5), -- limit
-                          inst('push', 0), -- index
-                          op('swap'),
-                          inst('call', Symbols.push_c_addr),
-                          inst('call', Symbols.push_c_addr), -- >R both
-                          inst('push', 65),
-                          inst('call', Symbols.putc), -- Loop body
-                          inst('push', 2),
-                          inst('call', Symbols.test_loop), -- inc by 1 and test
-                          inst('brnz', -16) -- brnz back to the start of the loop body
-            ),
-            expect_output('AAA'),
-            expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
-            expect_stack{ }
-        ))
+test_line(': blah 5 0 do 65 emit 2 +loop ; blah',
+          expect_memory(Symbols.heap_start + 11,
+                        inst('push', 5), -- limit
+                        inst('push', 0), -- index
+                        op('swap'),
+                        inst('call', Symbols.push_c_addr),
+                        inst('call', Symbols.push_c_addr), -- >R both
+                        inst('push', 65),
+                        inst('call', Symbols.putc), -- Loop body
+                        inst('push', 2),
+                        inst('call', Symbols.test_loop), -- inc by 1 and test
+                        inst('brnz', -16) -- brnz back to the start of the loop body
+          ),
+          expect_output('AAA'),
+          expect_word(Symbols.c_stack_ptr, Symbols.c_stack),
+          expect_stack{ })
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah 5 0 do 65 emit unloop exit loop ; blah'),
-        all(expect_memory(Symbols.heap_start + 11,
-                          inst('push', 5), -- limit
-                          inst('push', 0), -- index
-                          op('swap'),
-                          inst('call', Symbols.push_c_addr),
-                          inst('call', Symbols.push_c_addr), -- >R both
-                          inst('push', 65),
-                          inst('call', Symbols.putc), -- Loop body
-                          inst('call', Symbols.unloop_word), -- Loop body
-                          op('ret'),
-                          inst('push', 1),
-                          inst('call', Symbols.test_loop), -- inc by 1 and test
-                          inst('brnz', -21) -- Jump back over the check and loop body
-            ),
-            expect_output('A'), -- Because we exit the first time through, only one A
-            expect_word(Symbols.c_stack_ptr, Symbols.c_stack), -- But unloop cleans up after us
-            expect_stack{ }
-        ))
+test_line(': blah 5 0 do 65 emit unloop exit loop ; blah',
+          expect_memory(Symbols.heap_start + 11,
+                        inst('push', 5), -- limit
+                        inst('push', 0), -- index
+                        op('swap'),
+                        inst('call', Symbols.push_c_addr),
+                        inst('call', Symbols.push_c_addr), -- >R both
+                        inst('push', 65),
+                        inst('call', Symbols.putc), -- Loop body
+                        inst('call', Symbols.unloop_word), -- Loop body
+                        op('ret'),
+                        inst('push', 1),
+                        inst('call', Symbols.test_loop), -- inc by 1 and test
+                        inst('brnz', -21) -- Jump back over the check and loop body
+          ),
+          expect_output('A'), -- Because we exit the first time through, only one A
+          expect_word(Symbols.c_stack_ptr, Symbols.c_stack), -- But unloop cleans up after us
+          expect_stack{ })
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah 5 20 ?do 65 emit loop ; blah'),
-        all(expect_memory(Symbols.heap_start + 11,
-                          inst('push', 5), -- limit
-                          inst('push', 20), -- index
-                          op('swap'),
-                          inst('call', Symbols.push_c_addr),
-                          inst('call', Symbols.push_c_addr), -- >R both
-                          inst('push', 0), -- The pretest doesn't increment the counter
-                          inst('call', Symbols.test_loop), -- pretest loop, so test if we should do it at all
-                          inst('brz', 24),
-                          inst('push', 65),
-                          inst('call', Symbols.putc), -- Loop body
-                          inst('push', 1),
-                          inst('call', Symbols.test_loop), -- inc by 1 and test
-                          inst('brnz', -16), -- Jump back over the check and loop body
-                          inst('call', Symbols.unloop_word), -- Unloop
-                          op('ret')
-            ),
-            expect_output(''), -- Because we exit before running it once
-            expect_word(Symbols.c_stack_ptr, Symbols.c_stack), -- But unloop still cleans up after us
-            expect_stack{ }
-        ))
+test_line(': blah 5 20 ?do 65 emit loop ; blah',
+          expect_memory(Symbols.heap_start + 11,
+                        inst('push', 5), -- limit
+                        inst('push', 20), -- index
+                        op('swap'),
+                        inst('call', Symbols.push_c_addr),
+                        inst('call', Symbols.push_c_addr), -- >R both
+                        inst('push', 0), -- The pretest doesn't increment the counter
+                        inst('call', Symbols.test_loop), -- pretest loop, so test if we should do it at all
+                        inst('brz', 24),
+                        inst('push', 65),
+                        inst('call', Symbols.putc), -- Loop body
+                        inst('push', 1),
+                        inst('call', Symbols.test_loop), -- inc by 1 and test
+                        inst('brnz', -16), -- Jump back over the check and loop body
+                        inst('call', Symbols.unloop_word), -- Unloop
+                        op('ret')
+          ),
+          expect_output(''), -- Because we exit before running it once
+          expect_word(Symbols.c_stack_ptr, Symbols.c_stack), -- But unloop still cleans up after us
+          expect_stack{ })
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah 5 0 ?do 65 emit loop ; blah'),
-        expect_output('AAAAA')) -- The pretest shouldn't affect the actual loop period
+-- The pretest shouldn't affect the actual loop period
+test{': blah 5 0 ?do 65 emit loop ; blah', out = 'AAAAA'}
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah 5 0 do 65 emit 1 if leave then loop ; blah'),
-        expect_output('A')) -- Leave bails us out after the first emit
+-- Leave bails us out after the first emit
+test{': blah 5 0 do 65 emit 1 if leave then loop ; blah', out = 'A'}
 
 --------------------------------------------------
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah [ 65 emit ] 5 ; blah blah'),
-        all(expect_stack{ 5, 5 },
-            expect_output('A'))) -- The part in brackets happens once, the push 5 happens twice
+-- The part in brackets happens once, the push 5 happens twice
+test{': blah [ 65 emit ] 5 ; blah blah', stack = { 5, 5 }, out = 'A'}
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah create 15 ; blah fnord'),
-        all(expect_stack{ 15 },
-            expect_memory(Symbols.heap_start + 11,
-                          inst('call', Symbols.create_word), -- After blah's header, we have a call to create
-                          inst('push', 15), -- and then the compile time behavior of the new word
-                          op('ret'), -- blah's return
-                          'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
-                          word(Symbols.heap_start + 11 + 21), -- pointer to the new heap
-                          -- and pointer to the next dictionary entry. By this point the front of the
-                          -- dictionary is blah, which has its entry at heap_start:
-                          word(Symbols.heap_start))))
+test_line(': blah create 15 ; blah fnord',
+          expect_stack{ 15 },
+          expect_memory(Symbols.heap_start + 11,
+                        inst('call', Symbols.create_word), -- After blah's header, we have a call to create
+                        inst('push', 15), -- and then the compile time behavior of the new word
+                        op('ret'), -- blah's return
+                        'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
+                        word(Symbols.heap_start + 11 + 21), -- pointer to the new heap
+                        -- and pointer to the next dictionary entry. By this point the front of the
+                        -- dictionary is blah, which has its entry at heap_start:
+                        word(Symbols.heap_start)))
 
 -- Testing create / does> without compile-time behavior
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah create does> drop 2 3 ; blah fnord fnord + fnord'),
-        -- Because we're creating a new word fnord and then running it twice, we get the
-        -- runtime behavior twice, so, (2 3 + 2 3)
-        all(expect_stack{ 5, 2, 3 },
-            -- Body of blah:
-            expect_memory(Symbols.heap_start + 11,
-                          inst('call', Symbols.create_word), -- After blah's header, we have a call to create
-                          inst('push', Symbols.heap_start + 11 + 13), -- push the address of after the does>
-                          inst('jmp', Symbols.does_at_runtime), -- And a call to does@runtime, to start compiling it
-                          op('ret'), -- blah's return
-                          inst('call', Symbols.w_drop),
-                          inst('push', 2), -- The runtime behavior of fnord (the "mold"):
-                          inst('push', 3),
-                          op('ret')), -- fnord's runtime return
-            -- Header of fnord:
-            expect_memory(Symbols.heap_start + 11 + 26,
-                          'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
-                          word(Symbols.heap_start + 11 + 26 + 12), -- pointer to the trampoline
-                          -- and pointer to the next dictionary entry. By this point the front of the
-                          -- dictionary is blah, which has its entry at heap_start:
-                          word(Symbols.heap_start)),
-            -- Body (trampoline) of fnord:
-            expect_memory(Symbols.heap_start + 11 + 26 + 12,
-                          inst('push', Symbols.heap_start + 11 + 26 + 12), -- Push the old value, which was right
-                          -- after the header (because of the null compile-time behavior)
-                          inst('jmp', Symbols.heap_start + 11 + 13)))) -- jmp to the runtime behavior, after the
-                          -- does> call
-
+test_line(': blah create does> drop 2 3 ; blah fnord fnord + fnord',
+          -- Because we're creating a new word fnord and then running it twice, we get the
+          -- runtime behavior twice, so, (2 3 + 2 3)
+          expect_stack{ 5, 2, 3 },
+          -- Body of blah:
+          expect_memory(Symbols.heap_start + 11,
+                        inst('call', Symbols.create_word), -- After blah's header, we have a call to create
+                        inst('push', Symbols.heap_start + 11 + 13), -- push the address of after the does>
+                        inst('jmp', Symbols.does_at_runtime), -- And a call to does@runtime, to start compiling it
+                        op('ret'), -- blah's return
+                        inst('call', Symbols.w_drop),
+                        inst('push', 2), -- The runtime behavior of fnord (the "mold"):
+                        inst('push', 3),
+                        op('ret')), -- fnord's runtime return
+          -- Header of fnord:
+          expect_memory(Symbols.heap_start + 11 + 26,
+                        'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
+                        word(Symbols.heap_start + 11 + 26 + 12), -- pointer to the trampoline
+                        -- and pointer to the next dictionary entry. By this point the front of the
+                        -- dictionary is blah, which has its entry at heap_start:
+                        word(Symbols.heap_start)),
+          -- Body (trampoline) of fnord:
+          expect_memory(Symbols.heap_start + 11 + 26 + 12,
+                        inst('push', Symbols.heap_start + 11 + 26 + 12), -- Push the old value, which was right
+                        -- after the header (because of the null compile-time behavior)
+                        inst('jmp', Symbols.heap_start + 11 + 13))) -- jmp to the runtime behavior, after the does> call
 
 -- Testing create / does> when there's compile-time behavior
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah create 15 , does> @ 3 ; blah fnord fnord + fnord'),
-        all(expect_stack{ 18, 15, 3 },
-            -- Body of blah:
-            expect_memory(Symbols.heap_start + 11,
-                          inst('call', Symbols.create_word), -- After blah's header, we have a call to create
-                          inst('push', 15),
-                          inst('call', Symbols.comma_word),
-                          inst('push', Symbols.heap_start + 11 + 21), -- push the address of after the does>
-                          inst('jmp', Symbols.does_at_runtime), -- And a call to does@runtime, to start compiling it
-                          op('ret'), -- blah's return
-                          inst('call', Symbols.w_at), -- After the does>; the runtime behavior of fnord (the "mold"):
-                          inst('push', 3),
-                          op('ret')), -- fnord's runtime return
-            -- Header of fnord:
-            expect_memory(Symbols.heap_start + 11 + 30,
-                          'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
-                          word(Symbols.heap_start + 11 + 30 + 15), -- pointer to the trampoline
-                          -- and pointer to the next dictionary entry. By this point the front of the
-                          -- dictionary is blah, which has its entry at heap_start:
-                          word(Symbols.heap_start)),
-            expect_memory(Symbols.heap_start + 11 + 30 + 12,
-                          word(15)), -- The compile time behavior compiled this 15
-            -- Body (trampoline) of fnord:
-            expect_memory(Symbols.heap_start + 11 + 30 + 15,
-                          inst('push', Symbols.heap_start + 11 + 30 + 12), -- Push the old value, which was right
-                          -- after the header, the 15 we compiled
-                          inst('jmp', Symbols.heap_start + 11 + 21)))) -- jmp to the runtime behavior, after the
-                          -- does> call
+test_line(': blah create 15 , does> @ 3 ; blah fnord fnord + fnord',
+          expect_stack{ 18, 15, 3 },
+          -- Body of blah:
+          expect_memory(Symbols.heap_start + 11,
+                        inst('call', Symbols.create_word), -- After blah's header, we have a call to create
+                        inst('push', 15),
+                        inst('call', Symbols.comma_word),
+                        inst('push', Symbols.heap_start + 11 + 21), -- push the address of after the does>
+                        inst('jmp', Symbols.does_at_runtime), -- And a call to does@runtime, to start compiling it
+                        op('ret'), -- blah's return
+                        inst('call', Symbols.w_at), -- After the does>; the runtime behavior of fnord (the "mold"):
+                        inst('push', 3),
+                        op('ret')), -- fnord's runtime return
+          -- Header of fnord:
+          expect_memory(Symbols.heap_start + 11 + 30,
+                        'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
+                        word(Symbols.heap_start + 11 + 30 + 15), -- pointer to the trampoline
+                        -- and pointer to the next dictionary entry. By this point the front of the
+                        -- dictionary is blah, which has its entry at heap_start:
+                        word(Symbols.heap_start)),
+          expect_memory(Symbols.heap_start + 11 + 30 + 12,
+                        word(15)), -- The compile time behavior compiled this 15
+          -- Body (trampoline) of fnord:
+          expect_memory(Symbols.heap_start + 11 + 30 + 15,
+                        inst('push', Symbols.heap_start + 11 + 30 + 12), -- Push the old value, which was right
+                        -- after the header, the 15 we compiled
+                        inst('jmp', Symbols.heap_start + 11 + 21))) -- jmp to the runtime behavior, after the does> call
 
 --------------------------------------------------
 
 -- Emit is a non-immediate word so postpone compiles a thing that compiles a call to it
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah postpone emit ; blah'),
-        all(expect_stack{ },
-            expect_memory(Symbols.heap_start + 11,
-                          inst('push', Symbols.putc),
-                          inst('push', Opcodes.opcode_for('call')),
-                          inst('call', Symbols.compile_instruction_arg)),
-            expect_memory(Symbols.heap_start + 11 + 13,
-                          inst('call', Symbols.putc))))
+test_line(': blah postpone emit ; blah',
+          expect_stack{ },
+          expect_memory(Symbols.heap_start + 11,
+                        inst('push', Symbols.putc),
+                        inst('push', Opcodes.opcode_for('call')),
+                        inst('call', Symbols.compile_instruction_arg)),
+          expect_memory(Symbols.heap_start + 11 + 13,
+                        inst('call', Symbols.putc)))
 
 -- Open-bracket is an immediate word so postpone just compiles a call to it (which is
 -- pointless because we're never in compile mode when we call blah, here)
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah postpone [ ;'),
-        all(expect_stack{ },
-            expect_memory(Symbols.heap_start + 11,
-                          inst('call', Symbols.open_bracket_word),
-                          op('ret'))))
+test_line(': blah postpone [ ;',
+          expect_stack{ },
+          expect_memory(Symbols.heap_start + 11,
+                        inst('call', Symbols.open_bracket_word),
+                        op('ret')))
 
 --------------------------------------------------
 
 -- 'immediate' moves the most recent word from the runtime to compile-time dictionary:
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah 5 , ; immediate'),
-        all(expect_stack{ },
-            expect_word(Symbols.dictionary, Symbols.d_foo), -- Runtime dictionary points at whatever it did before
-            expect_word(Symbols.compile_dictionary, Symbols.heap_start), -- Compile dictionary now points at blah
-            expect_memory(Symbols.heap_start,
-                          'b', 'l', 'a', 'h', 0, -- Name of blah
-                          word(Symbols.heap_start + 11), -- Definition ptr is unchanged
-                          word(Symbols.d_if), -- Next ptr points at the normal start of the compile dictionary
-                          inst('push', 5), -- Body of blah. Compiles a five.
-                          inst('call', Symbols.comma_word),
-                          op('ret'))))
+test_line(': blah 5 , ; immediate',
+          expect_stack{ },
+          expect_word(Symbols.dictionary, Symbols.d_foo), -- Runtime dictionary points at whatever it did before
+          expect_word(Symbols.compile_dictionary, Symbols.heap_start), -- Compile dictionary now points at blah
+          expect_memory(Symbols.heap_start,
+                        'b', 'l', 'a', 'h', 0, -- Name of blah
+                        word(Symbols.heap_start + 11), -- Definition ptr is unchanged
+                        word(Symbols.d_if), -- Next ptr points at the normal start of the compile dictionary
+                        inst('push', 5), -- Body of blah. Compiles a five.
+                        inst('call', Symbols.comma_word),
+                        op('ret')))
 
 --------------------------------------------------
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah 2 5 + ; blah'),
-        all(expect_stack{ 7 }))
+test{': blah 2 5 + ; blah', stack = { 7 }}
 
 -- 'immediate' moves the most recent word from the runtime to compile-time dictionary:
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': 5+ 5 postpone literal postpone + ; immediate : blah 2 5+ ; blah'),
-        all(expect_stack{ 7 },
-            expect_memory(Symbols.heap_start,
-                          '5', '+', 0, -- Name of 5+
-                          word(Symbols.heap_start + 9), -- def ptr
-                          word(Symbols.d_if), -- next word ptr
-                          inst('push', 5), -- Push the 5
-                          inst('call', Symbols.literal_word), -- call literal to compile it
-                          inst('push', Symbols.w_add),
-                          inst('push', Opcodes.opcode_for('call')),
-                          inst('call', Symbols.compile_instruction_arg), -- compile a call to +
-                          op('ret')),
-            expect_memory(Symbols.heap_start + 30,
-                          'b', 'l', 'a', 'h', 0,
-                          word(Symbols.heap_start + 30 + 11),
-                          word(Symbols.d_foo), -- Standard header for blah
-                          inst('push', 2),
-                          inst('push', 5),
-                          inst('call', Symbols.w_add),
-                          op('ret'))))
+test_line(': 5+ 5 postpone literal postpone + ; immediate : blah 2 5+ ; blah',
+          expect_stack{ 7 },
+          expect_memory(Symbols.heap_start,
+                        '5', '+', 0, -- Name of 5+
+                        word(Symbols.heap_start + 9), -- def ptr
+                        word(Symbols.d_if), -- next word ptr
+                        inst('push', 5), -- Push the 5
+                        inst('call', Symbols.literal_word), -- call literal to compile it
+                        inst('push', Symbols.w_add),
+                        inst('push', Opcodes.opcode_for('call')),
+                        inst('call', Symbols.compile_instruction_arg), -- compile a call to +
+                        op('ret')),
+          expect_memory(Symbols.heap_start + 30,
+                        'b', 'l', 'a', 'h', 0,
+                        word(Symbols.heap_start + 30 + 11),
+                        word(Symbols.d_foo), -- Standard header for blah
+                        inst('push', 2),
+                        inst('push', 5),
+                        inst('call', Symbols.w_add),
+                        op('ret')))
 
 --------------------------------------------------
 
 -- Recurse compiles a call to the current word
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah 65 emit 1 - dup if recurse then ; 5 blah'),
-        all(expect_stack{ 0 },
-            expect_output('AAAAA')))
+test{': blah 65 emit 1 - dup if recurse then ; 5 blah',
+     stack = { 0 }, out = 'AAAAA'}
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ': blah recurse ;'),
-        expect_memory(Symbols.heap_start + 11,
-                      inst('call', Symbols.heap_start + 11),
-                      op('ret')))
+test_line(': blah recurse ;',
+          expect_memory(Symbols.heap_start + 11,
+                        inst('call', Symbols.heap_start + 11),
+                        op('ret')))
 
 --------------------------------------------------
 
 -- Tick looks up a word in the dictionary and pushes its code pointer
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "' foo"),
-        expect_stack{ Symbols.foo })
+test{"' foo", stack = { Symbols.foo }}
 
 -- Execute calls the address on top of the stack
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "' foo execute"),
-        all(expect_stack{ },
-            expect_output('You called foo\n')))
+test{"' foo execute", out = 'You called foo\n'}
 
 -- Compile-time tick still looks at the input for its word
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ": blah ' execute ; blah foo"),
-        all(expect_stack{ },
-            expect_output('You called foo\n')))
+test{": blah ' execute ; blah foo", out = 'You called foo\n'}
 
 -- Bracket-tick looks at the code to be compiled for its word
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ": blah ['] foo execute ; blah"),
-        expect_output('You called foo\n'))
+test{": blah ['] foo execute ; blah", out = 'You called foo\n'}
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, ": blah ['] foo execute ;"),
-        all(expect_stack{ },
-            expect_memory(Symbols.heap_start + 11,
-                          inst('push', Symbols.foo),
-                          inst('call', Symbols.w_execute),
-                          op('ret'))))
+test_line(": blah ['] foo execute ;",
+          expect_stack{ },
+          expect_memory(Symbols.heap_start + 11,
+                        inst('push', Symbols.foo),
+                        inst('call', Symbols.w_execute),
+                        op('ret')))
 
 --------------------------------------------------
 
 -- Negative numbers
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "-10"),
-        expect_stack{ (-10 & 0xffffff) })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "-0"),
-        expect_stack{ 0 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "-5 3 +"),
-        expect_stack{ (-2 & 0xffffff) })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "-5 -12 + ."),
-        expect_output('-17'))
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "-5 3 >"),
-        expect_stack{ 0 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "-5 -3 <"),
-        expect_stack{ 1 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "-5 3 u<"),
-        expect_stack{ 0 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "-5 3 u>"),
-        expect_stack{ 1 })
+test{"-10", stack = { (-10 & 0xffffff) }}
+test{"-0", stack = { 0 }}
+test{"-5 3 +", stack = { (-2 & 0xffffff) }}
+test{"-5 -12 + .", out = '-17'}
+test{"-5 3 >", stack = { 0 }}
+test{"-5 -3 <", stack = { 1 }}
+test{"-5 3 u<", stack = { 0 }}
+test{"-5 3 u>", stack = { 1 }}
 
 --------------------------------------------------
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "-10 negate"),
-        expect_stack{ 10 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "-10 abs 7 abs"),
-        expect_stack{ 10, 7 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "5 even 4 even"),
-        expect_stack{ 0, 1 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "5 2- 5 1- 5 2+ 5 1+"),
-        expect_stack{ 3, 4, 7, 6 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "5 2 lshift 8 1 rshift -40 2 arshift"),
-        expect_stack{ 20, 4, (-10 & 0xffffff) })
+-- More arithmetic
+test{"-10 negate", stack = { 10 }}
+test{"-10 abs 7 abs", stack = { 10, 7 }}
+test{"5 even 4 even", stack = { 0, 1 }}
+test{"5 2- 5 1- 5 2+ 5 1+", stack = { 3, 4, 7, 6 }}
+test{"5 2 lshift 8 1 rshift -40 2 arshift", stack = { 20, 4, (-10 & 0xffffff) }}
 
 --------------------------------------------------
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "5 7 3 nip"),
-        expect_stack{ 5, 3 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "1 2 3 4 rot"),
-        expect_stack{ 1, 3, 4, 2 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "1 2 3 4 -rot"),
-        expect_stack{ 1, 4, 2, 3 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "1 2 3 swap"),
-        expect_stack{ 1, 3, 2 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "1 2 3 tuck"),
-        expect_stack{ 1, 3, 2, 3 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "1 2 3 over"),
-        expect_stack{ 1, 2, 3, 2 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "1 2 ?dup"),
-        expect_stack{ 1, 2, 2 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "1 0 ?dup"),
-        expect_stack{ 1, 0 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "1 2 3 1 pick"),
-        expect_stack{ 1, 2, 3, 2 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "1 2 3 depth"),
-        expect_stack{ 1, 2, 3, 3 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "depth"),
-        expect_stack{ 0 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "rdepth"),
-        expect_stack{ 0 })
-
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "3 2 1 >r >r >r rdepth"),
-        expect_stack{ 3 })
+-- Stack manipulation
+test{"5 7 3 nip", stack = { 5, 3 }}
+test{"1 2 3 4 rot", stack = { 1, 3, 4, 2 }}
+test{"1 2 3 4 -rot", stack = { 1, 4, 2, 3 }}
+test{"1 2 3 swap", stack = { 1, 3, 2 }}
+test{"1 2 3 tuck", stack = { 1, 3, 2, 3 }}
+test{"1 2 3 over", stack = { 1, 2, 3, 2 }}
+test{"1 2 ?dup", stack = { 1, 2, 2 }}
+test{"1 0 ?dup", stack = { 1, 0 }}
+test{"1 2 3 1 pick", stack = { 1, 2, 3, 2 }}
+test{"1 2 3 depth", stack = { 1, 2, 3, 3 }}
+test{"depth", stack = { 0 }}
+test{"rdepth", stack = { 0 }}
+test{"3 2 1 >r >r >r rdepth", stack = { 3 }}
 
 --------------------------------------------------
 
-test_fn('handleline',
-        given_memory(Symbols.line_buf, "here 5 , here"),
-        expect_stack{ Symbols.heap_start, Symbols.heap_start + 3 })
+test{"here 5 , here", stack = { Symbols.heap_start, Symbols.heap_start + 3 }}
 
 --------------------------------------------------
 
