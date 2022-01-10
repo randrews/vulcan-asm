@@ -1107,6 +1107,13 @@ test{"-10 abs 7 abs", stack = { 10, 7 }}
 test{"5 even 4 even", stack = { 0, 1 }}
 test{"5 2- 5 1- 5 2+ 5 1+", stack = { 3, 4, 7, 6 }}
 test{"5 2 lshift 8 1 rshift -40 2 arshift", stack = { 20, 4, (-10 & 0xffffff) }}
+test{"5 2 <= 3 3 <= 1 3 <=", stack = { 0, 1, 1 }}
+test{"5 2 >= 3 3 >= 1 3 >=", stack = { 1, 1, 0 }}
+test{"5 0< -3 0< 2 0> -4 0>", stack = { 0, 1, 1, 0 }}
+test{"5 0= 0 0=", stack = { 0, 1 }}
+test{"3 3 != 2 32 !=", stack = { 0, 1 }}
+test{"-3 2 u>= -2 -2 u>= 2 -5 u>=", stack = { 1, 1, 0 }}
+test{"-3 2 u<= -2 -2 u<= 2 -5 u<=", stack = { 0, 1, 1 }}
 
 --------------------------------------------------
 
@@ -1124,9 +1131,6 @@ test{"1 2 3 depth", stack = { 1, 2, 3, 3 }}
 test{"depth", stack = { 0 }}
 test{"rdepth", stack = { 0 }}
 test{"3 2 1 >r >r >r rdepth", stack = { 3 }}
-
---------------------------------------------------
-
 test{"here 5 , here", stack = { Symbols.heap_start, Symbols.heap_start + 3 }}
 
 --------------------------------------------------
@@ -1145,13 +1149,12 @@ test{"here 5 , here", stack = { Symbols.heap_start, Symbols.heap_start + 3 }}
 -- negate abs even 2- 1- 2+ 1+ arshift rshift lshift
 -- nip rot -rot swap tuck over pick depth rdepth
 -- here
--- u> u<
+-- u> u< <= >= 0> 0< 0= != u<= u>=
 --
 -- Todo words:
 -- \ ( asm #asm key nop
 -- ror rol bic not xor or and false true clz
 -- u/mod /mod min max umin umax
--- u<= u>= <= >= 0< 0<> 0= <> !=
 -- number
 -- binary decimal hex base
 -- move fill constant buffer:

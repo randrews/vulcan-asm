@@ -160,6 +160,61 @@ d_bar: .db "bar\0"
 .db w_gt
 .db $+1
 
+.db "u<=\0"
+.db $+2
+.db $+4
+gt
+not
+ret
+
+.db "u>=\0"
+.db $+2
+.db $+4
+lt
+not
+ret
+
+.db "<=\0"
+.db $+2
+.db $+4
+agt
+not
+ret
+
+.db ">=\0"
+.db $+2
+.db $+4
+alt
+not
+ret
+
+.db "0>\0"
+.db $+2
+.db $+4
+alt 0
+not
+ret
+
+.db "0<\0"
+.db $+2
+.db $+3
+alt 0
+ret
+
+.db "0=\0"
+.db $+2
+.db $+3
+not
+ret
+
+.db "!=\0"
+.db $+2
+.db $+5
+xor
+not
+not
+ret
+
 .db "@\0"
 .db w_at
 .db $+1
