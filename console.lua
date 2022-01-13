@@ -3,18 +3,17 @@ CPU = require('cvemu')
 -- CPU = require('vemu.cpu')
 Loader = require('vemu.loader')
 
+lfs = require('lfs')
+lfs.chdir('4th')
+
 function init_cpu(code)
     local random_seed = os.time()
     math.randomseed(random_seed)
 
     local cpu = CPU.new(random_seed)
 
-    local iterator = io.open(code)
-    if code:match('%.asm$') then
-        Loader.asm(cpu, iterator:lines())
-    elseif code:match('%.f$') then
-        Loader.forge(cpu, iterator:lines())
-    end
+    local iterator = io.lines('4th.asm')
+    Loader.asm(cpu, iterator)
 
     cpu:install_device(2, 2,
                        { poke = function(addr, val) io.write(string.char(val)) end })
@@ -37,11 +36,6 @@ function readloop(cpu)
     end
 end
 
-local ARGV = {...}
-if not ARGV[1] then
-    error('No ROM supplied! Pass a .asm or .f filename as an argument')
-end
-
-local cpu = init_cpu(ARGV[1])
+local cpu = init_cpu()
 cpu:run()
 readloop(cpu)

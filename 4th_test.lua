@@ -1196,15 +1196,15 @@ test_line('1 2 ( 3 ( 4 ) 5', expect_stack{ 1, 2 }, expect_word(Symbols.handlewor
 -- \ ( )
 --
 -- Todo words:
--- asm #asm key nop
+-- asm asm# key nop
 -- ror rol bic not xor or and false true clz
 -- u/mod /mod min max umin umax
 -- number
 -- binary decimal hex base
 -- move fill constant buffer:
 -- type bl space spaces compare accept skipstring
--- char [char] hold sign <# # #> u.
--- .s u.s h.s hex.
+-- char [char] hold sign u.
+-- .s h.s
 -- query tib token parse evaluate quit
 -- cell+ cells here
 -- case of ?of endof endcase
