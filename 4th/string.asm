@@ -53,12 +53,14 @@ pos_is_number_done:
 ; Takes a pointer to the start of a word, returns a pointer to the
 ; first nonword-char after it
 skip_word: ; ( ptr -- first-nonword )
+    #while
     dup
-    load ; ( ptr ch )
+    load
     call word_char
-    brz @end_ret
+    #do
     add 1
-    jmpr @skip_word
+    #end
+    ret
 
 ; Takes a pointer to a nonword-char, returns a pointer to the
 ; first word-char after it, or the first zero / EOS
@@ -99,18 +101,15 @@ word_to_heap: ; ( -- )
     loadw heap_ptr
     jmp word_to
 
-; returns true if the character is either zero or a quotation mark
+; returns false if the character is either zero or a quotation mark
 until_double_quote: ; ( ch -- bool )
     dup
     xor 34 ; ascii double quote
-    brz @until_double_quote_false
-    swap 0
-    brz @until_double_quote_false
-    pop
-    ret 1
-until_double_quote_false:
-    pop
-    ret 0
+    gt 0 ; ( ch isnt-quote )
+    swap
+    gt 0 ; ( isnt-quote isnt-zero )
+    and
+    ret
 
 ; Reads from the input line a string, starting with the first word character after cursor
 ; and ending with a double quote. Copies it to the pad, null-terminates it, and
