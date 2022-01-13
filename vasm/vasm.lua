@@ -513,23 +513,61 @@ end
 -- ## Preprocessor
 -- Takes an iterator over lines including preprocessor directives, and returns another iterator,
 -- which iterates over just normal lines
+
+-- Assembler macros! Using gensym. turn into asm lines, in the preprocessor.
+-- #if / #unless / #else / #end
+-- #while / #until / #do / #end
+-- Example: #if compiles to "brz @{gensym()}" and #end (for an if) compiles to "{that_sym}:"
+-- Example:
+-- #while
+-- load blah
+-- gt 10
+-- #do
+-- ...
+-- #end
+-- Compiles to the while being a gensym, the do being a brz to the line after the end, and the end (because the
+-- top two things are a do and a while) being a jr to the while followed by another gensym.
+--
+-- Important rule is that everything you can do in macros is preprocessor-level, it will become new lines of
+-- code and not affect later assembler stages
 function preprocess(iterator)
     -- Today we'll just recognize one directive: the humble include
     local space = lpeg.S(" \t")^0
     local string_pattern = lpeg.P('"') * lpeg.C((lpeg.P(1)-lpeg.S('"\\'))^1) * '"'
-    local preprocess_pattern = space * '#' * lpeg.C('include') * space * string_pattern
+    local preprocess_pattern = space * '#' * (lpeg.C('include') * space * string_pattern +
+                                              lpeg.C('if') + lpeg.C('unless') + lpeg.C('else') +
+                                              lpeg.C('while') + lpeg.C('until') + lpeg.C('do') +
+                                              lpeg.C('end'))
 
     -- We'll keep a stack of files that we're reading from, so files can include other files
     local file_stack = { iterator }
 
+    -- We'll also keep a stack of open flow-control directives
+    local control_stack = { }
+
+    -- A function to generate unique (hopefully!) labels
+    local gensym_idx = 0
+    local function gensym()
+        gensym_idx = gensym_idx + 1
+        return '__gensym_' .. gensym_idx
+    end
+
+    -- Some preprocessor directives generate lines. When they do, they get put in this
+    -- table, which fetch_line will read from preferentially until it's empty.
+    local generated_lines = { }
+
     local function fetch_line()
         local line
         repeat
-            line = (file_stack[#file_stack])() -- Fetch a line
-            if not line then -- If we're done with this file, then:
-                table.remove(file_stack) -- Remove this file from the stack
-                if #file_stack == 0 then return nil end -- If it was the last file then we're done overall
-                line = (file_stack[#file_stack])() -- Otherwise grab another line from the file that included us
+            if #generated_lines > 0 then
+                line = table.remove(generated_lines, 1)
+            else
+                line = (file_stack[#file_stack])() -- Fetch a line
+                if not line then -- If we're done with this file, then:
+                    table.remove(file_stack) -- Remove this file from the stack
+                    if #file_stack == 0 then return nil end -- If it was the last file then we're done overall
+                    line = (file_stack[#file_stack])() -- Otherwise grab another line from the file that included us
+                end
             end
         until line
         return line -- At this point either we have a line or we've returned nil (and killed the iterator)
@@ -542,10 +580,49 @@ function preprocess(iterator)
             -- Now we're going to try to parse the line. Is it a preprocessor directive?
             if line then
                 directive, filename = preprocess_pattern:match(line)
-                if directive then
+                if directive == 'include' then
                     table.insert(file_stack, (io.lines(filename))) -- Add it to the file stack
-                    line = fetch_line()
+                elseif directive == 'if' then -- Insert a brz to the corresponding end
+                    local label = gensym()
+                    table.insert(control_stack, { 'target', label = label })
+                    table.insert(generated_lines, 'brz @' .. label)
+                elseif directive == 'unless' then -- Insert a brnz to the corresponding end
+                    local label = gensym()
+                    table.insert(control_stack, { 'target', label = label })
+                    table.insert(generated_lines, 'brnz @' .. label)
+                elseif directive == 'else' then -- Jmp to the end, and resolve the previous if / unless with a label
+                    local if_dir = table.remove(control_stack)
+                    if if_dir[1] ~= 'target' then error('Mismatched #else') end
+                    local label = gensym()
+                    table.insert(control_stack, { 'target', label = label })
+                    table.insert(generated_lines, 'jmpr @' .. label)
+                    table.insert(generated_lines, if_dir.label .. ':')
+                elseif directive == 'while' or directive == 'until' then -- Insert a start-of-loop label
+                    local label = gensym()
+                    table.insert(control_stack, { 'loop', label = label, type = directive })
+                    table.insert(generated_lines, label .. ':')
+                elseif directive == 'do' then -- brz / brnz to the end, based on the condition
+                    local last_dir = table.remove(control_stack)
+                    if not last_dir or last_dir[1] ~= 'loop' then error('Mismatched #do') end
+                    local after = gensym()
+                    table.insert(control_stack, { 'loop-do', start = last_dir.label, after = after })
+                    if last_dir.type == 'while' then
+                        table.insert(generated_lines, 'brz @' .. after)
+                    elseif last_dir.type == 'until' then
+                        table.insert(generated_lines, 'brnz @' .. after)
+                    end
+                elseif directive == 'end' then -- Does many things based on what it's ending:
+                    local last_dir = table.remove(control_stack)
+                    if not last_dir then error('Mismatched #end')
+                    elseif last_dir[1] == 'target' then -- For an if / unless / else, just put a label to land on
+                        table.insert(generated_lines, last_dir.label .. ':')
+                    elseif last_dir[1] == 'loop-do' then -- jmp back to the loop start, then resolve the label for `do` to land on
+                        table.insert(generated_lines, 'jmpr @' .. last_dir.start)
+                        table.insert(generated_lines, last_dir.after .. ':')
+                    end
                 end
+
+                if directive then line = fetch_line() end
             else
                 directive = nil -- A nil line can't be a directive...
             end

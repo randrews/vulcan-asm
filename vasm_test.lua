@@ -646,3 +646,143 @@ load 101
 add
 store 102
 hlt]], {0x79, 0x64, 0x79, 0x65, 0x04, 0x81, 0x66, 0x74})
+
+-- # Preprocessor tests
+-- (Note that we can't test the #include directive, also this is a TODO)
+
+preprocess = vulcan.preprocess
+
+-- ## Utility functions
+
+function test_preprocess(source, generated)
+    local actual_lines = preprocess(iterator(source))
+
+    local line_num = 1
+    local expected_out = generated:gmatch('([^\n]*)')
+    for line in actual_lines do
+        local next_expected = expected_out()
+        if line and not next_expected then
+            print('FAIL:\nUnexpected line:\n\t' .. line .. '\nat line ' .. line_num)
+        elseif line ~= next_expected then
+            print('FAIL:\nExpected:\n\t' .. next_expected .. '\nand found:\n\t' .. line .. '\nat line ' .. line_num)
+        end
+        line_num = line_num + 1
+    end
+
+    local next_expected = expected_out()
+    if next_expected then
+        print('FAIL:\nMissing expected line:\n\t' .. next_expected .. '\nat line ' .. line_num)
+    end
+end
+
+-- ## Test cases
+
+-- No preprocessor directives, untouched:
+test_preprocess([[
+.org 0x400
+push 5
+add 6 ; this adds six
+hlt
+]], [[
+.org 0x400
+push 5
+add 6 ; this adds six
+hlt]])
+
+-- An #if / #end
+test_preprocess([[
+.org 0x400
+push 5
+#if
+add 6 ; this adds six
+#end
+hlt
+]], [[
+.org 0x400
+push 5
+brz @__gensym_1
+add 6 ; this adds six
+__gensym_1:
+hlt]])
+
+-- An #unless / #end
+test_preprocess([[
+.org 0x400
+push 0
+#unless
+add 6 ; this adds six
+#end
+hlt
+]], [[
+.org 0x400
+push 0
+brnz @__gensym_1
+add 6 ; this adds six
+__gensym_1:
+hlt]])
+
+-- An #if / #else / #end
+test_preprocess([[
+.org 0x400
+push 5
+#if
+add 6 ; this adds six
+#else
+add 7
+#end
+hlt
+]], [[
+.org 0x400
+push 5
+brz @__gensym_1
+add 6 ; this adds six
+jmpr @__gensym_2
+__gensym_1:
+add 7
+__gensym_2:
+hlt]])
+
+-- Nested #if / #end
+test_preprocess([[
+.org 0x400
+push 5
+#if
+add 6 ; this adds six
+#if
+div 2
+#end
+#end
+hlt
+]], [[
+.org 0x400
+push 5
+brz @__gensym_1
+add 6 ; this adds six
+brz @__gensym_2
+div 2
+__gensym_2:
+__gensym_1:
+hlt]])
+
+-- While loops
+test_preprocess([[
+push 5
+#while
+gt 0
+#do
+push 65
+store 2
+sub 1
+#end
+hlt
+]], [[
+push 5
+__gensym_1:
+gt 0
+brz @__gensym_2
+push 65
+store 2
+sub 1
+jmpr @__gensym_1
+__gensym_2:
+hlt]])
