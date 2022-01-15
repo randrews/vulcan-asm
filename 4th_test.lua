@@ -275,9 +275,9 @@ test_fn('tick',
 
 -- Does it harm lower things on the stack?
 test_fn('tick',
-        all(given_memory(0x10000, '.'),
+        all(given_memory(0x10000, '?dup'),
             given_stack{ 1, 2, 3, 0x10000 }),
-        expect_stack{ 1, 2, 3, Symbols.itoa })
+        expect_stack{ 1, 2, 3, Symbols.dupnz })
 
 -- Does it find the last thing in the dictionary?
 test_fn('tick',
@@ -771,7 +771,7 @@ test_line(': blah 0 begin dup 5 < while dup . 1 + repeat ; blah',
                         call_inst('w_alt'),
                         inst('brz', 24), -- 4-instr loop body + repeat + brz itself
                         call_inst('w_dup'),
-                        call_inst('itoa'),
+                        call_inst('print_number'),
                         inst('push', 1),
                         call_inst('w_add'),
                         inst('jmpr', -32),
@@ -1178,6 +1178,82 @@ test_line('1 2 ( 3 ( 4 ) 5', expect_stack{ 1, 2 }, expect_word(Symbols.handlewor
 
 --------------------------------------------------
 
+test_fn('parse_hex_digit',
+        given_stack{ string.byte('A') },
+        expect_stack{ 10, 1 })
+
+test_fn('parse_hex_digit',
+        given_stack{ string.byte('c') },
+        expect_stack{ 12, 1 })
+
+test_fn('parse_hex_digit',
+        given_stack{ string.byte('3') },
+        expect_stack{ 3, 1 })
+
+test_fn('parse_hex_digit',
+        given_stack{ string.byte('j') },
+        expect_stack{ 0 })
+
+test_fn('parse_hex_digit',
+        given_stack{ string.byte('+') },
+        expect_stack{ 0 })
+
+test_fn('hex_is_number',
+        all(given_memory(0x10000, '12\0'),
+            given_stack{ 0x10000 }),
+        expect_stack{ 18, 1 })
+
+test_fn('hex_is_number',
+        all(given_memory(0x10000, '12   \0'),
+            given_stack{ 0x10000 }),
+        expect_stack{ 18, 1 })
+
+test_fn('hex_is_number',
+        all(given_memory(0x10000, 'a0\0'),
+            given_stack{ 0x10000 }),
+        expect_stack{ 160, 1 })
+
+test_fn('hex_is_number',
+        all(given_memory(0x10000, '0\0'),
+            given_stack{ 0x10000 }),
+        expect_stack{ 0, 1 })
+
+test_fn('hex_is_number',
+        all(given_memory(0x10000, 'blah\0'),
+            given_stack{ 0x10000 }),
+        expect_stack{ 0x10001, 0 })
+
+test_fn('hex_is_number',
+        all(given_memory(0x10000, 'AC\0'),
+            given_stack{ 0x10000 }),
+        expect_stack{ 172, 1 })
+
+test_fn('hex_itoa',
+        given_stack{ 7 },
+        all(expect_output('7'),
+            expect_stack{ }))
+
+test_fn('hex_itoa',
+        given_stack{ 17 },
+        all(expect_output('11'),
+            expect_stack{ }))
+
+test_fn('hex_itoa',
+        given_stack{ 0xabcd12 },
+        all(expect_output('abcd12'),
+            expect_stack{ }))
+
+--------------------------------------------------
+
+test{'hex 10', stack = { 16 }}
+test{'hex f1 dec 10', stack = { 241, 10 }}
+
+test{'hex f1 dec 10 . ." , " .', out = '10, 241'}
+test{'241 hex .', out = 'f1'}
+test{'5 10 hex . ." , " dec .', out = 'a, 5'}
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
 -- s" ." " cr . emit pad word
@@ -1194,13 +1270,13 @@ test_line('1 2 ( 3 ( 4 ) 5', expect_stack{ 1, 2 }, expect_word(Symbols.handlewor
 -- here
 -- u> u< <= >= 0> 0< 0= != u<= u>=
 -- \ ( )
+-- dec hex
 --
 -- Todo words:
 -- asm asm# key nop
 -- ror rol bic not xor or and false true clz
 -- u/mod /mod min max umin umax
 -- number
--- binary decimal hex base
 -- move fill constant buffer:
 -- type bl space spaces compare accept skipstring
 -- char [char] hold sign u.

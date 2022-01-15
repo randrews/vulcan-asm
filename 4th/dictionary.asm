@@ -125,7 +125,7 @@ d_bar: .db "bar\0"
 .db $+1
 
 .db ".\0"
-.db itoa
+.db print_number
 .db $+1
 
 .db "cr\0"
@@ -419,6 +419,24 @@ ret
 .db $+2
 .db $+3
 loadw heap_ptr
+ret
+
+.db "hex\0"
+.db $+2
+.db $+6
+push hex_is_number
+storew is_number_hook
+push hex_itoa
+storew itoa_hook
+ret
+
+.db "dec\0"
+.db $+2
+.db $+6
+push is_number
+storew is_number_hook
+push itoa
+storew itoa_hook
 ret
 
 .db "\\\0"

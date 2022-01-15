@@ -50,6 +50,61 @@ pos_is_number_done:
     popr
     ret 1
 
+; Attempt to parse a hexadecimal number. This is a sequence of digits 0-9 or a-f or A-F
+hex_is_number: ; ( ptr -- num valid? )
+    pushr 0
+    #while
+        dup
+        load
+        dup
+        call word_char
+    #do ; It's a word-char
+        call parse_hex_digit
+        #if ; It's a digit even!
+            popr
+            mul 16
+            add
+            pushr
+            add 1
+        #else ; Not a digit, not a \0...
+            popr
+            pop
+            ret 0
+        #end
+    #end
+    ; End of string, return the number
+    pop
+    pop
+    popr
+    ret 1
+
+; Returns whether the byte at the top of the stack is a hex digit, and what it is if so
+parse_hex_digit: ; ( byte -- [val 1] if a digit, or [0] if it isn't )
+    dup
+    call is_digit
+    #if ; It's a 0-9
+    sub 48 ; '0' ascii
+    ret 1
+    #else
+    dup
+    gt 96 ; ( ch is-lowercase )
+    #if
+    sub 32
+    #end
+    dup
+    dup
+    gt 64 ; at least 'A'
+    swap
+    lt 71 ; at most 'F'
+    and ; ( ch is-AF )
+    #if
+    sub 55
+    ret 1
+    #end
+    #end
+    pop
+    ret 0
+
 ; Takes a pointer to the start of a word, returns a pointer to the
 ; first nonword-char after it
 skip_word: ; ( ptr -- first-nonword )

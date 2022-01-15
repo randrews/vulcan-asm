@@ -99,7 +99,8 @@ compileword:
     brnz @compileword_found ; found something
     ; It wasn't in the dictionary, is it a number?
     dup
-    call is_number
+    loadw is_number_hook
+    call
     brnz @compileword_number
     ; It wasn't a number either, drop the garbage:
     pop
@@ -140,7 +141,8 @@ handleword: ; ( <args for word> word-start-addr -- <word return stack> )
     brnz @handleword_found ; found something
     ; It wasn't in the dictionary, is it a number?
     dup
-    call is_number
+    loadw is_number_hook
+    call
     brnz @handleword_number
     ; It wasn't a number either, drop the garbage:
     pop
@@ -221,6 +223,8 @@ expected_word_err: .db "Expected name, found end of input\0"
 ; Assorted support variables
 heap_ptr: .db heap_start ; holds the address in which to start the next heap entry
 handleword_hook: .db handleword ; The current function used to handle / compile words, switches based on mode
+is_number_hook: .db is_number ; The current function used to parse numbers, switches with hex / dec
+itoa_hook: .db itoa ; The current function used to print numbers, switches with hex / dec
 line_len: .db 0
 cursor: .db 0 ; During calls to handleword, this global points to the beginning of the word
 
