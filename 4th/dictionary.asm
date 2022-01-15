@@ -443,6 +443,21 @@ ret
 .db print_stack
 .db $+1
 
+.db "spaces\0"
+.db spaces
+.db $+1
+
+.db "space\0"
+.db $+2
+.db $+4
+push 32
+store 2
+ret
+
+.db "print\0"
+.db print
+.db $+1
+
 .db "\\\0"
 .db backslash_word
 .db $+1

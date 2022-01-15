@@ -225,3 +225,15 @@ copy_string_done:
     popr
     pop
     ret
+
+; Print some number of spaces
+spaces: ; ( n -- )
+    #while
+        call dupnz
+        gt 0
+    #do
+        push 32
+        store 2
+        sub 1
+    #end
+    ret

@@ -1259,9 +1259,15 @@ test{'20 30 40 hex .s', out = '<< 14 1e 28 >>', stack = { 20, 30, 40 }}
 
 --------------------------------------------------
 
+test{'3 spaces', out = '   '}
+test{'space', out = ' '}
+test{'s" foo" print', out = 'foo'}
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
--- s" ." " cr . emit pad word
+-- s" ." cr . emit pad word
 -- begin again until while repeat do ?do loop +loop unloop leave
 -- ; exit
 -- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 ?dup drop
@@ -1276,6 +1282,7 @@ test{'20 30 40 hex .s', out = '<< 14 1e 28 >>', stack = { 20, 30, 40 }}
 -- u> u< <= >= 0> 0< 0= != u<= u>=
 -- \ ( )
 -- dec hex .s
+-- space spaces print
 --
 -- Todo words:
 -- asm asm# key nop
@@ -1283,7 +1290,7 @@ test{'20 30 40 hex .s', out = '<< 14 1e 28 >>', stack = { 20, 30, 40 }}
 -- u/mod /mod min max umin umax
 -- number
 -- move fill constant buffer:
--- type bl space spaces compare accept skipstring
+-- compare accept skipstring
 -- char [char] hold sign u.
 -- query tib token parse evaluate quit
 -- cell+ cells here
