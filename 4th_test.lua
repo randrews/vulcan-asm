@@ -1254,6 +1254,11 @@ test{'5 10 hex . ." , " dec .', out = 'a, 5'}
 
 --------------------------------------------------
 
+test{'1 4 9 .s', out = '<< 1 4 9 >>', stack = { 1, 4, 9 }}
+test{'20 30 40 hex .s', out = '<< 14 1e 28 >>', stack = { 20, 30, 40 }}
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
 -- s" ." " cr . emit pad word
@@ -1270,7 +1275,7 @@ test{'5 10 hex . ." , " dec .', out = 'a, 5'}
 -- here
 -- u> u< <= >= 0> 0< 0= != u<= u>=
 -- \ ( )
--- dec hex
+-- dec hex .s
 --
 -- Todo words:
 -- asm asm# key nop
@@ -1280,7 +1285,6 @@ test{'5 10 hex . ." , " dec .', out = 'a, 5'}
 -- move fill constant buffer:
 -- type bl space spaces compare accept skipstring
 -- char [char] hold sign u.
--- .s h.s
 -- query tib token parse evaluate quit
 -- cell+ cells here
 -- case of ?of endof endcase

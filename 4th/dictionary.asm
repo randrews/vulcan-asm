@@ -439,6 +439,10 @@ push itoa
 storew itoa_hook
 ret
 
+.db ".s\0"
+.db print_stack
+.db $+1
+
 .db "\\\0"
 .db backslash_word
 .db $+1

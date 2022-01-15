@@ -217,6 +217,8 @@ data_start: ; Just a marker for the stats to measure how long the text section i
 missing_word_str: .db "That word wasn't found: \0"
 unclosed_error: .db "Unclosed string\0"
 expected_word_err: .db "Expected name, found end of input\0"
+print_stack_start: .db "<< \0"
+print_stack_end: .db ">>\0"
 
 #include "dictionary.asm"
 

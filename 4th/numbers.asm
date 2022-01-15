@@ -95,3 +95,33 @@ hex_itoa: ; ( num -- )
     push 32
     call free
     ret
+
+; Print the current stack contents, in order from 256 up, separated by spaces
+; TODO this depends on a 256-based stack and will need to be changed if you call setsdp
+print_stack: ; ( -- )
+    push print_stack_start
+    call print
+    sdp
+    sub 6
+    pushr
+    pop
+    push 256
+    #while
+        dup
+        peekr
+        lt
+    #do
+        dup
+        loadw
+        loadw itoa_hook
+        call
+        push 32
+        store 2
+        add 3
+    #end
+    popr
+    pop
+    pop
+    push print_stack_end
+    call print
+    ret
