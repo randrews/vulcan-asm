@@ -102,9 +102,7 @@ compileword:
     loadw is_number_hook
     call
     brnz @compileword_number
-    ; It wasn't a number either, drop the garbage:
-    pop
-    ; And complain:
+    ; It wasn't a number either, so complain:
     call missing_word
     ret
 compileword_compiled_found:
@@ -144,9 +142,7 @@ handleword: ; ( <args for word> word-start-addr -- <word return stack> )
     loadw is_number_hook
     call
     brnz @handleword_number
-    ; It wasn't a number either, drop the garbage:
-    pop
-    ; And complain:
+    ; It wasn't a number either, complain:
     call missing_word
     ret
 handleword_found:

@@ -2,21 +2,20 @@
 ; pos_is_number, that does a sequence of digits. This checks the first
 ; character against '-', and then calls that, and negative-izes if
 ; necessary.
-is_number: ; ( ptr -- num valid? )
+is_number: ; ( ptr -- [num 1] -or- [0] )
     dup
     load ; ( ptr first-ch )
     xor 45 ; 45 is '-', ( ptr not-dash )
     brnz @pos_is_number ; We're done here, it's positive
     add 1
     call pos_is_number ; ( pos-num valid? )
-    dup
     brz @is_number_bad
-    swap
     xor 0xffffff
     add 1
-    swap
+    ret 1
 is_number_bad:
-    ret
+    pop
+    ret 0
 
 ; The positive-only version of parsing a number. Negative-ness is
 ; handled by is_number, at this point we can assume that we just have
@@ -44,6 +43,7 @@ pos_is_number_loop:
 pos_is_number_bad:
     popr
     pop
+    pop
     ret 0
 pos_is_number_done:
     pop
@@ -51,7 +51,7 @@ pos_is_number_done:
     ret 1
 
 ; Attempt to parse a hexadecimal number. This is a sequence of digits 0-9 or a-f or A-F
-hex_is_number: ; ( ptr -- num valid? )
+hex_is_number: ; ( ptr -- [num 1] -or- [0] )
     pushr 0
     #while
         dup
@@ -68,6 +68,7 @@ hex_is_number: ; ( ptr -- num valid? )
             add 1
         #else ; Not a digit, not a \0...
             popr
+            pop
             pop
             ret 0
         #end

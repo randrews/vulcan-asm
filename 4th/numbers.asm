@@ -1,3 +1,10 @@
+input_number:
+    call word_to_heap
+    loadw heap_ptr
+    loadw is_number_hook
+    call
+    ret
+
 ; Prints a number, using whatever the current itoa_hook is
 print_number:
     loadw itoa_hook
@@ -124,4 +131,26 @@ print_stack: ; ( -- )
     pop
     push print_stack_end
     call print
+    ret
+
+; Roll left (moving high bit to low)
+rol: ; ( n -- n2 )
+    dup
+    lshift 1
+    swap
+    and 0x800000
+    #if
+    or 1
+    #end
+    ret
+
+; Roll right (moving low bit to high)
+ror: ; ( n -- n2 )
+    dup
+    rshift 1
+    swap
+    and 1
+    #if
+    or 0x800000
+    #end
     ret

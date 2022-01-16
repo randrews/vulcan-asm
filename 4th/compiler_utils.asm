@@ -29,7 +29,6 @@ new_dict_error:
     call cr
     ret
 
-
 ; Set the current mode to interpret
 open_bracket_word:
     push handleword

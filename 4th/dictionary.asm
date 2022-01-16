@@ -121,7 +121,56 @@ d_bar: .db "bar\0"
 .db $+1
 
 .db "word\0"
-.db 0
+.db $+2
+.db $+4
+call word_to_pad
+push pad
+ret
+
+.db "xor\0"
+.db $+2
+.db $+3
+xor
+ret
+
+.db "or\0"
+.db $+2
+.db $+3
+or
+ret
+
+.db "and\0"
+.db $+2
+.db $+3
+and
+ret
+
+.db "not\0"
+.db $+2
+.db $+3
+xor 0xffffff
+ret
+
+.db "false\0"
+.db $+2
+.db $+2
+ret 0
+
+.db "true\0"
+.db $+2
+.db $+2
+ret 1
+
+.db "ror\0"
+.db ror
+.db $+1
+
+.db "rol\0"
+.db rol
+.db $+1
+
+.db "number\0"
+.db input_number
 .db $+1
 
 .db ".\0"

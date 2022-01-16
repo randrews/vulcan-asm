@@ -335,7 +335,7 @@ test_fn('is_number',
 test_fn('is_number',
         all(given_memory(0x10000, '34cd\0'),
             given_stack{ 0x10000 }),
-        expect_stack{ 0x10002, 0 })
+        expect_stack{ 0 })
 
 test_fn('is_number',
         all(given_memory(0x10000, '512  \0'),
@@ -1221,7 +1221,7 @@ test_fn('hex_is_number',
 test_fn('hex_is_number',
         all(given_memory(0x10000, 'blah\0'),
             given_stack{ 0x10000 }),
-        expect_stack{ 0x10001, 0 })
+        expect_stack{ 0 })
 
 test_fn('hex_is_number',
         all(given_memory(0x10000, 'AC\0'),
@@ -1265,9 +1265,32 @@ test{'s" foo" print', out = 'foo'}
 
 --------------------------------------------------
 
+test_line("word    blah 2 3",
+          expect_stack{ Symbols.pad, 2, 3 },
+          expect_memory(Symbols.pad, 'b', 'l', 'a', 'h', 0))
+
+test{"number 17", stack = { 17, 1 }}
+test{"number blah", stack = { 0 }}
+test{"number -23", stack = { (-23 & 0xffffff), 1 }}
+test{"hex number a4", stack = { 164, 1 }}
+
+--------------------------------------------------
+
+test{"3 6 and", stack = { 2 }}
+test{"2 5 or", stack = { 7 }}
+test{"5 7 xor", stack = { 2 }}
+test{"10 not", stack = { 0xfffff5 }}
+test{"false true", stack = { 0, 1 }}
+test{"3 ror", stack = { 0x800001 }}
+test{"2 ror", stack = { 1 }}
+test{"3 rol", stack = { 6 }}
+test{"hex 800001 rol", stack = { 3 }}
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
--- s" ." cr . emit pad word
+-- s" ." cr . emit pad word number
 -- begin again until while repeat do ?do loop +loop unloop leave
 -- ; exit
 -- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 ?dup drop
@@ -1283,17 +1306,16 @@ test{'s" foo" print', out = 'foo'}
 -- \ ( )
 -- dec hex .s
 -- space spaces print
+-- not xor or and false true ror rol
 --
 -- Todo words:
 -- asm asm# key nop
--- ror rol bic not xor or and false true clz
 -- u/mod /mod min max umin umax
--- number
 -- move fill constant buffer:
 -- compare accept skipstring
 -- char [char] hold sign u.
 -- query tib token parse evaluate quit
--- cell+ cells here
+-- cell+ cells
 -- case of ?of endof endcase
 -- i j k
 
