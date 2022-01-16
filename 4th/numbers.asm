@@ -85,7 +85,7 @@ hex_itoa: ; ( num -- )
         popr
         add 1
         pushr
-        div 16
+        rshift 4
     #end
     pop
     popr

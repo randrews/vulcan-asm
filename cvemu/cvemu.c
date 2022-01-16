@@ -491,8 +491,8 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         cpu_push_data(cpu, to_signed(cpu_pop_data(cpu)) / b);
         break;
     case MOD:
-        b = cpu_pop_data(cpu);
-        cpu_push_data(cpu, cpu_pop_data(cpu) % b);
+        b = to_signed(cpu_pop_data(cpu));
+        cpu_push_data(cpu, to_signed(cpu_pop_data(cpu)) % b);
         break;
     case RAND:
         // TODO

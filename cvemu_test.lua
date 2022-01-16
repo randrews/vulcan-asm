@@ -347,13 +347,48 @@ Loader.asm(cpu, iterator([[
     div 3
     push 4
     div -2
+    push 10
+    div 3
+    push -10
+    div 3
+    push 10
+    div -3
     hlt
 ]]))
 cpu:run()
+assert(cpu:pop_data() == (-3 & 0xffffff))
+assert(cpu:pop_data() == (-3 & 0xffffff))
+assert(cpu:pop_data() == 3)
 assert(cpu:pop_data() == (-2 & 0xffffff))
 assert(cpu:pop_data() == (-3 & 0xffffff))
 assert(cpu:pop_data() == 2)
 assert(cpu:pop_data() == 5)
+
+-- Signed modulus
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 0x400
+    push -10
+    mod 2
+    push 10
+    mod 2
+    push 10
+    mod -2
+    push 10
+    mod 3
+    push 10
+    mod -4
+    push -10
+    mod -4
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == (-2 & 0xffffff))
+assert(cpu:pop_data() == 2)
+assert(cpu:pop_data() == 1)
+assert(cpu:pop_data() == 0)
+assert(cpu:pop_data() == 0)
+assert(cpu:pop_data() == 0)
 
 -- Device reset hooks
 local arr = {}
