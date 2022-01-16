@@ -343,6 +343,10 @@ ret
 .db w_byte_inc
 .db $+1
 
+.db "compare\0"
+.db compare
+.db $+1
+
 .db "dup\0"
 .db w_dup
 .db $+1

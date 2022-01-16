@@ -238,3 +238,34 @@ spaces: ; ( n -- )
         sub 1
     #end
     ret
+
+; Return a flag of whether two strings are equal
+compare: ; ( str1 str2 -- equal? )
+    pushr
+    #while
+        dup
+        load
+        peekr
+        load
+        xor
+        not
+    #do
+        ; If we're here, they're equal chars, so first check if they're equal zeroes:
+        dup
+        load
+        #unless
+            popr
+            pop
+            pop
+            ret 1
+        #end
+        ; They're the same, increment both pointers
+        add 1
+        popr
+        add 1
+        pushr
+    #end
+    popr
+    pop
+    pop
+    ret 0

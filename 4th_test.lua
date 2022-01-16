@@ -1300,6 +1300,14 @@ test{"-9 -2 /mod", stack = { 4, (-1 & 0xffffff) }}
 
 --------------------------------------------------
 
+test{'s" apple" s" apple" compare', stack = { 1 }}
+test{'s" apple" s" pear" compare', stack = { 0 }}
+test{'s" apple" s" " compare', stack = { 0 }}
+test{': foo word s" banana" compare ; foo apple', stack = { 0 }}
+test{': foo word s" banana" compare ; foo banana', stack = { 1 }}
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
 -- s" ." cr . emit pad word number
@@ -1320,11 +1328,12 @@ test{"-9 -2 /mod", stack = { 4, (-1 & 0xffffff) }}
 -- space spaces print
 -- not xor or and false true ror rol
 -- min max umin umax
+-- compare
 --
 -- Todo words:
 -- asm asm# key nop
 -- move fill constant buffer:
--- compare accept skipstring
+-- accept skipstring
 -- char [char] hold sign u.
 -- query tib token parse evaluate quit
 -- cell+ cells
