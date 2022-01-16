@@ -112,6 +112,9 @@ test([[add 23]], [[("opcode" "add" "argument" ("expr" ("term" 23)))]])
 -- Decimal zero argument
 test([[add 0]], [[("opcode" "add" "argument" ("expr" ("term" 0)))]])
 
+-- Negative decimal argument
+test([[add -5]], [[("opcode" "add" "argument" ("expr" ("term" -5)))]])
+
 -- Strings
 test([[  .db "hello"]], [[("directive" ".db" "argument" ("string" ("h" "e" "l" "l" "o")))]])
 
@@ -120,12 +123,16 @@ test([[  .db "hello\""]], [[("directive" ".db" "argument" ("string" ("h" "e" "l"
 
 -- Expressions
 test([[add 43+17]], [[("opcode" "add" "argument" ("expr" ("term" 43) "+" ("term" 17)))]])
+test([[add 43-17]], [[("opcode" "add" "argument" ("expr" ("term" 43) "-" ("term" 17)))]])
+test([[add 3+-17]], [[("opcode" "add" "argument" ("expr" ("term" 3) "+" ("term" -17)))]])
+test([[add 3*-17]], [[("opcode" "add" "argument" ("expr" ("term" 3 "*" -17)))]])
 
 -- Multiple terms
 test([[add 43+17 - 3]], [[("opcode" "add" "argument" ("expr" ("term" 43) "+" ("term" 17) "-" ("term" 3)))]])
 
 -- Multiplication
 test([[add 2*14-3]], [[("opcode" "add" "argument" ("expr" ("term" 2 "*" 14) "-" ("term" 3)))]])
+test([[add 2*-4+3]], [[("opcode" "add" "argument" ("expr" ("term" 2 "*" -4) "+" ("term" 3)))]])
 
 -- Sub-expressions
 test([[add 2*(14-3)]], [[("opcode" "add" "argument" ("expr" ("term" 2 "*" ("expr" ("term" 14) "-" ("term" 3)))))]])

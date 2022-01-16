@@ -335,6 +335,26 @@ cpu:run()
 assert(cpu:pop_data() ~= 0)
 assert(cpu:pop_data() == 0)
 
+-- Signed division
+local cpu = CPU.new()
+Loader.asm(cpu, iterator([[
+    .org 0x400
+    push 10
+    div 2
+    push -8
+    div -4
+    push -9
+    div 3
+    push 4
+    div -2
+    hlt
+]]))
+cpu:run()
+assert(cpu:pop_data() == (-2 & 0xffffff))
+assert(cpu:pop_data() == (-3 & 0xffffff))
+assert(cpu:pop_data() == 2)
+assert(cpu:pop_data() == 5)
+
 -- Device reset hooks
 local arr = {}
 local cpu = CPU.new()

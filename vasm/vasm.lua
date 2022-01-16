@@ -63,10 +63,11 @@ function statement_pattern()
     --   because otherwise any "0x" will parse as "decimal 0 followed
     --   by unparseable x"
     local dec_number = (lpeg.R('19') * lpeg.R('09')^0) / tonumber
+    local neg_number = (lpeg.P('-') * dec_number) / function(n) return n * -1 end
     local hex_number = lpeg.P('0x') * lpeg.C(lpeg.R('09','af','AF')^1) / function(s) return tonumber(s, 16) end
     local bin_number = lpeg.P('0b') * lpeg.C(lpeg.S('01')^1) / function(s) return tonumber(s, 2) end
     local dec_zero = lpeg.P('0') / tonumber
-    local number = dec_number + hex_number + bin_number + dec_zero
+    local number = dec_number + hex_number + bin_number + dec_zero + neg_number
 
     -- A label can be any sequence of C-identifier-y characters, as long as it doesn't start with
     -- a digit:
@@ -354,7 +355,8 @@ function measure_instructions(lines, symbols)
                 local success, val = pcall(evaluate, line.argument, symbols)
                 if not success then line.length = 4
                 else
-                    if val < 256 then line.length = 2
+                    if val < 0 then line.length = 4 -- If it's negative, we need the full 3 bytes
+                    elseif val < 256 then line.length = 2
                     elseif val < 65536 then line.length = 3
                     else line.length = 4 end
                 end
