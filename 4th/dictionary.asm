@@ -161,6 +161,38 @@ ret 0
 .db $+2
 ret 1
 
+.db "min\0"
+.db $+2
+.db $+5
+push $+2
+jmp select_num
+alt
+ret
+
+.db "max\0"
+.db $+2
+.db $+5
+push $+2
+jmp select_num
+agt
+ret
+
+.db "umin\0"
+.db $+2
+.db $+5
+push $+2
+jmp select_num
+lt
+ret
+
+.db "umax\0"
+.db $+2
+.db $+5
+push $+2
+jmp select_num
+gt
+ret
+
 .db "ror\0"
 .db ror
 .db $+1
@@ -200,6 +232,17 @@ ret 1
 .db "mod\0"
 .db w_mod
 .db $+1
+
+.db "/mod\0"
+.db $+2
+.db $+8
+pick 1
+pick 1
+mod
+pushr
+div
+popr
+ret
 
 .db "=\0"
 .db w_eq

@@ -1285,6 +1285,18 @@ test{"3 ror", stack = { 0x800001 }}
 test{"2 ror", stack = { 1 }}
 test{"3 rol", stack = { 6 }}
 test{"hex 800001 rol", stack = { 3 }}
+test{"3 5 min", stack = { 3 }}
+test{"7 2 min", stack = { 2 }}
+test{"7 2 max", stack = { 7 }}
+test{"-7 2 max", stack = { 2 }}
+test{"-7 2 umax", stack = { (-7 & 0xffffff) }}
+test{"-7 2 umin", stack = { 2 }}
+test{"3 3 max", stack = { 3 }}
+test{"5 2 /mod", stack = { 2, 1 }}
+test{"-3 3 /", stack = { (-1 & 0xffffff) }}
+test{"-9 -3 /", stack = { 3 }}
+test{"-9 -2 /mod", stack = { 4, (-1 & 0xffffff) }}
+--test{"5 0 /mod", stack = { 2, 1 }} -- TODO this needs to not crash the emulator
 
 --------------------------------------------------
 
@@ -1293,7 +1305,7 @@ test{"hex 800001 rol", stack = { 3 }}
 -- s" ." cr . emit pad word number
 -- begin again until while repeat do ?do loop +loop unloop leave
 -- ; exit
--- + - * / mod = < > @ ! +! c@ c! c+! dup dup2 ?dup drop
+-- + - * / mod /mod = < > @ ! +! c@ c! c+! dup dup2 ?dup drop
 -- foo bar
 -- : allot free variable
 -- [ ] , does> create postpone immediate literal
@@ -1307,10 +1319,10 @@ test{"hex 800001 rol", stack = { 3 }}
 -- dec hex .s
 -- space spaces print
 -- not xor or and false true ror rol
+-- min max umin umax
 --
 -- Todo words:
 -- asm asm# key nop
--- u/mod /mod min max umin umax
 -- move fill constant buffer:
 -- compare accept skipstring
 -- char [char] hold sign u.

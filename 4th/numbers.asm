@@ -154,3 +154,17 @@ ror: ; ( n -- n2 )
     or 0x800000
     #end
     ret
+
+; Select one of a / b to leave on the stack, depending on whether
+; [a b comparator] returns nonzero. This is the guts of min / max /
+; umin / umax
+select_num: ; ( a b comparator -- n )
+    pushr
+    pick 1
+    pick 1
+    popr
+    call
+    brnz @+2
+    swap
+    pop
+    ret
