@@ -1308,6 +1308,13 @@ test{': foo word s" banana" compare ; foo banana', stack = { 1 }}
 
 --------------------------------------------------
 
+test_line("cell+", expect_stack{ Symbols.heap_start }, expect_word(Symbols.heap_ptr, Symbols.heap_start + 3))
+test_line("4 cells", expect_stack{ Symbols.heap_start }, expect_word(Symbols.heap_ptr, Symbols.heap_start + 12))
+test_line("cell+ 2 cells", expect_stack{ Symbols.heap_start, Symbols.heap_start + 3 },
+          expect_word(Symbols.heap_ptr, Symbols.heap_start + 9))
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
 -- s" ." cr . emit pad word number
@@ -1329,16 +1336,19 @@ test{': foo word s" banana" compare ; foo banana', stack = { 1 }}
 -- not xor or and false true ror rol
 -- min max umin umax
 -- compare
+-- cell+ cells
 --
 -- Todo words:
--- asm asm# key nop
--- move fill constant buffer:
--- accept skipstring
--- char [char] hold sign u.
--- query tib token parse evaluate quit
--- cell+ cells
+-- asm asm# nop
+-- move fill constant
+-- char [char] u.
 -- case of ?of endof endcase
 -- i j k
+--
+-- Words for (much) later:
+-- query tib token parse evaluate quit
+-- accept key
+-- buffer:
 
 print('Text ends at: ' .. Symbols.line_buf)
 print('Bytes available: ' .. 131072 - Symbols.heap_start)

@@ -347,6 +347,27 @@ ret
 .db compare
 .db $+1
 
+.db "cell+\0"
+.db $+2
+.db $+6
+loadw heap_ptr
+dup
+add 3
+storew heap_ptr
+ret
+
+.db "cells\0"
+.db $+2
+.db $+9
+pushr
+loadw heap_ptr
+dup
+popr
+mul 3
+add
+storew heap_ptr
+ret
+
 .db "dup\0"
 .db w_dup
 .db $+1
