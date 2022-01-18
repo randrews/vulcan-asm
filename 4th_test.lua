@@ -1273,6 +1273,7 @@ test{"number 17", stack = { 17, 1 }}
 test{"number blah", stack = { 0 }}
 test{"number -23", stack = { (-23 & 0xffffff), 1 }}
 test{"hex number a4", stack = { 164, 1 }}
+test{"1 23 lshift .", out = '-8388608'}
 
 --------------------------------------------------
 

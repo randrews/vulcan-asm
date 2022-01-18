@@ -85,7 +85,7 @@ exit_word:
 ; push <emit>
 ; push $CALL
 ; call compile_instruction_arg
-; ...being compiled into the current defw because when run that will
+; ...being compiled into the current defn because when run that will
 ; compile a call to emit. But "postpone do" causes a call to "do" to be
 ; compiled, because when run that will call "do" (whereas normally we'd
 ; just call "do" right now because it's immediate).

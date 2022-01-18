@@ -31,6 +31,7 @@ itoa_pos: ; ( num -- )
 itoa_loop:
     dup ; ( num num ) [ arr ]
     mod 10
+    call w_abs
     dup
     add 48 ; ( num mod ch )
     peekr ; ( num mod ch arr ) [ arr ]
