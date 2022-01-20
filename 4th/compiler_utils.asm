@@ -29,14 +29,9 @@ new_dict_error:
     call cr
     ret
 
-; Set the current mode to interpret
-open_bracket_word:
-    push handleword
-    jmpr @set_handleword_hook
-close_bracket_word: ; Set the current mode to compile
-    push compileword
-    jmpr @set_handleword_hook
-set_handleword_hook:
+open_bracket_word: push handleword ; Set the current mode to interpret
+    jmpr @+2
+close_bracket_word: push compileword ; Set the current mode to compile
     storew handleword_hook
     ret
 

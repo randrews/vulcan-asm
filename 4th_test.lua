@@ -1316,6 +1316,26 @@ test_line("cell+ 2 cells", expect_stack{ Symbols.heap_start, Symbols.heap_start 
 
 --------------------------------------------------
 
+-- continue compiles a jmp to its following word
+test_line(': blah continue [ [',
+          expect_stack{ },
+          expect_memory(Symbols.heap_start + 11,
+                        inst('jmp', Symbols.open_bracket_word)))
+
+test_line('create :: ] create continue ] [',
+          expect_stack{ },
+          expect_memory(Symbols.heap_start,
+                        ':', ':', 0,
+                        word(Symbols.heap_start + 9),
+                        word(Symbols.d_foo),
+                        inst('call', Symbols.create_word),
+                        inst('jmp', Symbols.close_bracket_word)))
+
+-- create : ] create continue ]
+
+
+--------------------------------------------------
+
 -- Finished words:
 -- if then else
 -- s" ." cr . emit pad word number

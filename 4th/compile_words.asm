@@ -6,7 +6,6 @@ semicolon_word:
     call compile_instruction
     jmp open_bracket_word
 
-
 ; A normal branch-if-zero to wherever the 'then' or 'else' ends up
 if_word:
     push $BRZ
@@ -159,3 +158,25 @@ compile_tick_word:
     call tick
     push $PUSH
     jmp compile_instruction_arg
+
+continue_word:
+    call word_to_heap
+    loadw heap_ptr
+    call compile_tick
+    call dupnz
+    #if
+    jmpr @continue_compile
+    #else
+    loadw heap_ptr
+    call tick
+    call dupnz
+    #if
+    jmpr @continue_compile
+    #else
+    jmp missing_word_str
+    #end
+    #end
+continue_compile:
+    push $JMP
+    call compile_instruction_arg ; compile a jmp to that word
+    ret

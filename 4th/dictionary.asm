@@ -73,6 +73,10 @@ d_if: .db "if\0"
 .db postpone_word
 .db $+1
 
+.db "continue\0"
+.db continue_word
+.db $+1
+
 .db "literal\0"
 .db literal_word
 .db $+1
@@ -96,6 +100,13 @@ d_if: .db "if\0"
 .db ")\0"
 .db close_paren_stub
 .db $+1
+
+.db ",ret\0"
+.db $+2
+.db $+4
+push $RET
+call compile_instruction
+ret
 
 .db ";\0"
 .db semicolon_word
