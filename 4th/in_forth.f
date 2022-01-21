@@ -1,45 +1,52 @@
 \ Needed words:
-\ [ ] asm #asm , postpone (foundational compiler interface)
-\ create does> immediate (foundational dictionary interface)
-\ >r r> r@ rdrop rpick (because they aren't using the normal stack)
+\ [ ] asm , postpone exit literal (foundational compiler interface)
+\ create does> immediate ' ['] (foundational dictionary interface)
+\ word number (foundational parser interface)
+\ >r r> r@ rpick (because they aren't using the normal stack)
 \ dec hex pad (because they modify global vars)
 \ depth rdepth .s (because they use sdp)
-\ \ ( ) s" ." (because they deal with parser state)
-\ compare (because we need an asm one anyway and it's free)
+\ \ ) ( s" ." (because they deal with parser state)
+\ . print compare ?dup (because we need asm ones anyway and it's free)
 
 \ New words:
 \ &heap pushes the address of the heap pointer, so `here` is ``&heap @`
 \ quit exists in both dictionaries, clears the stack (setsdp) and jmps to the main loop.
-\ asm and #asm are immediate words which compile an opcode with or without an arg
-\ ,asm and ,#asm are immediate words which compile the instructions to compile an opcode
+\ asm is an immediate word which compiles an opcode without an arg
+\ ,asm is an immediate word which compiles the instructions to compile an opcode
 \ continue compiles a jmp to a given word (a tail call)
 \ ,brz ,brnz and ,jmpr are immediate words which compile those instructions, but with a 0 argument. The address of the argument is >r'd
-\ ,ret compiles a ret with no argument. It's needed to define semicolon (see note 1)
 \ resolve is an immediate word which pops the top address from the ctrl stack and writes `here` to it.
 
-\ note 1: why do you need ,ret?
+\ note 1: why do you need exit?
 \ Because the defn for semicolon needs to postpone something to compile a ret, and you can't use ,asm
 \ because you'd have to pass it a word argument ("ret"). The normal answer to this is to create a new
-\ word, ": ,ret ,asm ret ; immediate", but you would need semicolon to exist in order to do that.
+\ word, ": exit ,asm ret ; immediate", but you would need semicolon to exist in order to do that.
 
-\ . word number
-\ begin again until while repeat do ?do loop +loop unloop leave
-\ /mod = < >
-\ : variable
+\ begin again until while repeat do ?do loop +loop
+\ /mod
+\ variable
 \ literal
-\ recurse execute ' [']
 \ negate abs even
-\ u> u< <= >= 0> 0< 0= != u<= u>=
+\ <= >= 0> 0< 0= != u<= u>=
 \ min max umin umax
 
 create : ] create continue ] [
-: ; postpone ,ret continue [ [ immediate
+create execute ] asm jmp [
+: ; postpone exit continue [ [ immediate
 
 \ Control structure words
-: exit ,ret ; immediate
 : if ,brz ; immediate
 : then resolve ; immediate
 : else r> ,jmpr >r resolve ; immediate
+: variable create 0 , does> ;
+
+\ Counted loops, clean up the R stack if we want to early return
+\ Removes the loop counter things from the R stack
+: unloop r> r> drop drop ;
+
+\ Counted loops, cause an early return on the next test
+\ Sets the loop index equal to the counter
+: leave r> drop r@ >r ;
 
 \ Single-opcode words
 : and asm and ;
@@ -62,13 +69,19 @@ create : ] create continue ] [
 : ! asm storew ;
 : c@ asm load ;
 : c! asm store ;
+: > asm agt ;
+: < asm alt ;
+: u> asm gt ;
+: u< asm lt ;
 
 \ Simple utils
-: 2- 2 - ;
-: 1- 1 - ;
-: 2+ 2 + ;
-: 1+ 1 + ;
-; over 1 pick ;
+\ : 2- 2 - ;
+\ : 1- 1 - ;
+\ : 2+ 2 + ;
+\ : 1+ 1 + ;
+\ : even 1 and asm not ;
+: rdrop r> drop ;
+: over 1 pick ;
 : nip swap drop ;
 : -rot rot rot ;
 : tuck dup -rot ;
@@ -87,10 +100,10 @@ create : ] create continue ] [
 : true 1 ;
 : ror dup 1 rshift swap 23 lshift or ;
 : rol dup 23 rshift swap 1 lshift or ;
-: cell+ 3 allot ;
-: cells 3 * allot ;
+\ : cell+ 3 allot ;
+\ : cells 3 * allot ;
+: = xor asm not ;
 
 \ Things that require loops
-: ?dup dup if dup then ;
+: abs dup 0 < if negate then ;
 : spaces 0 do space loop ;
-: print begin dup c@ ?dup while emit 1 + repeat ;

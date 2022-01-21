@@ -1,18 +1,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; The initial compile word dictionary:
 
-d_if: .db "if\0"
-.db if_word
-.db $+1
-
-.db "then\0"
-.db then_word
-.db $+1
-
-.db "else\0"
-.db else_word
-.db $+1
-
+compile_dict_start:
 .db "s\"\0"
 .db compile_squote
 .db $+1
@@ -81,10 +70,6 @@ d_if: .db "if\0"
 .db literal_word
 .db $+1
 
-.db "recurse\0"
-.db recurse_word
-.db $+1
-
 .db "[']\0"
 .db compile_tick_word
 .db $+1
@@ -99,37 +84,16 @@ d_if: .db "if\0"
 
 .db ")\0"
 .db close_paren_stub
-.db $+1
-
-.db ",ret\0"
-.db $+2
-.db $+4
-push $RET
-call compile_instruction
-ret
-
-.db ";\0"
-.db semicolon_word
-.db 0 ; sentinel for end of dictionary
+.db 0 ; Sentinel for end of dictionary
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; The initial runtime word dictionary:
 
-d_foo: .db "foo\0"
-.db foo
-.db $+1
-
-d_bar: .db "bar\0"
-.db bar
-.db $+1
-
-.db "emit\0"
-.db putc
-.db $+1
-
+dict_start:
 .db "pad\0"
-.db pad_word
-.db $+1
+.db $+2
+.db $+2
+ret pad
 
 .db "word\0"
 .db $+2
@@ -137,80 +101,6 @@ d_bar: .db "bar\0"
 call word_to_pad
 push pad
 ret
-
-.db "xor\0"
-.db $+2
-.db $+3
-xor
-ret
-
-.db "or\0"
-.db $+2
-.db $+3
-or
-ret
-
-.db "and\0"
-.db $+2
-.db $+3
-and
-ret
-
-.db "not\0"
-.db $+2
-.db $+3
-xor 0xffffff
-ret
-
-.db "false\0"
-.db $+2
-.db $+2
-ret 0
-
-.db "true\0"
-.db $+2
-.db $+2
-ret 1
-
-.db "min\0"
-.db $+2
-.db $+5
-push $+2
-jmp select_num
-alt
-ret
-
-.db "max\0"
-.db $+2
-.db $+5
-push $+2
-jmp select_num
-agt
-ret
-
-.db "umin\0"
-.db $+2
-.db $+5
-push $+2
-jmp select_num
-lt
-ret
-
-.db "umax\0"
-.db $+2
-.db $+5
-push $+2
-jmp select_num
-gt
-ret
-
-.db "ror\0"
-.db ror
-.db $+1
-
-.db "rol\0"
-.db rol
-.db $+1
 
 .db "number\0"
 .db input_number
@@ -220,175 +110,8 @@ ret
 .db print_number
 .db $+1
 
-.db "cr\0"
-.db cr
-.db $+1
-
-.db "+\0"
-.db w_add
-.db $+1
-
-.db "-\0"
-.db w_sub
-.db $+1
-
-.db "*\0"
-.db w_mul
-.db $+1
-
-.db "/\0"
-.db w_div
-.db $+1
-
-.db "mod\0"
-.db w_mod
-.db $+1
-
-.db "/mod\0"
-.db $+2
-.db $+8
-pick 1
-pick 1
-mod
-pushr
-div
-popr
-ret
-
-.db "=\0"
-.db w_eq
-.db $+1
-
-.db "<\0"
-.db w_alt
-.db $+1
-
-.db ">\0"
-.db w_agt
-.db $+1
-
-.db "u<\0"
-.db w_lt
-.db $+1
-
-.db "u>\0"
-.db w_gt
-.db $+1
-
-.db "u<=\0"
-.db $+2
-.db $+4
-gt
-not
-ret
-
-.db "u>=\0"
-.db $+2
-.db $+4
-lt
-not
-ret
-
-.db "<=\0"
-.db $+2
-.db $+4
-agt
-not
-ret
-
-.db ">=\0"
-.db $+2
-.db $+4
-alt
-not
-ret
-
-.db "0>\0"
-.db $+2
-.db $+4
-alt 0
-not
-ret
-
-.db "0<\0"
-.db $+2
-.db $+3
-alt 0
-ret
-
-.db "0=\0"
-.db $+2
-.db $+3
-not
-ret
-
-.db "!=\0"
-.db $+2
-.db $+5
-xor
-not
-not
-ret
-
-.db "@\0"
-.db w_at
-.db $+1
-
-.db "!\0"
-.db w_set
-.db $+1
-
-.db "+!\0"
-.db w_inc
-.db $+1
-
-.db "c@\0"
-.db w_byte_at
-.db $+1
-
-.db "c!\0"
-.db w_byte_set
-.db $+1
-
-.db "c+!\0"
-.db w_byte_inc
-.db $+1
-
 .db "compare\0"
 .db compare
-.db $+1
-
-.db "cell+\0"
-.db $+2
-.db $+6
-loadw heap_ptr
-dup
-add 3
-storew heap_ptr
-ret
-
-.db "cells\0"
-.db $+2
-.db $+9
-pushr
-loadw heap_ptr
-dup
-popr
-mul 3
-add
-storew heap_ptr
-ret
-
-.db "dup\0"
-.db w_dup
-.db $+1
-
-.db "drop\0"
-.db w_drop
-.db $+1
-
-.db "dup2\0"
-.db w_dup2
 .db $+1
 
 .db "?dup\0"
@@ -403,22 +126,6 @@ ret
 .db squote
 .db $+1
 
-.db ":\0"
-.db colon_word
-.db $+1
-
-.db "allot\0"
-.db allot
-.db $+1
-
-.db "free\0"
-.db free
-.db $+1
-
-.db "variable\0"
-.db variable_word
-.db $+1
-
 .db ">r\0"
 .db push_c_addr
 .db $+1
@@ -431,20 +138,8 @@ ret
 .db w_peek_r
 .db $+1
 
-.db "rdrop\0"
-.db w_rdrop
-.db $+1
-
 .db "rpick\0"
 .db w_rpick
-.db $+1
-
-.db "unloop\0"
-.db unloop_word
-.db $+1
-
-.db "leave\0"
-.db leave_word
 .db $+1
 
 .db "]\0"
@@ -459,10 +154,6 @@ ret
 .db comma_word
 .db $+1
 
-.db "execute\0"
-.db w_execute
-.db $+1
-
 .db "'\0"
 .db tick_word
 .db $+1
@@ -470,60 +161,6 @@ ret
 .db "immediate\0"
 .db immediate_word
 .db $+1
-
-.db "negate\0"
-.db w_negate
-.db $+1
-
-.db "abs\0"
-.db w_abs
-.db $+1
-
-.db "nip\0"
-.db $+2
-.db $+4
-swap
-pop
-ret
-
-.db "rot\0"
-.db $+2
-.db $+3
-rot
-ret
-
-.db "-rot\0"
-.db $+2
-.db $+4
-rot
-rot
-ret
-
-.db "swap\0"
-.db $+2
-.db $+3
-swap
-ret
-
-.db "tuck\0"
-.db $+2
-.db $+5
-dup
-rot
-rot
-ret
-
-.db "over\0"
-.db $+2
-.db $+3
-pick 1
-ret
-
-.db "pick\0"
-.db $+2
-.db $+3
-pick
-ret
 
 .db "depth\0"
 .db $+2
@@ -571,17 +208,6 @@ ret
 .db print_stack
 .db $+1
 
-.db "spaces\0"
-.db spaces
-.db $+1
-
-.db "space\0"
-.db $+2
-.db $+4
-push 32
-store 2
-ret
-
 .db "print\0"
 .db print
 .db $+1
@@ -596,53 +222,36 @@ ret
 
 .db ")\0"
 .db close_paren_stub
-.db $+1
-
-.db "even\0"
-.db $+2
-.db $+4
-and 1
-not
-ret
-
-.db "2-\0"
-.db $+2
-.db $+3
-sub 2
-ret
-
-.db "1-\0"
-.db $+2
-.db $+3
-sub 1
-ret
-
-.db "2+\0"
-.db $+2
-.db $+3
-add 2
-ret
-
-.db "1+\0"
-.db $+2
-.db $+3
-add 1
-ret
-
-.db "arshift\0"
-.db $+2
-.db $+3
-arshift
-ret
-
-.db "rshift\0"
-.db $+2
-.db $+3
-rshift
-ret
-
-.db "lshift\0"
-.db $+2
 .db 0
-lshift
-ret
+
+; Store the current handleword_hook in the C stack,
+; put linecomment in its place. When handleline starts,
+; if it sees that handleword_hook is linecomment, it'll
+; pop the old one back out.
+backslash_word:
+    loadw handleword_hook
+    call push_c_addr
+    push linecomment
+    storew handleword_hook
+    ret
+
+; Store the current handleword_hook in the C stack,
+; put parencomment in its place.
+open_paren_word:
+    loadw handleword_hook
+    call push_c_addr
+    push parencomment
+    storew handleword_hook
+    ret
+
+; Store the current handleword_hook in the C stack,
+; put parencomment in its place.
+; We also have a "stub" word which is what the dict actually
+; points to, so that a mismatched close paren doesn't end
+; up actually doing anything (it's only callable from / by
+; parencomment)
+close_paren_word:
+    call pop_c_addr
+    storew handleword_hook
+close_paren_stub:
+    ret

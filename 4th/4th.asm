@@ -51,7 +51,6 @@ onkeypress_handleline:
 #include "compiler_utils.asm"
 #include "runtime_words.asm"
 #include "compile_words.asm"
-#include "math.asm"
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -190,23 +189,6 @@ missing_word:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; These two were used before most of it was written, as test words.
-; TODO dump both these
-foo:
-    push foo_str
-    call print
-    call cr
-    ret
-bar:
-    push bar_str
-    call print
-    call cr
-    ret
-foo_str: .db "You called foo\0"
-bar_str: .db "Bar was called, probably by you!\0"
-
-;;;;;;;;;;;;;;;;;;
-
 data_start: ; Just a marker for the stats to measure how long the text section is
 
 ; Some strings for error messages and whatnot
@@ -227,10 +209,10 @@ line_len: .db 0
 cursor: .db 0 ; During calls to handleword, this global points to the beginning of the word
 
 ; pointer to head of runtime dictionary
-dictionary: .db d_foo
+dictionary: .db dict_start
 
 ; pointer to head of compile-time dictionary
-compile_dictionary: .db d_if
+compile_dictionary: .db compile_dict_start
 
 ; A buffer for line input
 line_buf: .db 0

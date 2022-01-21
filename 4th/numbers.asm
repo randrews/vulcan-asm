@@ -21,8 +21,7 @@ itoa: ; ( num -- )
     push 45 ; 45 is '-', print a leading dash
     store 2
 itoa_pos: ; ( num -- )
-    push 32
-    call allot
+    loadw heap_ptr ; Gonna build the string on the heap
     dup
     swap 0
     store
@@ -31,7 +30,12 @@ itoa_pos: ; ( num -- )
 itoa_loop:
     dup ; ( num num ) [ arr ]
     mod 10
-    call w_abs
+    dup
+    alt 0
+    #if
+    xor 0xffffff
+    add 1
+    #end
     dup
     add 48 ; ( num mod ch )
     peekr ; ( num mod ch arr ) [ arr ]
@@ -56,14 +60,11 @@ itoa_print_loop:
     load
     brnz @itoa_print_loop
     pop
-    push 32
-    call free
     ret
 
 ; Print the number on top of the stack, in hex
 hex_itoa: ; ( num -- )
-    push 32
-    call allot ; Set aside a buffer of 32 chars
+    loadw heap_ptr ; Build the string on the heap, but don't allot the space
     dup
     swap 0
     store ; Store a null terminator as the first char
@@ -100,8 +101,6 @@ hex_itoa: ; ( num -- )
         sub 1
     #end
     pop
-    push 32
-    call free
     ret
 
 ; Print the current stack contents, in order from 256 up, separated by spaces
@@ -132,28 +131,6 @@ print_stack: ; ( -- )
     pop
     push print_stack_end
     call print
-    ret
-
-; Roll left (moving high bit to low)
-rol: ; ( n -- n2 )
-    dup
-    lshift 1
-    swap
-    and 0x800000
-    #if
-    or 1
-    #end
-    ret
-
-; Roll right (moving low bit to high)
-ror: ; ( n -- n2 )
-    dup
-    rshift 1
-    swap
-    and 1
-    #if
-    or 0x800000
-    #end
     ret
 
 ; Select one of a / b to leave on the stack, depending on whether

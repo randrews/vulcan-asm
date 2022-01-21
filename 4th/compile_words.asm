@@ -1,33 +1,5 @@
 #include "loops.asm"
 
-; End a definition: compile a ret and re-enter interpret mode
-semicolon_word:
-    push $RET
-    call compile_instruction
-    jmp open_bracket_word
-
-; A normal branch-if-zero to wherever the 'then' or 'else' ends up
-if_word:
-    push $BRZ
-    call push_jump
-    ret
-
-; An unconditional jump to the next 'then', followed by targeting the
-; previous 'if'
-else_word:
-    loadw heap_ptr
-    add 4
-    call resolve_c_addr
-    push $JMPR
-    call push_jump
-    ret
-
-; Resolve the last address to jump here
-then_word:
-    loadw heap_ptr
-    call resolve_c_addr
-    ret
-
 ; The s-quote equivalent in compile mode:
 compile_squote:
     push $JMPR
@@ -47,27 +19,6 @@ compile_dotquote:
     push print
     push $CALL
     call compile_instruction_arg
-    ret
-
-; This takes a name (word_to_pad / new_dict_from_pad, just like colon_word) and
-; creates a word for it that, when called, pushes the address of a variable to the stack.
-; That address is the byte right after the word itself, and there are three bytes reserved
-; there. It also initializes the variable to zero.
-variable_word:
-    call word_to_heap
-    call new_dict
-    loadw heap_ptr
-    add 5 ; 4 bytes for the push, 1 bytes for the ret
-    push $PUSH
-    call compile_instruction_arg
-    push $RET
-    call compile_instruction
-    loadw heap_ptr
-    dup
-    add 3
-    storew heap_ptr
-    swap 0
-    storew
     ret
 
 ; Compile a ret, for an early return (to escape from a begin / again maybe)
@@ -143,15 +94,6 @@ literal_word:
     call compile_instruction_arg
     ret
 
-; Compile a call to the head of the dictionary
-recurse_word:
-    loadw dictionary
-    call skip_word
-    add 1
-    loadw
-    push $CALL
-    jmp compile_instruction_arg
-
 compile_tick_word:
     call word_to_heap
     loadw heap_ptr
@@ -159,6 +101,9 @@ compile_tick_word:
     push $PUSH
     jmp compile_instruction_arg
 
+; Reads a word from either dictionary (but preferentially the runtime one) and
+; compiles a jmp to that word. This can be used to create a tail-call but is
+; also required to define semicolon
 continue_word:
     call word_to_heap
     loadw heap_ptr

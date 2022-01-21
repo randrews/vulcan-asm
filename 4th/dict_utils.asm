@@ -58,35 +58,3 @@ compile_tick:
     loadw compile_dictionary
     call find_in_dict
     ret
-
-; Store the current handleword_hook in the C stack,
-; put linecomment in its place. When handleline starts,
-; if it sees that handleword_hook is linecomment, it'll
-; pop the old one back out.
-backslash_word:
-    loadw handleword_hook
-    call push_c_addr
-    push linecomment
-    storew handleword_hook
-    ret
-
-; Store the current handleword_hook in the C stack,
-; put parencomment in its place.
-open_paren_word:
-    loadw handleword_hook
-    call push_c_addr
-    push parencomment
-    storew handleword_hook
-    ret
-
-; Store the current handleword_hook in the C stack,
-; put parencomment in its place.
-; We also have a "stub" word which is what the dict actually
-; points to, so that a mismatched close paren doesn't end
-; up actually doing anything (it's only callable from / by
-; parencomment)
-close_paren_word:
-    call pop_c_addr
-    storew handleword_hook
-close_paren_stub:
-    ret

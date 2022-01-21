@@ -49,7 +49,6 @@ repeat_word:
     call resolve_c_addr
     ret
 
-
 ; Counted loops: utility to compile instructions to >r loop limit / index:
 compile_loop_counters:
     push $SWAP
@@ -133,25 +132,14 @@ loop_word_posttest:
     call pop_c_addr
     pop
 loop_word_cleanup:
-    push unloop_word
+    push unloop
     push $CALL
     call compile_instruction_arg ; call unloop to clean up the counters
     ret
 
-; Counted loops, clean up the R stack if we want to early return
-; Removes the loop counter things from the R stack
-unloop_word:
+unloop:
+    call pop_c_addr
     call pop_c_addr
     pop
-    call pop_c_addr
     pop
-    ret
-
-; Counted loops, cause an early return on the next test
-; Sets the loop index equal to the counter
-leave_word:
-    call pop_c_addr
-    pop
-    call w_peek_r
-    call push_c_addr
     ret

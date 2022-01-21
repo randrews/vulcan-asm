@@ -1,5 +1,4 @@
 #include "numbers.asm"
-#include "simple.asm"
 
 ; Runtime dotquote: read a string to the pad and print it
 dotquote:
@@ -69,11 +68,6 @@ create_word:
     call new_dict
     ret
 
-; Starts a new definition of a normal runtime word
-colon_word:
-    call create_word
-    jmp close_bracket_word
-
 ; Compiles the top of stack to the heap
 comma_word:
     loadw heap_ptr
@@ -83,53 +77,6 @@ comma_word:
     storew
     ret
 
-; Increment heap_ptr by a number of bytes and return the old heap ptr
-; (in other words, allocate an array on the heap)
-allot: ; ( num -- ptr )
-    loadw heap_ptr
-    pick 1
-    pick 1
-    add
-    storew heap_ptr
-    swap
-    pop
-    ret
-
-; Decrement heap_ptr by a number of bytes (in other words, free an array
-; allocated on the top of the heap)
-; TODO this shouldn't exist
-free: ; ( num -- )
-    loadw heap_ptr
-    swap
-    sub
-    storew heap_ptr
-    ret
-
-; Emit a single ASCII character
-putc:
-    store 2
-    ret
-
-; Increment the word whose address is at TOS
-w_inc:
-    dup
-    pushr
-    loadw
-    add
-    popr
-    storew
-    ret
-
-; Increment the byte whose address is at TOS (overflow doesn't affect next byte)
-w_byte_inc:
-    dup
-    pushr
-    load
-    add
-    popr
-    store
-    ret
-
 ; The R stack is provided mostly for convenience, because it can't be the actual
 ; CPU return stack for reasons. But since we never use it in compile mode and we
 ; never use the c_stack except in compile mode, they're the same stack:
@@ -137,12 +84,6 @@ w_peek_r:
     loadw c_stack_ptr
     sub 3
     loadw
-    ret
-
-; Drop from the R stack
-w_rdrop:
-    call pop_c_addr
-    pop
     ret
 
 ; Pick from the R stack
