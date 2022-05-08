@@ -9,11 +9,11 @@ is_number: ; ( ptr -- [num 1] -or- [0] )
     brnz @pos_is_number ; We're done here, it's positive
     add 1
     call pos_is_number ; ( pos-num valid? )
-    brz @is_number_bad
-    xor 0xffffff
-    add 1
-    ret 1
-is_number_bad:
+    #if
+        xor 0xffffff
+        add 1
+        ret 1
+    #end
     pop
     ret 0
 
@@ -188,8 +188,8 @@ read_string_unclosed:
     push unclosed_error
     call print
     push 0
-    store line_buf
-    push line_buf
+    store tib
+    push tib
     storew cursor
     jmpr @end0_pop2
 

@@ -32,6 +32,7 @@ int cvemu_peek(lua_State *L);
 unsigned char cpu_peek(Cpu *cpu, unsigned int addr, lua_State *L);
 int cvemu_print_stack(lua_State *L);
 int cvemu_fetch_stack(lua_State *L);
+int cvemu_fetch_r_stack(lua_State *L);
 Opcode cpu_fetch(Cpu *cpu, lua_State *L);
 int cvemu_run(lua_State *L);
 void cpu_run(Cpu *cpu, lua_State *L);
@@ -69,6 +70,7 @@ int luaopen_cvemu(lua_State *lua){
         {"set_pc", cvemu_set_pc},
         {"print_stack", cvemu_print_stack},
         {"stack", cvemu_fetch_stack},
+        {"r_stack", cvemu_fetch_r_stack},
         {"install_device", cvemu_install_device},
         {"run", cvemu_run},
         {"flags", cvemu_flags},
@@ -166,6 +168,7 @@ int cvemu_reset(lua_State *L) {
 void cpu_reset(Cpu *cpu) {
     cpu->dp = 256; // Data stack pointer (0x00-0xff reserved, always points at low byte of top of stack)
     cpu->bottom_dp = 256; // Exists only for debugging; set this in a setdp instruction
+    cpu->top_sp = 1024; // Exists only for debugging; set this in a setdp instruction
     cpu->sp = 1024; // Return stack pointer (256 cells higher)
     cpu->pc = 1024; // Program counter
     cpu->halted = 0; // Flag to stop execution
@@ -439,6 +442,22 @@ int cvemu_fetch_stack(lua_State *L) {
     }
 }
 
+int cvemu_fetch_r_stack(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    
+    if (cpu->sp > cpu->top_sp) {
+        luaL_error(L, "RStack has underflowed");
+    } else if (cpu->sp == cpu->top_sp) {
+        return 0; // Stack's empty, return nothing
+    } else {
+        int count = 0;
+        for (int i = cpu->top_sp - 3; i >= cpu->sp; i-=3) {
+            lua_pushinteger(L, cpu_peek24(cpu, i, 0));
+            count++;
+        }
+        return count;
+    }
+}
 
 Opcode cpu_fetch(Cpu *cpu, lua_State *L) {
     int instruction = cpu_peek(cpu, cpu->pc, L);

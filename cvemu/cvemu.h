@@ -23,6 +23,7 @@ typedef struct Cpu {
     int pc; // 1024, Program counter
     int dp; // 256, Data stack pointer (0x00-0xff reserved, always points at low byte of top of stack)
     int bottom_dp; // 256, Exists only for debugging; set this in a setdp instruction
+    int top_sp; // 1024, Exists only for debugging; set this in a setdp instruction
     int sp; // 1024, Return stack pointer (256 cells higher)
     int halted; // false
     int next_pc; // 0

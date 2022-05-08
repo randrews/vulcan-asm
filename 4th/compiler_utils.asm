@@ -29,11 +29,11 @@ new_dict_error:
     call cr
     ret
 
-open_bracket_word: push handleword ; Set the current mode to interpret
-    jmpr @+2
-close_bracket_word: push compileword ; Set the current mode to compile
-    storew handleword_hook
-    ret
+;;;;; open_bracket_word: push immediate_handleword ; Set the current mode to interpret
+;;;;;     jmpr @+2
+;;;;; close_bracket_word: push compileword ; Set the current mode to compile
+;;;;;     storew handleword_hook
+;;;;;     ret
 
 ; Compiles a full 4-byte instruction to the heap given an arg and an opcode
 compile_instruction_arg: ; ( arg opcode -- )
