@@ -221,17 +221,17 @@ copy_string_done:
     pop
     ret
 
-; Print some number of spaces
-spaces: ; ( n -- )
-    #while
-        call dupnz
-        gt 0
-    #do
-        push 32
-        store 2
-        sub 1
-    #end
-    ret
+;;; ; Print some number of spaces
+;;; spaces: ; ( n -- )
+;;;     #while
+;;;         call dupnz
+;;;         gt 0
+;;;     #do
+;;;         push 32
+;;;         store 2
+;;;         sub 1
+;;;     #end
+;;;     ret
 
 ; Return a flag of whether two strings are equal
 compare: ; ( str1 str2 -- equal? )

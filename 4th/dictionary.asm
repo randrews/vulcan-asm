@@ -35,6 +35,10 @@ compile_dict_start:
 .db nova_semicolon
 .db $+1
 
+.db "s\"\0"
+.db nova_compile_squote
+.db $+1
+
 .db "\\\0"
 .db backslash
 .db $+1
@@ -47,10 +51,6 @@ compile_dict_start:
 .db close_paren_stub
 .db 0 ; Sentinel for end of dictionary
 
-;;;;; .db "s\"\0"
-;;;;; .db compile_squote
-;;;;; .db $+1
-;;;;; 
 ;;;;; .db ".\"\0"
 ;;;;; .db compile_dotquote
 ;;;;; .db $+1
@@ -89,14 +89,6 @@ compile_dict_start:
 ;;;;; 
 ;;;;; .db "+loop\0"
 ;;;;; .db plusloop_word
-;;;;; .db $+1
-;;;;;
-;;;;; .db "continue\0"
-;;;;; .db continue_word
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "(\0"
-;;;;; .db open_paren_word
 ;;;;; .db $+1
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -144,6 +136,30 @@ ret pad
 .db nova_word_to_pad
 .db $+1
 
+.db "number\0"
+.db nova_number
+.db $+1
+
+.db "hex\0"
+.db nova_hex
+.db $+1
+
+.db "dec\0"
+.db nova_dec
+.db $+1
+
+.db "?dup\0"
+.db dupnz
+.db $+1
+
+.db ".\0"
+.db print_number
+.db $+1
+
+.db "s\"\0"
+.db nova_squote
+.db $+1
+
 .db "\\\0"
 .db backslash
 .db $+1
@@ -156,28 +172,12 @@ ret pad
 .db close_paren_stub
 .db 0
 
-;;;;; .db "number\0"
-;;;;; .db input_number
-;;;;; .db $+1
-;;;;; 
-;;;;; .db ".\0"
-;;;;; .db print_number
-;;;;; .db $+1
-;;;;; 
 ;;;;; .db "compare\0"
 ;;;;; .db compare
 ;;;;; .db $+1
 ;;;;; 
-;;;;; .db "?dup\0"
-;;;;; .db dupnz
-;;;;; .db $+1
-;;;;; 
 ;;;;; .db ".\"\0"
 ;;;;; .db dotquote
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "s\"\0"
-;;;;; .db squote
 ;;;;; .db $+1
 ;;;;; 
 ;;;;; .db ">r\0"
@@ -200,24 +200,6 @@ ret pad
 ;;;;; .db $+2
 ;;;;; .db $+3
 ;;;;; loadw heap_ptr
-;;;;; ret
-;;;;; 
-;;;;; .db "hex\0"
-;;;;; .db $+2
-;;;;; .db $+6
-;;;;; push hex_is_number
-;;;;; storew is_number_hook
-;;;;; push hex_itoa
-;;;;; storew itoa_hook
-;;;;; ret
-;;;;; 
-;;;;; .db "dec\0"
-;;;;; .db $+2
-;;;;; .db $+6
-;;;;; push is_number
-;;;;; storew is_number_hook
-;;;;; push itoa
-;;;;; storew itoa_hook
 ;;;;; ret
 ;;;;; 
 ;;;;; .db ".s\0"

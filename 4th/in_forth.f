@@ -1,9 +1,9 @@
 \ Needed words:
-\ [ ] asm , postpone exit literal (foundational compiler interface)
-\ create does> immediate ' ['] (foundational dictionary interface)
-\ word number (foundational parser interface)
+\ DONE: [ ] asm , postpone exit literal (foundational compiler interface)
+\ DONE: create does> immediate ' ['] (foundational dictionary interface)
+\ DONE: word number (foundational parser interface)
 \ >r r> r@ rpick (because they aren't using the normal stack)
-\ dec hex pad (because they modify global vars)
+\ DONE: dec hex pad (because they modify global vars)
 \ .s (because it uses sdp)
 \ \ ) ( s" ." (because they deal with parser state)
 \ . print compare ?dup (because we need asm ones anyway and it's free)
@@ -11,9 +11,9 @@
 \ New words:
 \ &heap pushes the address of the heap pointer, so `here` is ``&heap @`
 \ quit exists in both dictionaries, clears the stack (setsdp) and jmps to the main loop.
-\ asm is a word which compiles an opcode without an arg
+\ DONE: asm is a word which compiles an opcode without an arg
 \ ,asm is an immediate word which compiles the instructions to compile an opcode
-\ DONE continue compiles a jmp to a given word (a tail call)
+\ DONE: continue compiles a jmp to a given word (a tail call)
 \ ,brz ,brnz and ,jmpr are immediate words which compile those instructions, but with a 0 argument. The address of the argument is >r'd
 \ resolve is an immediate word which pops the top address from the ctrl stack and writes `here` to it.
 

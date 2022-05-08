@@ -216,6 +216,9 @@ test_fn('dupnz',
         given_stack{ 0 },
         expect_stack{ 0 })
 
+test_line('10 ?dup', expect_stack{10, 10})
+test_line('0 ?dup', expect_stack{0})
+
 --------------------------------------------------
 
 test_line('10', expect_stack{10})
@@ -507,19 +510,68 @@ test_lines({ '] 1 2 \\ 3 4', '5 6' }, expect_heap_advance(16))
 
 --------------------------------------------------
 
+-- Parse numbers from words
+test_line('number 17', expect_stack{ 17, 1 })
+test_line('number blah', expect_stack{ 0 })
+test_line('number -23', expect_stack{ (-23 & 0xffffff), 1 })
+
+-- Parse hex numbers from words
+test_line('hex number a4', expect_stack{ 164, 1 })
+test_line('hex number blah', expect_stack{ 0 })
+
+-- Switch between hex and dec
+test_line('hex number a4 dec number 23', expect_stack{ 164, 1, 23, 1 })
+test_line('hex a4 dec 23', expect_stack{ 164, 23 })
+
+--------------------------------------------------
+
+-- Output in hex and dec
+test_line('hex a4 . dec 23 .', expect_output('a423')) -- Yeah, no separator
+test_line('hex a4 dec .', expect_output('164'))
+test_line('dec 525 hex .', expect_output('20d'))
+test_line('-15 .', expect_output('-15'))
+
+--------------------------------------------------
+
+-- Compiling strings to the heap
+test_line('s" foo"',
+          expect_stack{heap(0)},
+          expect_memory(heap(0), 'f', 'o', 'o', 0),
+          expect_heap_advance(4))
+
+-- Compiling empty string
+test_line('s" "',
+          expect_stack{heap(0)},
+          expect_memory(heap(0), 0),
+          expect_heap_advance(1))
+
+-- Unterminated string
+test_line('s" foo',
+          expect_stack{},
+          expect_heap_advance(0),
+          expect_output('Unclosed string'))
+
+-- Compile move squote
+test_line('] s" blah"',
+          expect_memory(heap(0),
+                        inst('jmpr', 9), -- length of the jmpr itself + 'blah\0'
+                        'b', 'l', 'a', 'h', 0, -- The actual string
+                        inst('push', heap(4))), -- Push the addr of the string
+          expect_heap_advance(13))
+
+-- Compile mode unterminated string
+test_line('] s" foo',
+          expect_heap_advance(0),
+          expect_output('Unclosed string'))
+
+--------------------------------------------------
+
 --[==[
     TODOs
-    X ' and ['] words and tests
-    X Rewrite : and ; in asm
-    X literal
-    X pad, word
-    X comments
-
-    Later TODOs
     - Prelude of simple words
     - Rewrite / compress string fns
     - String I/O
-    - Numeric bases and number
+    X Numeric bases and number
 --]==]
 
 --------------------------------------------------

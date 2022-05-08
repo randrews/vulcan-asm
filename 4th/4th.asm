@@ -85,6 +85,13 @@ nova_word_to: ; ( src dest -- )
     store
     ret
 
+nova_number:
+    call nova_word
+    loadw heap_ptr
+    loadw is_number_hook
+    call
+    ret
+
 ; Creates a new dictionary entry, pointing at the (new) heap, for the following word
 nova_create: ; ( -- )
     call nova_word ; consume a word and stick it on the heap
@@ -407,6 +414,104 @@ nova_bracket_tick:
 nova_literal:
     push $PUSH
     jmp compile_instruction_arg
+
+; Switch is_number_hook and itoa_hook between hex and dec mode
+nova_dec:
+    push is_number
+    push itoa
+    jmpr @+4
+nova_hex:
+    push hex_is_number
+    push hex_itoa
+    storew itoa_hook
+    storew is_number_hook
+    ret
+
+; Fetch a single char from the input buffer, advancing the cursor
+; If the cursor is already at the end (null term) don't advance it
+nova_char: ; ( -- ch )
+    loadw cursor
+    load
+    call dupnz
+    #if
+        loadw cursor
+        add 1
+        storew cursor
+        ret
+    #end
+    ret 0
+
+; Compiles a string to the heap and pushes a pointer to it
+nova_squote: ; ( -- addr )
+    loadw heap_ptr
+    pushr
+    #while
+        call nova_char
+        dup
+        dup
+        gt 0
+        swap
+        xor 34 ; ascii double quote
+        gt 0
+        and ; It's not a null-term and it's not a double quote
+    #do
+        loadw heap_ptr
+        store
+        loadw heap_ptr
+        add 1
+        storew heap_ptr
+    #end
+    #unless ; Unterminated string!
+        popr
+        storew heap_ptr ; Restore the original heap_ptr
+        push unclosed_error
+        jmp print
+    #end
+    loadw heap_ptr
+    dup ; ( here here )
+    push 0
+    swap
+    store
+    add 1
+    storew heap_ptr ; Null-term the string and increment heap ptr
+    popr ; The original heap ptr is actually the string ptr
+    ret
+
+; The s-quote equivalent in compile mode:
+nova_compile_squote:
+    loadw heap_ptr
+    pushr
+    push $JMPR
+    call push_jump ; compile a jmpr to get us past the string
+    call nova_squote ; ( addr )
+    ;;;
+    loadw heap_ptr ; squote might have failed and not actually compiled anything
+    sub 4          ; (because of an unterminated string) We'll handle that:
+    peekr          ; Detect if our saved heap is the current heap - 4, meaning
+    xor            ; that all we've compiled is that jmp...
+    #unless
+        popr ; So just restore that saved heap_ptr
+        storew heap_ptr
+        ret
+    #end
+    ;;;
+    loadw heap_ptr
+    call resolve_c_addr ; Jump to right after the null-terminator
+    ; compile a push with the string start
+    push $PUSH ; ( addr $push )
+    call compile_instruction_arg
+    popr
+    pop
+    ret
+
+; The dot-quote equivalent in compile mode:
+nova_compile_dotquote:
+    call nova_compile_squote
+    ; compile a call to print
+    push print
+    push $CALL
+    call compile_instruction_arg
+    ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

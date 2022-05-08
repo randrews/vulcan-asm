@@ -27,14 +27,3 @@ w_rpick: ; ( i -- c_stack[i] ) where the top of the R stack is '0 rpick'
     sub
     loadw
     ret
-
-; Compiles a string to the heap and pushes a pointer to it
-squote: ; ( -- addr )
-    loadw heap_ptr
-    dup
-    call read_quote_string
-    call dupnz
-    brz @end_ret
-    add 1
-    storew heap_ptr
-    ret
