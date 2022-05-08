@@ -4,12 +4,9 @@
 \ word number (foundational parser interface)
 \ >r r> r@ rpick (because they aren't using the normal stack)
 \ dec hex pad (because they modify global vars)
-\ .s (because they use sdp)
+\ .s (because it uses sdp)
 \ \ ) ( s" ." (because they deal with parser state)
 \ . print compare ?dup (because we need asm ones anyway and it's free)
-
-\ Not making:
-\ depth rdepth
 
 \ New words:
 \ &heap pushes the address of the heap pointer, so `here` is ``&heap @`

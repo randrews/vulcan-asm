@@ -19,13 +19,16 @@ end1_ret: ret 1
 
 ; Print a null-term string
 print: ; ( addr -- )
-    dup
-    load
-    call dupnz
-    brz @end_pop1
-    store 0x02
-    add 1
-    jmpr @print
+    #while
+        dup
+        load
+        call dupnz
+    #do
+        store 0x02
+        add 1
+    #end
+    pop
+    ret
 
 ; Print a carriage return
 cr: ; ( -- )

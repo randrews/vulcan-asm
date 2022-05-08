@@ -424,6 +424,17 @@ int cvemu_print_stack(lua_State *L) {
     return 0;
 }
 
+int cvemu_print_r_stack(lua_State *L) {
+    Cpu *cpu = checkCpu(L, 1);
+    if (cpu->sp == cpu->top_sp) {
+        printf("<stack empty>\n");
+    } else {
+        for (int i = cpu->top_sp - 3; i >= cpu->sp; i-=3) {
+            printf("%d:\t0x%x\n", i, cpu_peek24(cpu, i, 0));
+        }
+    }
+    return 0;
+}
 
 int cvemu_fetch_stack(lua_State *L) {
     Cpu *cpu = checkCpu(L, 1);
@@ -665,6 +676,8 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         break;
     case DEBUG:
         cvemu_print_stack(L);
+        printf(">>>>>>>>>>>>>>>>>>>>\n");
+        cvemu_print_r_stack(L);
         printf("--------------------\n");
         break;
     }
@@ -678,6 +691,7 @@ int cvemu_run(lua_State *L) {
 }
 
 void cpu_run(Cpu *cpu, lua_State *L) {
+    cpu->halted = 0;
     while (!cpu->halted) {
         cpu_execute(cpu, cpu_fetch(cpu, L), L);
         cpu_tick_devices(cpu, L);

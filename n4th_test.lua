@@ -35,8 +35,8 @@ function test_fn(name, setup, check)
     local cpu, output = init_cpu()
     setup(cpu)
     call(cpu, name)
-    st = { cpu:stack() }
-    rst = { cpu:r_stack() }
+    local st = { cpu:stack() }
+    local rst = { cpu:r_stack() }
     check(st, output.contents, cpu, rst)
 end
 
@@ -145,7 +145,7 @@ function dump_memory(addr, len)
             local op = Opcodes.mnemonic_for(math.floor(b / 4))
             local args = b & 3
             if b < 32 then c = '' end
-            print(string.format('%xh: %xh (%d) %q %q/%d', a, b, b, c, op, args))
+            print(string.format('[%d]\t%xh:\t%xh\t(%d)\t%q\t%q/%d', a - addr, a, b, b, c, op, args))
         end
     end
 end
@@ -161,14 +161,30 @@ function test_line(line, ...)
     test_fn('eval', all(given_stack{Symbols.tib}, given_memory(Symbols.tib, line)), all(...))
 end
 
--- example: test{'blah', stack = { 1 }, out = 'foo'}
-function test(opts)
-    test_fn('handleline', given_memory(Symbols.line_buf, opts[1]),
-            all(expect_stack(opts.stack or {}), expect_output(opts.out or '')))
+function test_prelude_line(line, ...)
+    test_fn('eval', all(run_prelude, given_stack{Symbols.tib}, given_memory(Symbols.tib, line)), all(...))
+end
+
+PRELUDE = 32 -- How many bytes the prelude adds to the heap
+function run_prelude(cpu)
+    local prelude = 'create : ] create continue ] [ : ; postpone exit continue [ [ immediate'
+    local setup = all(given_stack{Symbols.tib}, given_memory(Symbols.tib, prelude))
+    setup(cpu)
+    call(cpu, 'eval')
 end
 
 function heap(offset)
     return Symbols.heap_start + offset
+end
+
+function dump_symbols()
+    reverse = {}
+    addrs = {}
+    for sym, addr in pairs(Symbols) do reverse[addr] = sym; table.insert(addrs, addr) end
+    table.sort(addrs)
+    for _, addr in ipairs(addrs) do
+        print(string.format('0x%x\t%s', addr, reverse[addr]))
+    end
 end
 
 --------------------------------------------------
@@ -184,9 +200,9 @@ test_fn('dupnz',
 --------------------------------------------------
 
 test_line('10', expect_stack{10})
-test_line('10 20 30', all(
-              expect_stack{10, 20, 30},
-              expect_r_stack{}))
+test_line('10 20 30',
+          expect_stack{10, 20, 30},
+          expect_r_stack{})
 
 --------------------------------------------------
 
@@ -195,12 +211,12 @@ test_line('notaword', expect_output('Not a word: notaword\n'))
 
 --------------------------------------------------
 
-test_line('create blah', all(
-              expect_word(Symbols.heap_ptr, heap(11)), -- Heap ptr is advanced by the entry length
-              expect_memory(heap(0), 'blah\0'), -- New dict entry has the name
-              expect_word(heap(5), heap(11)), -- Followed by the new heap ptr
-              expect_word(heap(8), Symbols.dict_start), -- Next ptr is the old dict head
-              expect_word(Symbols.dictionary, heap(0)))) -- Dict has had the new entry consed on to it
+test_line('create blah',
+          expect_word(Symbols.heap_ptr, heap(11)), -- Heap ptr is advanced by the entry length
+          expect_memory(heap(0), 'blah\0'), -- New dict entry has the name
+          expect_word(heap(5), heap(11)), -- Followed by the new heap ptr
+          expect_word(heap(8), Symbols.dict_start), -- Next ptr is the old dict head
+          expect_word(Symbols.dictionary, heap(0))) -- Dict has had the new entry consed on to it
 
 --------------------------------------------------
 
@@ -213,15 +229,15 @@ test_line('] [', all(
 --------------------------------------------------
 
 -- Compiling a number
-test_line('] 122773', all(
-              expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
-              expect_memory(heap(0), { 3, 149, 223, 1}))) -- A push instruction for 122773
+test_line('] 122773',
+          expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
+          expect_memory(heap(0), { 3, 149, 223, 1})) -- A push instruction for 122773
 
 -- Compiling a call to a word
-test_line('] create', all(
-              expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
-              expect_memory(heap(0), { Opcodes.opcode_for('call') * 4 + 3 }), -- A call instruction
-              expect_word(heap(1), Symbols.nova_create))) -- ...to nova_create
+test_line('] create',
+          expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
+          expect_memory(heap(0), { Opcodes.opcode_for('call') * 4 + 3 }), -- A call instruction
+          expect_word(heap(1), Symbols.nova_create)) -- ...to nova_create
 
 -- Compiling gibberish
 test_line('] stillnotaword', expect_output('Not a word: stillnotaword\n'))
@@ -229,16 +245,16 @@ test_line('] stillnotaword', expect_output('Not a word: stillnotaword\n'))
 --------------------------------------------------
 
 -- Continue word (compiles a jmp)
-test_line('] continue ]', all(
-              expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
-              expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
-              expect_word(heap(1), Symbols.nova_close_bracket))) -- ...to nova_close_bracket
+test_line('] continue ]',
+          expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
+          expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
+          expect_word(heap(1), Symbols.nova_close_bracket)) -- ...to nova_close_bracket
 
 -- Continue compile word
-test_line('] continue [', all(
-              expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
-              expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
-              expect_word(heap(1), Symbols.nova_open_bracket))) -- ...to nova_close_bracket
+test_line('] continue [',
+          expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
+          expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
+          expect_word(heap(1), Symbols.nova_open_bracket)) -- ...to nova_close_bracket
 
 -- Continue gibberish
 test_line('] continue supernotword', expect_output('Not a word: supernotword\n'))
@@ -246,29 +262,29 @@ test_line('] continue supernotword', expect_output('Not a word: supernotword\n')
 --------------------------------------------------
 
 -- Prelude colon definition
-test_line('create : ] create continue ] [', all(
-              expect_memory(heap(0), ':\0'), -- New dict entry has the name
-              expect_word(heap(2), heap(8)), -- Followed by the ptr to the fn
-              expect_memory(heap(8), inst('call', Symbols.nova_create)), -- Which is a call to create...
-              expect_memory(heap(12), inst('jmp', Symbols.nova_close_bracket)), -- Followed by jmping to close_bracket
-              expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- And now we're back in immediate mode
-              expect_r_stack{})) -- And haven't leaked a stack frame
+test_line('create : ] create continue ] [',
+          expect_memory(heap(0), ':\0'), -- New dict entry has the name
+          expect_word(heap(2), heap(8)), -- Followed by the ptr to the fn
+          expect_memory(heap(8), inst('call', Symbols.nova_create)), -- Which is a call to create...
+          expect_memory(heap(12), inst('jmp', Symbols.nova_close_bracket)), -- Followed by jmping to close_bracket
+          expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- And now we're back in immediate mode
+          expect_r_stack{}) -- And haven't leaked a stack frame
 
 -- Using prelude colon
-test_line('create : ] create continue ] [ : foo 35', all(
-              expect_memory(heap(16), 'foo\0'), -- A new entry for foo
-              expect_word(heap(20), heap(26)), -- Defn ptr is the new heap
-              expect_memory(heap(26), inst('push', 35)), -- fn begins with pushing a 35
-              expect_word(Symbols.handleword_hook, Symbols.compile_handleword), -- We're still in compile mode
-              expect_r_stack{})) -- And haven't leaked a stack frame
+test_line('create : ] create continue ] [ : foo 35',
+          expect_memory(heap(16), 'foo\0'), -- A new entry for foo
+          expect_word(heap(20), heap(26)), -- Defn ptr is the new heap
+          expect_memory(heap(26), inst('push', 35)), -- fn begins with pushing a 35
+          expect_word(Symbols.handleword_hook, Symbols.compile_handleword), -- We're still in compile mode
+          expect_r_stack{}) -- And haven't leaked a stack frame
 
 --------------------------------------------------
 
 -- Postponing normal words
-test_line('] postpone create', all(
-              expect_memory(heap(0), inst('push', Symbols.nova_create)),
-              expect_memory(heap(4), inst('push', Opcodes.opcode_for('call'))),
-              expect_memory(heap(8), inst('call', Symbols.compile_instruction_arg))))
+test_line('] postpone create',
+          expect_memory(heap(0), inst('push', Symbols.nova_create)),
+          expect_memory(heap(4), inst('push', Opcodes.opcode_for('call'))),
+          expect_memory(heap(8), inst('call', Symbols.compile_instruction_arg)))
 
 -- Postponing compile words
 test_line('] postpone [', expect_memory(heap(0), inst('call', Symbols.nova_open_bracket)))
@@ -284,34 +300,106 @@ test_line('] exit', expect_memory(heap(0), { op('ret') }))
 --------------------------------------------------
 
 -- Prelude semicolon definition
-test_line('create : ] create continue ] [ : ; postpone exit continue [ [ immediate', all(
-              expect_memory(heap(16), ';\0'), -- A new entry for semicolon
-              expect_memory(heap(24), inst('call', Symbols.nova_exit)), -- Which compiles a ret
-              expect_memory(heap(28), inst('jmp', Symbols.nova_open_bracket)), -- And then returns to immediate mode
-              expect_word(Symbols.compile_dictionary, heap(16)), -- Semicolon is in the compile dict
-              expect_word(heap(21), Symbols.compile_dict_start), -- Semicolon points at old compile_dict head
-              expect_word(Symbols.handleword_hook, Symbols.immediate_handleword))) -- In immediate mode again
+test_line('create : ] create continue ] [ : ; postpone exit continue [ [ immediate',
+          expect_memory(heap(16), ';\0'), -- A new entry for semicolon
+          expect_memory(heap(24), inst('call', Symbols.nova_exit)), -- Which compiles a ret
+          expect_memory(heap(28), inst('jmp', Symbols.nova_open_bracket)), -- And then returns to immediate mode
+          expect_word(Symbols.compile_dictionary, heap(16)), -- Semicolon is in the compile dict
+          expect_word(heap(21), Symbols.compile_dict_start), -- Semicolon points at old compile_dict head
+          expect_word(Symbols.handleword_hook, Symbols.immediate_handleword)) -- In immediate mode again
 
 -- Using prelude semicolon
-test_line('create : ] create continue ] [ : ; postpone exit continue [ [ immediate ] ;', all(
-              expect_memory(heap(32), op('ret')), -- Compiled our ret
-              expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- In immediate mode again
-              expect_r_stack{})) -- And haven't leaked a stack frame
+test_prelude_line('] ;',
+                  expect_memory(heap(PRELUDE), op('ret')), -- Compiled our ret
+                  expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- In immediate mode again
+                  expect_r_stack{}) -- And haven't leaked a stack frame
 
 --------------------------------------------------
 
 -- Defining a word and calling it
-test_line('create : ] create continue ] [ : ; postpone exit continue [ [ immediate : fives 5 5 5 ; fives', all(
-              expect_stack{ 5, 5, 5 },
-              expect_r_stack{}))
+test_prelude_line(': fives 5 5 5 ; fives',
+                  expect_stack{ 5, 5, 5 },
+                  expect_r_stack{})
 
 --------------------------------------------------
 
--- Execute
-test_line('create execute 23 asm', all(
-              expect_word(Symbols.heap_ptr, heap(15)),
-              expect_word(heap(8), heap(14)),
-              expect_memory(heap(14), op('jmp'))))
+-- Basic use of asm
+test_line('create execute asm jmp',
+          expect_word(Symbols.heap_ptr, heap(15)),
+          expect_word(heap(8), heap(14)),
+          expect_memory(heap(14), op('jmp')))
+
+-- Invalid asm
+test_line('asm blah',
+          expect_output('Invalid mnemonic: blah\n'),
+          expect_r_stack{},
+          expect_stack{})
+
+-- Asm with args
+test_line('45 #asm push',
+          expect_memory(heap(0), inst('push', 45)),
+          expect_word(Symbols.heap_ptr, heap(4)))
+
+--------------------------------------------------
+
+-- Testing create / does> without compile-time behavior
+test_prelude_line(': blah create does> 2 3 ; blah fnord fnord',
+                  -- We're creating a new word fnord and then running it, the new word gets passed the address
+                  -- of its heap stuff and then pushes a couple numbers. Its heap area is the heap ptr when we
+                  -- called does>, so, PRELUDE + 11 (blah's entry) + 21 (blah's body, part of which is fnord's) + 12 (fnord's entry)
+                  expect_stack{ heap(PRELUDE + 11 + 22 + 12), 2, 3 }, -- 
+                  -- Body of blah:
+                  expect_memory(heap(PRELUDE + 11),
+                                inst('call', Symbols.nova_create), -- After blah's header, we have a call to create
+                                inst('push', heap(PRELUDE + 11 + 13)), -- push the address of after the does>
+                                inst('jmp', Symbols.does_at_runtime), -- And a call to does@runtime, to start compiling it
+                                op('ret'), -- blah's return
+                                inst('push', 2), -- The runtime behavior of fnord (the "mold"):
+                                inst('push', 3),
+                                op('ret')), -- fnord's runtime return
+                  -- Header of fnord:
+                  expect_memory(heap(PRELUDE + 11 + 22),
+                                'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
+                                word(heap(PRELUDE + 11 + 22 + 12)), -- pointer to the trampoline
+                                -- and pointer to the next dictionary entry. By this point the front of the
+                                -- dictionary is blah, which has its entry at heap(PRELUDE), right after the prelude:
+                                word(heap(PRELUDE))),
+                  -- Body (trampoline) of fnord:
+                  expect_memory(heap(PRELUDE + 11 + 22 + 12),
+                                inst('push', heap(PRELUDE + 11 + 22 + 12)), -- Push the old value, which was right
+                                -- after the header (because of the null compile-time behavior)
+                                inst('jmp', heap(PRELUDE + 11 + 13)))) -- jmp to the runtime behavior, after the does> call
+
+-- Testing create / does> when there's compile-time behavior
+test_prelude_line(': blah create 15 , does> 3 ; blah fnord fnord',
+                  -- We're creating a new word fnord and then running it, the new word gets passed the address
+                  -- of its heap stuff and then pushes a three. Its heap area is the heap ptr when we
+                  -- called does>, so, PRELUDE + 11 (blah's entry) + 26 (blah's body, part of which is fnord's) + 12 (fnord's entry)
+                  expect_stack{ heap(PRELUDE + 11 + 26 + 12), 3 },
+                  -- Body of blah:
+                  expect_memory(heap(PRELUDE + 11),
+                        inst('call', Symbols.nova_create), -- After blah's header, we have a call to create
+                        inst('push', 15),
+                        inst('call', Symbols.nova_comma),
+                        inst('push', heap(PRELUDE + 11 + 21)), -- push the address of after the does>
+                        inst('jmp', Symbols.does_at_runtime), -- And a call to does@runtime, to start compiling it
+                        op('ret'), -- blah's return
+                        inst('push', 3), -- After the does>; the runtime behavior of fnord (the "mold"):
+                        op('ret')), -- fnord's runtime return
+                  -- Header of fnord:
+                  expect_memory(heap(PRELUDE + 11 + 26),
+                                'f', 'n', 'o', 'r', 'd', 0, -- the new word's header
+                                word(heap(PRELUDE + 11 + 26 + 15)), -- pointer to the trampoline
+                                -- and pointer to the next dictionary entry. By this point the front of the
+                                -- dictionary is blah, which has its entry right after the prelude at heap(PRELUDE):
+                                word(heap(PRELUDE))),
+                  expect_memory(heap(PRELUDE + 11 + 26 + 12),
+                                word(15)), -- The compile time behavior compiled this 15
+                  -- Body (trampoline) of fnord:
+                  expect_memory(heap(PRELUDE + 11 + 26 + 15),
+                                inst('push', heap(PRELUDE + 11 + 26 + 12)), -- Push the old value, which was right
+                                -- after the header, the 15 we compiled
+                                inst('jmp', heap(PRELUDE + 11 + 21)))) -- jmp to the runtime behavior, after the does> call
 
 --------------------------------------------------
 

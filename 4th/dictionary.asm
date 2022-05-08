@@ -58,9 +58,9 @@ compile_dict_start:
 .db nova_continue
 .db $+1
 
-;;;;; .db "does>\0"
-;;;;; .db does_word
-;;;;; .db $+1
+.db "does>\0"
+.db does_word
+.db $+1
 
 .db "postpone\0"
 .db nova_postpone
@@ -154,10 +154,10 @@ dict_start:
 .db nova_create
 .db $+1
 
-;;;;; .db ",\0"
-;;;;; .db comma_word
-;;;;; .db $+1
-;;;;; 
+.db ",\0"
+.db nova_comma
+.db $+1
+
 ;;;;; .db "'\0"
 ;;;;; .db tick_word
 ;;;;; .db $+1
@@ -167,7 +167,11 @@ dict_start:
 .db $+1
 
 .db "asm\0"
-.db compile_instruction
+.db nova_asm
+.db $+1
+
+.db "#asm\0"
+.db nova_arg_asm
 .db $+1
 
 ;;;;; .db "depth\0"
