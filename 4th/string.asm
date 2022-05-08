@@ -143,12 +143,6 @@ word_to: ; ( dest -- )
     ret
 
 ; Copies the first word starting at / after the cursor from line_buf
-; to the pad, and null-terminates it
-word_to_pad: ; ( -- )
-    push pad
-    jmp word_to
-
-; Copies the first word starting at / after the cursor from line_buf
 ; to the bottom of the heap, and null-terminates it. This does NOT
 ; advance heap_ptr! The idea is that this is immediately sent to tick
 ; to recognize the word, which will be written over by whatever the

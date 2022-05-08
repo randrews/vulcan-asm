@@ -17,6 +17,13 @@ stop:
 ; This cannot be put in the dictionary, because if it calls itself recursively it'll clobber the
 ; cursor, but it can be called from outside. It's the primary entry point to Forth.
 eval: ; ( ptr -- ??? )
+    ; First, if the last line left us in linecomment, get out of it:
+    loadw handleword_hook
+    xor linecomment
+    #unless
+        call pop_c_addr
+        storew handleword_hook
+    #end
     call skip_nonword ; Skip any leading whitespace
     storew cursor ; Store the pointer in the cursor, so it's not polluting the stack during handleword calls
     #while ; While we're not at the end of the string
@@ -197,6 +204,24 @@ nova_comma:
     storew
     ret
 
+; Normal interface for defining words
+nova_colon:
+    call nova_create
+    jmp nova_close_bracket
+
+; Normal interface for ending word definitions
+nova_semicolon:
+    push $RET
+    call compile_instruction
+    jmp nova_open_bracket
+
+; Copy a word of input to the pad and return the pad address
+nova_word_to_pad:
+    loadw cursor
+    push pad
+    call nova_word_to
+    ret pad
+
 ; This is a runtime word used for defining the behavior of created
 ; words. For example: ": foo create does> drop 12 ;" makes a word foo, used as:
 ; "foo blah". That call creates another word, blah, which when it's
@@ -347,6 +372,42 @@ nova_arg_asm:
         jmp invalid_mnemonic
     #end
 
+find_word:
+    call nova_word
+    loadw heap_ptr
+    call tick
+    call dupnz
+    #unless
+        loadw heap_ptr
+        call compile_tick
+    #end
+    ret
+
+nova_tick:
+    call find_word
+    call dupnz
+    #unless
+        loadw heap_ptr
+        jmp missing_word
+    #end
+    ret
+
+nova_bracket_tick:
+    call find_word
+    call dupnz
+    #unless
+        loadw heap_ptr
+        jmp missing_word
+    #end
+    ; Intentionally falls through to nova_literal!
+
+; Compile-time word that reads a word from the stack at compile time and pushes it
+; to the stack at runtime (which is to say, read a word at compile and compile a
+; $PUSH of that word
+nova_literal:
+    push $PUSH
+    jmp compile_instruction_arg
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; Handle a word, in immediate mode. The word must be at ptr, and null-terminated
@@ -411,23 +472,56 @@ linecomment: ; ( word-start-addr -- )
 
 ; Word handler for paren-comment mode (anything in parens).
 parencomment: ; ( word-start-addr -- )
-    ; first check for a blank word and skip:
     dup
     load
-    brz @end_pop1 ; blank?
-    ; Now call tick to try to find it in the dictionary
-    call tick ; ( entry-addr )
-    ; If it is another open paren, do it again:
+    #unless ; Is the word just blank?
+        pop
+        ret
+    #end
+    call tick ; ( entry-addr-or-0 )
     dup
-    xor open_paren_word ; ( entry-addr diff )
-    brnz @+3
-    pop
-    jmp open_paren_word
-    ; If it is the close-paren stub, we call it:
-    xor close_paren_stub ; ( diff )
-    brnz @+2
-    jmp close_paren_word
-    ret ; Else just leave
+    xor open_paren
+    #unless ; Is the new word "("?
+        pop
+        jmp open_paren
+    #end
+    xor close_paren_stub
+    #unless ; Is it the ")" stub?
+        jmp close_paren ; Call close_paren
+    #end
+    ret ; It was something else (or zero) so just ignore it, it's a comment
+
+; Store the current handleword_hook in the C stack,
+; put parencomment in its place.
+open_paren:
+    loadw handleword_hook
+    call push_c_addr
+    push parencomment
+    storew handleword_hook
+    ret
+
+; Store the current handleword_hook in the C stack,
+; put parencomment in its place.
+; We also have a "stub" word which is what the dict actually
+; points to, so that a mismatched close paren doesn't end
+; up actually doing anything (it's only callable from / by
+; parencomment)
+close_paren:
+    call pop_c_addr
+    storew handleword_hook
+close_paren_stub:
+    ret
+
+; Store the current handleword_hook in the C stack,
+; put linecomment in its place. When handleline starts,
+; if it sees that handleword_hook is linecomment, it'll
+; pop the old one back out.
+backslash:
+    loadw handleword_hook
+    call push_c_addr
+    push linecomment
+    storew handleword_hook
+    ret
 
 ; Called when we expected to find something in the dictionary and didn't
 invalid_mnemonic:

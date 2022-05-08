@@ -95,7 +95,7 @@ function expect_memory(start, ...)
     return function(_s, _o, cpu)
         for i, b in ipairs(expanded_mem) do
             local actual = cpu:peek(start + i - 1)
-            assert(actual == b, string.format('%x: exp %d, act %d', start + i - 1, b, actual))
+            assert(actual == b, string.format('0x%x: exp %d, act %d', start + i - 1, b, actual))
         end
     end
 end
@@ -137,6 +137,14 @@ function expect_word(addr, val)
     end
 end
 
+function expect_heap_advance(n)
+    return function(_s, _o, cpu)
+        local expected = heap(0) + n
+        local actual = cpu:peek24(Symbols.heap_ptr)
+        assert(actual == expected, string.format('heap should advance %d, actual %d', n, actual - heap(0)))
+    end
+end
+
 function dump_memory(addr, len)
     return function(_s, _o, cpu)
         for a = addr, addr + len do
@@ -161,16 +169,27 @@ function test_line(line, ...)
     test_fn('eval', all(given_stack{Symbols.tib}, given_memory(Symbols.tib, line)), all(...))
 end
 
-function test_prelude_line(line, ...)
-    test_fn('eval', all(run_prelude, given_stack{Symbols.tib}, given_memory(Symbols.tib, line)), all(...))
+function test_lines(lines, ...)
+    local cpu, output = init_cpu()
+
+    for _, line in ipairs(lines) do
+        cpu:push_data(Symbols.tib)
+        local contents = { line:byte(1, #line) }
+        table.insert(contents, 0)
+        for i, b in ipairs(contents) do cpu:poke(Symbols.tib + i - 1, b) end
+        call(cpu, 'eval')
+    end
+
+    local st = { cpu:stack() }
+    local rst = { cpu:r_stack() }
+    local check = all(...)
+    check(st, output.contents, cpu, rst)
 end
 
-PRELUDE = 32 -- How many bytes the prelude adds to the heap
-function run_prelude(cpu)
-    local prelude = 'create : ] create continue ] [ : ; postpone exit continue [ [ immediate'
-    local setup = all(given_stack{Symbols.tib}, given_memory(Symbols.tib, prelude))
-    setup(cpu)
-    call(cpu, 'eval')
+PRELUDE = 34 -- How many bytes the prelude adds to the heap
+function test_prelude_line(line, ...)
+    local prelude = 'create :: ] create continue ] [ :: ;; postpone exit continue [ [ immediate'
+    test_lines({ prelude, line }, ...)
 end
 
 function heap(offset)
@@ -262,19 +281,19 @@ test_line('] continue supernotword', expect_output('Not a word: supernotword\n')
 --------------------------------------------------
 
 -- Prelude colon definition
-test_line('create : ] create continue ] [',
-          expect_memory(heap(0), ':\0'), -- New dict entry has the name
-          expect_word(heap(2), heap(8)), -- Followed by the ptr to the fn
-          expect_memory(heap(8), inst('call', Symbols.nova_create)), -- Which is a call to create...
-          expect_memory(heap(12), inst('jmp', Symbols.nova_close_bracket)), -- Followed by jmping to close_bracket
+test_line('create :: ] create continue ] [',
+          expect_memory(heap(0), '::\0'), -- New dict entry has the name
+          expect_word(heap(3), heap(9)), -- Followed by the ptr to the fn
+          expect_memory(heap(9), inst('call', Symbols.nova_create)), -- Which is a call to create...
+          expect_memory(heap(13), inst('jmp', Symbols.nova_close_bracket)), -- Followed by jmping to close_bracket
           expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- And now we're back in immediate mode
           expect_r_stack{}) -- And haven't leaked a stack frame
 
 -- Using prelude colon
-test_line('create : ] create continue ] [ : foo 35',
-          expect_memory(heap(16), 'foo\0'), -- A new entry for foo
-          expect_word(heap(20), heap(26)), -- Defn ptr is the new heap
-          expect_memory(heap(26), inst('push', 35)), -- fn begins with pushing a 35
+test_line('create :: ] create continue ] [ :: foo 35',
+          expect_memory(heap(17), 'foo\0'), -- A new entry for foo
+          expect_word(heap(21), heap(27)), -- Defn ptr is the new heap
+          expect_memory(heap(27), inst('push', 35)), -- fn begins with pushing a 35
           expect_word(Symbols.handleword_hook, Symbols.compile_handleword), -- We're still in compile mode
           expect_r_stack{}) -- And haven't leaked a stack frame
 
@@ -298,52 +317,36 @@ test_line('] postpone reallynotaword', expect_output('Not a word: reallynotaword
 test_line('] exit', expect_memory(heap(0), { op('ret') }))
 
 --------------------------------------------------
+--- Prelude stuff: -------------------------------
+--------------------------------------------------
+
+-- This was a fun intellectual exercise and makes a nice torture test for NovaForth, but it violates the
+-- "optimize for understandability" principle and so colon and semicolon are now both written in asm. The
+-- tests remain here because they're good, vero exhaustive, tests.
 
 -- Prelude semicolon definition
-test_line('create : ] create continue ] [ : ; postpone exit continue [ [ immediate',
-          expect_memory(heap(16), ';\0'), -- A new entry for semicolon
-          expect_memory(heap(24), inst('call', Symbols.nova_exit)), -- Which compiles a ret
-          expect_memory(heap(28), inst('jmp', Symbols.nova_open_bracket)), -- And then returns to immediate mode
-          expect_word(Symbols.compile_dictionary, heap(16)), -- Semicolon is in the compile dict
-          expect_word(heap(21), Symbols.compile_dict_start), -- Semicolon points at old compile_dict head
+test_line('create :: ] create continue ] [ :: ;; postpone exit continue [ [ immediate',
+          expect_memory(heap(17), ';', ';', 0), -- A new entry for semicolon
+          expect_memory(heap(26),
+                        inst('call', Symbols.nova_exit), -- Which compiles a ret
+                        inst('jmp', Symbols.nova_open_bracket)), -- And then returns to immediate mode
+          expect_word(Symbols.compile_dictionary, heap(17)), -- Semicolon is in the compile dict
+          expect_word(heap(23), Symbols.compile_dict_start), -- Semicolon points at old compile_dict head
           expect_word(Symbols.handleword_hook, Symbols.immediate_handleword)) -- In immediate mode again
 
 -- Using prelude semicolon
-test_prelude_line('] ;',
+test_prelude_line('] ;;',
                   expect_memory(heap(PRELUDE), op('ret')), -- Compiled our ret
                   expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- In immediate mode again
                   expect_r_stack{}) -- And haven't leaked a stack frame
 
---------------------------------------------------
-
--- Defining a word and calling it
-test_prelude_line(': fives 5 5 5 ; fives',
+-- Defining a word and calling it, with the prelude
+test_prelude_line(':: fives 5 5 5 ;; fives',
                   expect_stack{ 5, 5, 5 },
                   expect_r_stack{})
 
---------------------------------------------------
-
--- Basic use of asm
-test_line('create execute asm jmp',
-          expect_word(Symbols.heap_ptr, heap(15)),
-          expect_word(heap(8), heap(14)),
-          expect_memory(heap(14), op('jmp')))
-
--- Invalid asm
-test_line('asm blah',
-          expect_output('Invalid mnemonic: blah\n'),
-          expect_r_stack{},
-          expect_stack{})
-
--- Asm with args
-test_line('45 #asm push',
-          expect_memory(heap(0), inst('push', 45)),
-          expect_word(Symbols.heap_ptr, heap(4)))
-
---------------------------------------------------
-
--- Testing create / does> without compile-time behavior
-test_prelude_line(': blah create does> 2 3 ; blah fnord fnord',
+-- Testing create / does> without compile-time behavior, with the prelude
+test_prelude_line(':: blah create does> 2 3 ;; blah fnord fnord',
                   -- We're creating a new word fnord and then running it, the new word gets passed the address
                   -- of its heap stuff and then pushes a couple numbers. Its heap area is the heap ptr when we
                   -- called does>, so, PRELUDE + 11 (blah's entry) + 21 (blah's body, part of which is fnord's) + 12 (fnord's entry)
@@ -370,8 +373,8 @@ test_prelude_line(': blah create does> 2 3 ; blah fnord fnord',
                                 -- after the header (because of the null compile-time behavior)
                                 inst('jmp', heap(PRELUDE + 11 + 13)))) -- jmp to the runtime behavior, after the does> call
 
--- Testing create / does> when there's compile-time behavior
-test_prelude_line(': blah create 15 , does> 3 ; blah fnord fnord',
+-- Testing create / does> when there's compile-time behavior, with the prelude
+test_prelude_line(':: blah create 15 , does> 3 ;; blah fnord fnord',
                   -- We're creating a new word fnord and then running it, the new word gets passed the address
                   -- of its heap stuff and then pushes a three. Its heap area is the heap ptr when we
                   -- called does>, so, PRELUDE + 11 (blah's entry) + 26 (blah's body, part of which is fnord's) + 12 (fnord's entry)
@@ -400,6 +403,124 @@ test_prelude_line(': blah create 15 , does> 3 ; blah fnord fnord',
                                 inst('push', heap(PRELUDE + 11 + 26 + 12)), -- Push the old value, which was right
                                 -- after the header, the 15 we compiled
                                 inst('jmp', heap(PRELUDE + 11 + 21)))) -- jmp to the runtime behavior, after the does> call
+
+--------------------------------------------------
+
+-- Defining a word and calling it, with the normal colon / semicolon words
+test_line(': fives 5 5 5 ; fives',
+          expect_stack{ 5, 5, 5 },
+          expect_r_stack{})
+
+--------------------------------------------------
+
+-- Basic use of asm
+test_line('create execute asm jmp',
+          expect_word(Symbols.heap_ptr, heap(15)),
+          expect_word(heap(8), heap(14)),
+          expect_memory(heap(14), op('jmp')))
+
+-- Invalid asm
+test_line('asm blah',
+          expect_output('Invalid mnemonic: blah\n'),
+          expect_r_stack{},
+          expect_stack{})
+
+-- Asm with args
+test_line('45 #asm push',
+          expect_memory(heap(0), inst('push', 45)),
+          expect_word(Symbols.heap_ptr, heap(4)))
+
+--------------------------------------------------
+
+-- Comma compile a number
+test_line('1234 ,',
+          expect_word(heap(0), 1234),
+          expect_heap_advance(3))
+
+--------------------------------------------------
+
+-- Tick a word
+test_line("' asm", expect_stack{ Symbols.nova_asm })
+
+-- Bracket-tick a word
+test_line("] ['] asm",
+          expect_memory(heap(0), inst('push', Symbols.nova_asm)),
+          expect_heap_advance(4))
+
+-- Tick gibberish
+test_line("' bananas",
+          expect_stack{},
+          expect_r_stack{},
+          expect_output('Not a word: bananas\n'))
+
+-- Bracket-tick gibberish
+test_line("] ['] penguin",
+          expect_stack{},
+          expect_r_stack{},
+          expect_output('Not a word: penguin\n'))
+
+-- Tick a compile word
+test_line("' [", expect_stack{ Symbols.nova_open_bracket })
+
+-- Bracket-tick a compile word
+test_line("] ['] does>",
+          expect_memory(heap(0), inst('push', Symbols.does_word)),
+          expect_heap_advance(4))
+
+--------------------------------------------------
+
+-- Fetch the pad address
+test_line('  pad  ', expect_stack{ Symbols.pad })
+
+-- Read a word to the pad
+test_line('word mango',
+          expect_stack{ Symbols.pad },
+          expect_memory(Symbols.pad, 'm', 'a', 'n', 'g', 'o', 0))
+
+--------------------------------------------------
+
+-- Literal, compiles a push instruction
+test_line('1234 ] literal',
+          expect_stack{},
+          expect_memory(heap(0), inst('push', 1234)),
+          expect_heap_advance(4))
+
+--------------------------------------------------
+
+-- Paren comments
+test_line('1 2 ( 3 4 5 ) 6', expect_stack{1, 2, 6})
+
+-- Nested paren comments
+test_line('1 2 ( ( 3 4 ) 5 6', expect_stack{1, 2})
+
+-- Compiled paren comments
+test_line('] 1 2 ( 3 4 5 ) 6', expect_heap_advance(12))
+
+-- Compiled nested paren comments
+test_line('] 1 2 ( ( 3 4 ) 5 6', expect_heap_advance(8))
+
+-- Backslash comments
+test_lines({ '1 2 \\ 3 4', '5 6' }, expect_stack{1, 2, 5, 6})
+
+-- Compiled backslash comments
+test_lines({ '] 1 2 \\ 3 4', '5 6' }, expect_heap_advance(16))
+
+--------------------------------------------------
+
+--[==[
+    TODOs
+    X ' and ['] words and tests
+    X Rewrite : and ; in asm
+    X literal
+    X pad, word
+    X comments
+
+    Later TODOs
+    - Prelude of simple words
+    - Rewrite / compress string fns
+    - String I/O
+    - Numeric bases and number
+--]==]
 
 --------------------------------------------------
 

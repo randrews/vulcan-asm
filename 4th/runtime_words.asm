@@ -38,8 +38,3 @@ squote: ; ( -- addr )
     add 1
     storew heap_ptr
     ret
-
-tick_word:
-    call word_to_heap
-    loadw heap_ptr
-    jmp tick
