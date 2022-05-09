@@ -145,6 +145,22 @@ function expect_heap_advance(n)
     end
 end
 
+function expect_cursor(n)
+    return function(_s, _o, cpu)
+        local expected = Symbols.tib + n
+        local actual = cpu:peek24(Symbols.cursor)
+        assert(actual == expected, string.format('cursor should advance %d, actual %d', n, actual - Symbols.tib))
+    end
+end
+
+function expect_4th_rstack(stack)
+    local words = {}
+    for _, v in ipairs(stack) do table.insert(words, word(v)) end
+    return all(
+        expect_memory(Symbols.r_stack, table.unpack(words)),
+        expect_word(Symbols.r_stack_ptr, Symbols.r_stack + #stack * 3))
+end
+
 function dump_memory(addr, len)
     return function(_s, _o, cpu)
         for a = addr, addr + len do
@@ -536,6 +552,7 @@ test_line('-15 .', expect_output('-15'))
 -- Compiling strings to the heap
 test_line('s" foo"',
           expect_stack{heap(0)},
+          expect_cursor(7),
           expect_memory(heap(0), 'f', 'o', 'o', 0),
           expect_heap_advance(4))
 
@@ -549,6 +566,7 @@ test_line('s" "',
 test_line('s" foo',
           expect_stack{},
           expect_heap_advance(0),
+          expect_cursor(6),
           expect_output('Unclosed string'))
 
 -- Compile move squote
@@ -566,15 +584,94 @@ test_line('] s" foo',
 
 --------------------------------------------------
 
+-- Basic output
+test_line('." foo"',
+          expect_stack{}, expect_heap_advance(0),
+          expect_output('foo'))
+
+-- Compile output
+test_line('] ." foo"',
+          expect_heap_advance(16),
+          expect_memory(heap(0),
+                        inst('jmpr', 8),
+                        'f', 'o', 'o', 0,
+                        inst('push', heap(4)),
+                        inst('call', Symbols.print)))
+
+-- Unterminated output
+test_line('." foo',
+          expect_stack{}, expect_heap_advance(0),
+          expect_output('Unclosed string'))
+
+-- Compile output
+test_line('] ." foo',
+          expect_heap_advance(0),
+          expect_output('Unclosed string'))
+
+--------------------------------------------------
+
+-- Test print fn
+test_line('s" foo" print',
+          expect_cursor(13),
+          expect_heap_advance(4),
+          expect_output('foo'))
+
+--------------------------------------------------
+
+-- Test compare
+test_line('s" foo" s" bar" compare', expect_stack{0})
+test_line('s" foo" s" foo" compare', expect_stack{1})
+test_line('s" foo" ?dup compare', expect_stack{1}) -- There's no simple dup...
+test_line('s" foo" s" foo234" compare', expect_stack{0})
+test_line('s" foo123" s" foo" compare', expect_stack{0})
+
+--------------------------------------------------
+
+test_line('10 20 30 .s',
+          expect_stack{ 10, 20, 30 },
+          expect_output('<< 10 20 30 >>'))
+
+test_line('10 20 30 hex .s',
+          expect_stack{ 10, 20, 30 },
+          expect_output('<< a 14 1e >>'))
+
+test_line('.s',
+          expect_stack{},
+          expect_output('<< >>'))
+
+--------------------------------------------------
+
+test_line('3 >r r@',
+          expect_stack{3},
+          expect_4th_rstack{3})
+
+test_line('3 >r 5 r>',
+          expect_stack{5, 3},
+          expect_4th_rstack{})
+
+test_line('10 20 30 >r >r >r 2 rpick',
+          expect_stack{30},
+          expect_4th_rstack{30, 20, 10})
+
+--------------------------------------------------
+
+test_line('&heap', expect_stack{Symbols.heap_ptr})
+
+--------------------------------------------------
+
 --[==[
     TODOs
+    X Rstack words
+    X String I/O
+    X Numeric bases and number
+
+    Later TODOs
     - Prelude of simple words
     - Rewrite / compress string fns
-    - String I/O
-    X Numeric bases and number
 --]==]
 
 --------------------------------------------------
 
 print('Bytes available: ' .. 131072 - heap(0))
 print('Text size: ' .. Symbols.data_start - 0x400)
+print('Including dictionaries: ' .. Symbols.heap_ptr - 0x400)

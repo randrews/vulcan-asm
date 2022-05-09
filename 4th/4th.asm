@@ -8,7 +8,7 @@ stop:
 #include "dict_utils.asm"
 #include "string.asm"
 #include "compiler_utils.asm"
-#include "runtime_words.asm"
+#include "numbers.asm"
 #include "compile_words.asm"
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -441,9 +441,10 @@ nova_char: ; ( -- ch )
     #end
     ret 0
 
-; Compiles a string to the heap and pushes a pointer to it
-nova_squote: ; ( -- addr )
-    loadw heap_ptr
+; Copies a string (until the first double quote) to the destination
+; and null-terminates it. Increments cursor accordingly. Returns
+; either the address after the string for success or 0 if it was unterminated.
+nova_quote_string_to: ; ( dest -- flag )
     pushr
     #while
         call nova_char
@@ -455,26 +456,43 @@ nova_squote: ; ( -- addr )
         gt 0
         and ; It's not a null-term and it's not a double quote
     #do
-        loadw heap_ptr
+        peekr
         store
-        loadw heap_ptr
+        popr
         add 1
-        storew heap_ptr
+        pushr
     #end
     #unless ; Unterminated string!
         popr
-        storew heap_ptr ; Restore the original heap_ptr
+        pop
         push unclosed_error
-        jmp print
+        call print
+        ret 0
     #end
-    loadw heap_ptr
+    loadw cursor ; Skip any junk after the close quote; cursor always points at a valid word
+    call skip_nonword
+    storew cursor
+    popr ; Yoink out our running pointer to the dest so we can null-term it
     dup ; ( here here )
-    push 0
-    swap
-    store
-    add 1
-    storew heap_ptr ; Null-term the string and increment heap ptr
-    popr ; The original heap ptr is actually the string ptr
+    swap 0
+    store ; null-term the string
+    add 1 ; Increment it so we return the point after the string (counting its null-term)
+    ret
+
+; Compiles a string to the heap and pushes a pointer to it
+nova_squote: ; ( -- addr )
+    loadw heap_ptr
+    dup
+    pushr
+    call nova_quote_string_to
+    call dupnz
+    #if
+        storew heap_ptr
+        popr
+    #else
+        popr
+        pop
+    #end
     ret
 
 ; The s-quote equivalent in compile mode:
@@ -504,13 +522,97 @@ nova_compile_squote:
     pop
     ret
 
+; Read a quote string to the pad and then print it
+nova_dotquote:
+    push pad
+    call nova_quote_string_to
+    #if
+        push pad
+        jmp print
+    #end
+    ret
+
 ; The dot-quote equivalent in compile mode:
 nova_compile_dotquote:
+    loadw heap_ptr ; store the heap at start
+    pushr
     call nova_compile_squote
-    ; compile a call to print
-    push print
-    push $CALL
-    call compile_instruction_arg
+    loadw heap_ptr ; see if nova_compile_squote actually changed it
+    popr
+    xor
+    #if ; we actually compiled something, compile a call to print
+        push print
+        push $CALL
+        jmp compile_instruction_arg
+    #end
+    ret
+
+; Print the current stack contents, in order from 256 up, separated by spaces
+; TODO this depends on a 256-based stack and will need to be changed if you call setsdp
+nova_print_stack: ; ( -- )
+    push print_stack_start
+    call print
+    sdp
+    sub 6
+    pushr
+    pop
+    push 256
+    #while
+        dup
+        peekr
+        lt
+    #do
+        dup
+        loadw
+        loadw itoa_hook
+        call
+        push 32
+        store 2
+        add 3
+    #end
+    popr
+    pop
+    pop
+    push print_stack_end
+    call print
+    ret
+
+; The R stack is built manually with these fns, because it can't be the actual
+; CPU return stack for reasons.
+
+; The equivalent of peekr
+nova_peekr:
+    loadw r_stack_ptr
+    sub 3
+    loadw
+    ret
+
+; Pick from the R stack
+nova_rpick: ; ( i -- c_stack[i] ) where the top of the R stack is '0 rpick'
+    loadw r_stack_ptr
+    swap
+    add 1
+    mul 3
+    sub
+    loadw
+    ret
+
+; Equivalent of pushr
+nova_pushr: ; ( val -- )
+    loadw r_stack_ptr
+    dup
+    add 3
+    storew r_stack_ptr
+    storew
+    ret
+
+; Equivalent of popr
+nova_popr: ; ( -- val )
+    loadw r_stack_ptr
+    sub 3
+    dup
+    storew r_stack_ptr
+    loadw
     ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -675,9 +777,9 @@ pad: .db 0
 .org pad + 0x100
 
 ; A stack for compiling control structures
-c_stack_ptr: .db c_stack
-c_stack: .db 0
-.org c_stack + 96
+r_stack_ptr: .db r_stack
+r_stack: .db 0
+.org r_stack + 96
 
 ; Things we define start here:
 heap_start:

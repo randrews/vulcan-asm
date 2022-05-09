@@ -2,14 +2,14 @@
 \ DONE: [ ] asm , postpone exit literal (foundational compiler interface)
 \ DONE: create does> immediate ' ['] (foundational dictionary interface)
 \ DONE: word number (foundational parser interface)
-\ >r r> r@ rpick (because they aren't using the normal stack)
+\ DONE: >r r> r@ rpick (because they aren't using the normal stack)
 \ DONE: dec hex pad (because they modify global vars)
-\ .s (because it uses sdp)
-\ \ ) ( s" ." (because they deal with parser state)
-\ . print compare ?dup (because we need asm ones anyway and it's free)
+\ DONE: .s (because it uses sdp)
+\ DONE: \ ) ( s" ." (because they deal with parser state)
+\ DONE: . print compare ?dup (because we need asm ones anyway and it's free)
 
 \ New words:
-\ &heap pushes the address of the heap pointer, so `here` is ``&heap @`
+\ DONE: &heap pushes the address of the heap pointer, so `here` is ``&heap @`
 \ quit exists in both dictionaries, clears the stack (setsdp) and jmps to the main loop.
 \ DONE: asm is a word which compiles an opcode without an arg
 \ ,asm is an immediate word which compiles the instructions to compile an opcode

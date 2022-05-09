@@ -75,28 +75,28 @@ push_jump: ; ( opcode -- )
 
 ; Pushes an address of an unresolved pointer to the control stack
 push_c_addr: ; ( addr -- )
-    loadw c_stack_ptr
+    loadw r_stack_ptr
     dup
     add 3
-    storew c_stack_ptr
+    storew r_stack_ptr
     storew
     ret
 
 ; Pops the top of the control stack back to the data stack
 pop_c_addr: ; ( -- addr )
-    loadw c_stack_ptr
+    loadw r_stack_ptr
     sub 3
     dup
-    storew c_stack_ptr
+    storew r_stack_ptr
     loadw
     ret
 
 ; Resolve the top address on the control stack to the current top of stack address
 resolve_c_addr: ; ( heap-addr -- )
-    loadw c_stack_ptr
+    loadw r_stack_ptr
     sub 3
     dup ; ( heap cstack-3 cstack-3 )
-    storew c_stack_ptr
+    storew r_stack_ptr
     loadw ; ( heap arg-addr )
     dup
     sub 1 ; ( heap arg-addr instr-addr )

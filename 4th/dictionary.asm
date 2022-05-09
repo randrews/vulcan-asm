@@ -39,6 +39,10 @@ compile_dict_start:
 .db nova_compile_squote
 .db $+1
 
+.db ".\"\0"
+.db nova_compile_dotquote
+.db $+1
+
 .db "\\\0"
 .db backslash
 .db $+1
@@ -50,46 +54,6 @@ compile_dict_start:
 .db ")\0"
 .db close_paren_stub
 .db 0 ; Sentinel for end of dictionary
-
-;;;;; .db ".\"\0"
-;;;;; .db compile_dotquote
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "begin\0"
-;;;;; .db begin_word
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "again\0"
-;;;;; .db again_word
-;;;;; .db $+1
-;;;;;
-;;;;; .db "until\0"
-;;;;; .db until_word
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "while\0"
-;;;;; .db while_word
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "repeat\0"
-;;;;; .db repeat_word
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "do\0"
-;;;;; .db do_word
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "?do\0"
-;;;;; .db pretest_do_word
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "loop\0"
-;;;;; .db loop_word
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "+loop\0"
-;;;;; .db plusloop_word
-;;;;; .db $+1
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; The initial runtime word dictionary:
@@ -160,6 +124,43 @@ ret pad
 .db nova_squote
 .db $+1
 
+.db ".\"\0"
+.db nova_dotquote
+.db $+1
+
+.db "print\0"
+.db print
+.db $+1
+
+.db "compare\0"
+.db compare
+.db $+1
+
+.db ".s\0"
+.db nova_print_stack
+.db $+1
+
+.db ">r\0"
+.db nova_pushr
+.db $+1
+
+.db "r>\0"
+.db nova_popr
+.db $+1
+
+.db "r@\0"
+.db nova_peekr
+.db $+1
+
+.db "rpick\0"
+.db nova_rpick
+.db $+1
+
+.db "&heap\0"
+.db $+2
+.db $+2
+ret heap_ptr
+
 .db "\\\0"
 .db backslash
 .db $+1
@@ -171,41 +172,3 @@ ret pad
 .db ")\0"
 .db close_paren_stub
 .db 0
-
-;;;;; .db "compare\0"
-;;;;; .db compare
-;;;;; .db $+1
-;;;;; 
-;;;;; .db ".\"\0"
-;;;;; .db dotquote
-;;;;; .db $+1
-;;;;; 
-;;;;; .db ">r\0"
-;;;;; .db push_c_addr
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "r>\0"
-;;;;; .db pop_c_addr
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "r@\0"
-;;;;; .db w_peek_r
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "rpick\0"
-;;;;; .db w_rpick
-;;;;; .db $+1
-;;;;;
-;;;;; .db "here\0"
-;;;;; .db $+2
-;;;;; .db $+3
-;;;;; loadw heap_ptr
-;;;;; ret
-;;;;; 
-;;;;; .db ".s\0"
-;;;;; .db print_stack
-;;;;; .db $+1
-;;;;; 
-;;;;; .db "print\0"
-;;;;; .db print
-;;;;; .db $+1

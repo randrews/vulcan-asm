@@ -103,46 +103,16 @@ hex_itoa: ; ( num -- )
     pop
     ret
 
-; Print the current stack contents, in order from 256 up, separated by spaces
-; TODO this depends on a 256-based stack and will need to be changed if you call setsdp
-print_stack: ; ( -- )
-    push print_stack_start
-    call print
-    sdp
-    sub 6
-    pushr
-    pop
-    push 256
-    #while
-        dup
-        peekr
-        lt
-    #do
-        dup
-        loadw
-        loadw itoa_hook
-        call
-        push 32
-        store 2
-        add 3
-    #end
-    popr
-    pop
-    pop
-    push print_stack_end
-    call print
-    ret
-
 ; Select one of a / b to leave on the stack, depending on whether
 ; [a b comparator] returns nonzero. This is the guts of min / max /
 ; umin / umax
-select_num: ; ( a b comparator -- n )
-    pushr
-    pick 1
-    pick 1
-    popr
-    call
-    brnz @+2
-    swap
-    pop
-    ret
+;; select_num: ; ( a b comparator -- n )
+;;     pushr
+;;     pick 1
+;;     pick 1
+;;     popr
+;;     call
+;;     brnz @+2
+;;     swap
+;;     pop
+;;     ret

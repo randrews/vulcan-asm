@@ -161,32 +161,6 @@ until_double_quote: ; ( ch -- bool )
     and
     ret
 
-; Reads from the input line a string, starting with the first word character after cursor
-; and ending with a double quote. Copies it to the pad, null-terminates it, and
-; advances cursor to right after the closing quote. Leaves on the stack the address of the
-; null terminator, or a zero if the string is unclosed (in addition to printing an error)
-read_quote_string: ; ( dest -- end-addr )
-    loadw cursor
-    call skip_nonword
-    swap
-    push until_double_quote
-    call copy_string ; ( src-end dest-end )
-    swap ; ( dest-end src-end )
-    dup
-    load
-    brz @read_string_unclosed
-    add 1
-    storew cursor
-    ret
-read_string_unclosed:
-    push unclosed_error
-    call print
-    push 0
-    store tib
-    push tib
-    storew cursor
-    jmpr @end0_pop2
-
 ; Copy a string to somewhere else, given a function to test whether a given
 ; character is the end of the string. Calls test for each character and copies
 ; each one for which it returns false, then adds a null terminator and returns
@@ -220,18 +194,6 @@ copy_string_done:
     popr
     pop
     ret
-
-;;; ; Print some number of spaces
-;;; spaces: ; ( n -- )
-;;;     #while
-;;;         call dupnz
-;;;         gt 0
-;;;     #do
-;;;         push 32
-;;;         store 2
-;;;         sub 1
-;;;     #end
-;;;     ret
 
 ; Return a flag of whether two strings are equal
 compare: ; ( str1 str2 -- equal? )
