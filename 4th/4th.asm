@@ -21,7 +21,7 @@ eval: ; ( ptr -- ??? )
     loadw handleword_hook
     xor linecomment
     #unless
-        call pop_c_addr
+        call nova_popr
         storew handleword_hook
     #end
     call skip_nonword ; Skip any leading whitespace
@@ -698,11 +698,12 @@ parencomment: ; ( word-start-addr -- )
     #end
     ret ; It was something else (or zero) so just ignore it, it's a comment
 
-; Store the current handleword_hook in the C stack,
-; put parencomment in its place.
+; Store the current handleword_hook in the R stack, put parencomment in its place.
+; It won't matter because it's not like anything's gonna be looking in the rstack
+; while we eval a comment.
 open_paren:
     loadw handleword_hook
-    call push_c_addr
+    call nova_pushr
     push parencomment
     storew handleword_hook
     ret
@@ -714,7 +715,7 @@ open_paren:
 ; up actually doing anything (it's only callable from / by
 ; parencomment)
 close_paren:
-    call pop_c_addr
+    call nova_popr
     storew handleword_hook
 close_paren_stub:
     ret
@@ -725,7 +726,7 @@ close_paren_stub:
 ; pop the old one back out.
 backslash:
     loadw handleword_hook
-    call push_c_addr
+    call nova_pushr
     push linecomment
     storew handleword_hook
     ret

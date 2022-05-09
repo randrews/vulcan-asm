@@ -70,25 +70,7 @@ push_jump: ; ( opcode -- )
     call compile_instruction_arg
     loadw heap_ptr
     sub 3
-    call push_c_addr
-    ret
-
-; Pushes an address of an unresolved pointer to the control stack
-push_c_addr: ; ( addr -- )
-    loadw r_stack_ptr
-    dup
-    add 3
-    storew r_stack_ptr
-    storew
-    ret
-
-; Pops the top of the control stack back to the data stack
-pop_c_addr: ; ( -- addr )
-    loadw r_stack_ptr
-    sub 3
-    dup
-    storew r_stack_ptr
-    loadw
+    call nova_pushr
     ret
 
 ; Resolve the top address on the control stack to the current top of stack address
