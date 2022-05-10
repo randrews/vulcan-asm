@@ -12,10 +12,11 @@
 \ DONE: &heap pushes the address of the heap pointer, so `here` is ``&heap @`
 \ quit exists in both dictionaries, clears the stack (setsdp) and jmps to the main loop.
 \ DONE: asm is a word which compiles an opcode without an arg
-\ ,asm is an immediate word which compiles the instructions to compile an opcode
+\ DONE: asm in immediate mode compiles the instructions to compile an opcode
 \ DONE: continue compiles a jmp to a given word (a tail call)
-\ ,brz ,brnz and ,jmpr are immediate words which compile those instructions, but with a 0 argument. The address of the argument is >r'd
-\ resolve is an immediate word which pops the top address from the ctrl stack and writes `here` to it.
+\ DONE: >asm is a word which reads a mnemonic and compiles that instruction, but with a 0 argument. The address of the argument is >r'd
+\ DONE: >asm in compile mode reads a mnemonic and compiles instructions to compile that word, >r-ing the arg address
+\ DONE: resolve is an immediate word which pops the top address from the ctrl stack and writes `here` to it as a relative address
 
 \ note 1: why do you need exit?
 \ Because the defn for semicolon needs to postpone something to compile a ret, and you can't use ,asm
@@ -35,7 +36,7 @@ create : ] create continue ] [
 create execute $jmp asm 
 
 \ Control structure words
-: if ,brz ; immediate
+: if >asm brz ; immediate
 : then resolve ; immediate
 : else r> ,jmpr >r resolve ; immediate
 : variable create 0 , does> ;

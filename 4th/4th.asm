@@ -31,13 +31,13 @@ eval: ; ( ptr -- ??? )
         load
     #do
         loadw cursor ; Copy the word we care about to the heap
-        loadw heap_ptr
+        loadw heap
         call nova_word_to
         loadw cursor ; Advance cursor by the word we just copied and the following crap
         call skip_word
         call skip_nonword
         storew cursor
-        loadw heap_ptr ; Load the address we just put the word at and execute it
+        loadw heap ; Load the address we just put the word at and execute it
         loadw handleword_hook
         call
     #end
@@ -49,13 +49,13 @@ eval: ; ( ptr -- ??? )
 ; of the next word (or the null terminator if this is the last word); do not advance heap.
 nova_word: ; ( -- )
     loadw cursor
-    loadw heap_ptr
+    loadw heap
     call nova_word_to
     loadw cursor
     call skip_word
     call skip_nonword
     storew cursor
-    loadw heap_ptr ; But what if the word is empty string?
+    loadw heap ; But what if the word is empty string?
     load
     #unless
         push expected_word_err
@@ -87,7 +87,7 @@ nova_word_to: ; ( src dest -- )
 
 nova_number:
     call nova_word
-    loadw heap_ptr
+    loadw heap
     loadw is_number_hook
     call
     ret
@@ -95,7 +95,7 @@ nova_number:
 ; Creates a new dictionary entry, pointing at the (new) heap, for the following word
 nova_create: ; ( -- )
     call nova_word ; consume a word and stick it on the heap
-    loadw heap_ptr ; Load the heap ptr and advance it to the place right after the word's null-terminator
+    loadw heap ; Load the heap ptr and advance it to the place right after the word's null-terminator
     call skip_word
     add 1
     dup ; ( def_ptr def_ptr )
@@ -106,10 +106,10 @@ nova_create: ; ( -- )
     pick 1
     add 3
     storew ; point it at the dictionary
-    loadw heap_ptr
+    loadw heap
     storew dictionary ; point the dictionary at it
     add 6
-    storew heap_ptr ; advance the heap ptr
+    storew heap ; advance the heap ptr
     ret
 
 ; Enter immediate mode or compile mode
@@ -122,21 +122,21 @@ nova_close_bracket: push compile_handleword
 ; Compile a jmp to a word
 nova_continue: ; ( -- )
     call nova_word
-    loadw heap_ptr
+    loadw heap
     call tick ; ( ptr-to-word )
     call dupnz
     #if ; It's actually a word!
         push $JMP
         jmpr @compile_instruction_arg
     #else ; It's not a normal word, but could be a compile word
-        loadw heap_ptr
+        loadw heap
         call compile_tick
         call dupnz
         #if ; Compile word, compile it anyway
             push $JMP
             jmpr @compile_instruction_arg
         #else ; This is just not a word at all
-            loadw heap_ptr
+            loadw heap
             jmpr @missing_word
         #end
     #end
@@ -155,7 +155,7 @@ nova_continue: ; ( -- )
 ; just call "do" right now because it's immediate).
 nova_postpone:
     call nova_word
-    loadw heap_ptr
+    loadw heap
     call tick ; ( ptr-to-word )
     call dupnz
     #if ; It's a normal word
@@ -168,14 +168,14 @@ nova_postpone:
         push $CALL
         jmpr @compile_instruction_arg ; compile a call of compile_instruction_arg
     #else ; It's not a normal word, maybe a compile word?
-        loadw heap_ptr
+        loadw heap
         call compile_tick
         call dupnz
         #if ; It's a compile word
             push $CALL
             jmpr @compile_instruction_arg ; Compile a call to it.
         #else ; It's not a compile word either, error out
-            loadw heap_ptr
+            loadw heap
             jmpr @missing_word
         #end
     #end
@@ -204,10 +204,10 @@ nova_immediate:
 
 ; Compiles the top of stack to the heap
 nova_comma:
-    loadw heap_ptr
+    loadw heap
     dup
     add 3
-    storew heap_ptr
+    storew heap
     storew
     ret
 
@@ -247,7 +247,7 @@ nova_word_to_pad:
 ; > push a 12 (runtime behavior of the new word)
 ; > return
 does_word:
-    loadw heap_ptr
+    loadw heap
     add 9 ; to account for the push itself, the call and the ret
     push $PUSH
     call compile_instruction_arg ; push the addr right after the does>
@@ -272,7 +272,7 @@ does_at_runtime: ; ( does-addr -- )
     dup
     loadw
     pushr ; stash old in the r stack
-    loadw heap_ptr
+    loadw heap
     swap
     storew ; point it at the new definition
     popr
@@ -331,7 +331,7 @@ mnemonics_end:
 nova_opcode_for_word: ; ( -- opcode ) -or- ( -- word-ptr -1 ) if it isn't a mnemonic
     call nova_word
     pushr 0
-    loadw heap_ptr
+    loadw heap
     push mnemonics
     #until ; While our ptr into mnemonics is the different from the heap str
         pick 1
@@ -360,32 +360,102 @@ nova_opcode_for_word: ; ( -- opcode ) -or- ( -- word-ptr -1 ) if it isn't a mnem
 nova_asm:
     call nova_opcode_for_word
     dup
-    sub 0xffffff
-    #if
-        jmp compile_instruction
-    #else
+    xor -1
+    #unless
         pop
         jmp invalid_mnemonic
     #end
+    jmp compile_instruction
 
-nova_arg_asm:
+nova_arg_asm_word:
     call nova_opcode_for_word
     dup
-    sub 0xffffff
-    #if
-        jmp compile_instruction_arg
-    #else
+    xor -1
+    #unless
         pop
         jmp invalid_mnemonic
     #end
+    jmp compile_instruction_arg
+
+; Read a mnemonic and compile that instruction with a 0 arg. The address of the arg
+; gets >r'd, for later resolve-calling
+nova_asm_to_word:
+    call nova_opcode_for_word
+    dup
+    xor -1
+    #unless ; Thaaaat's not an opcode...
+        pop
+        jmp invalid_mnemonic
+    #end
+nova_asm_to: ; When we >asm in compile mode in comes here
+    loadw heap
+    add 1
+    call nova_pushr ; heap + 1 is our arg address, >r it
+    swap 0
+    jmp compile_instruction_arg ; Go ahead and compile the jmp-or-whatever
+
+; This word is special. This is >asm in compile mode.
+; This reads a mnemonic just like >asm, from the compiled source. But once it has it (and has
+; ensured it's valid) instead of actually compiling the instruction, it compiles a push of
+; the opcode and a call of the business-end of asm_to, so that this becomes compiled code
+; that will compile that instruction.
+; So, this is sort of halfway in between a runtime and a compile word: it's compile because
+; it's reading its mnemonic off the input, immediately, but it's runtime because what it does
+; with that mnemonic is compile a call to something, rather than do anything right away.
+; nova_compile_asm and nova_compile_asm_arg work the same way, more or less
+nova_compile_asm_to:
+    call nova_opcode_for_word
+    dup
+    xor -1
+    #unless ; Thaaaat's not an opcode...
+        pop
+        jmp invalid_mnemonic
+    #end
+    push $PUSH
+    call compile_instruction_arg ; compile a push of the opcode
+    push nova_asm_to
+    push $CALL
+    jmp compile_instruction_arg ; compile a call to the asm_to guts that actually compiles the op
+
+nova_compile_asm:
+    call nova_opcode_for_word
+    dup
+    xor -1
+    #unless
+        pop
+        jmp invalid_mnemonic
+    #end
+    push $PUSH
+    call compile_instruction_arg ; compile 'push <opcode>'
+    push compile_instruction
+    push $CALL
+    jmp compile_instruction_arg ; compile 'call compile_instruction'
+
+nova_compile_arg_asm:
+    call nova_opcode_for_word
+    dup
+    xor -1
+    #unless
+        pop
+        jmp invalid_mnemonic
+    #end
+    push $PUSH
+    call compile_instruction_arg ; compile 'push <opcode>'
+    push compile_instruction_arg
+    push $CALL
+    jmp compile_instruction_arg ; compile 'call compile_instruction_arg'
+
+nova_here:
+    loadw heap
+    ret
 
 find_word:
     call nova_word
-    loadw heap_ptr
+    loadw heap
     call tick
     call dupnz
     #unless
-        loadw heap_ptr
+        loadw heap
         call compile_tick
     #end
     ret
@@ -394,7 +464,7 @@ nova_tick:
     call find_word
     call dupnz
     #unless
-        loadw heap_ptr
+        loadw heap
         jmp missing_word
     #end
     ret
@@ -403,7 +473,7 @@ nova_bracket_tick:
     call find_word
     call dupnz
     #unless
-        loadw heap_ptr
+        loadw heap
         jmp missing_word
     #end
     ; Intentionally falls through to nova_literal!
@@ -481,13 +551,13 @@ nova_quote_string_to: ; ( dest -- flag )
 
 ; Compiles a string to the heap and pushes a pointer to it
 nova_squote: ; ( -- addr )
-    loadw heap_ptr
+    loadw heap
     dup
     pushr
     call nova_quote_string_to
     call dupnz
     #if
-        storew heap_ptr
+        storew heap
         popr
     #else
         popr
@@ -497,24 +567,23 @@ nova_squote: ; ( -- addr )
 
 ; The s-quote equivalent in compile mode:
 nova_compile_squote:
-    loadw heap_ptr
+    loadw heap
     pushr
     push $JMPR
     call push_jump ; compile a jmpr to get us past the string
     call nova_squote ; ( addr )
     ;;;
-    loadw heap_ptr ; squote might have failed and not actually compiled anything
+    loadw heap ; squote might have failed and not actually compiled anything
     sub 4          ; (because of an unterminated string) We'll handle that:
     peekr          ; Detect if our saved heap is the current heap - 4, meaning
     xor            ; that all we've compiled is that jmp...
     #unless
-        popr ; So just restore that saved heap_ptr
-        storew heap_ptr
+        popr ; So just restore that saved heap
+        storew heap
         ret
     #end
     ;;;
-    loadw heap_ptr
-    call resolve_c_addr ; Jump to right after the null-terminator
+    call nova_resolve ; Jump to right after the null-terminator
     ; compile a push with the string start
     push $PUSH ; ( addr $push )
     call compile_instruction_arg
@@ -534,10 +603,10 @@ nova_dotquote:
 
 ; The dot-quote equivalent in compile mode:
 nova_compile_dotquote:
-    loadw heap_ptr ; store the heap at start
+    loadw heap ; store the heap at start
     pushr
     call nova_compile_squote
-    loadw heap_ptr ; see if nova_compile_squote actually changed it
+    loadw heap ; see if nova_compile_squote actually changed it
     popr
     xor
     #if ; we actually compiled something, compile a call to print
@@ -756,7 +825,7 @@ print_stack_end: .db ">>\0"
 #include "dictionary.asm"
 
 ; Assorted support variables
-heap_ptr: .db heap_start ; holds the address in which to start the next heap entry
+heap: .db heap_start ; holds the address in which to start the next heap entry
 handleword_hook: .db immediate_handleword ; The current function used to handle / compile words, switches based on mode
 is_number_hook: .db is_number ; The current function used to parse numbers, switches with hex / dec
 itoa_hook: .db itoa ; The current function used to print numbers, switches with hex / dec

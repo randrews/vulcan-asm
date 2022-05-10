@@ -1,6 +1,7 @@
 input_number:
-    call word_to_heap
-    loadw heap_ptr
+    loadw cursor
+    call nova_word
+    loadw heap
     loadw is_number_hook
     call
     ret
@@ -12,6 +13,7 @@ print_number:
 
 ; Print the number on top of the stack, in decimal, with a
 ; leading '-' if it's negative
+; TODO: refactor this to use macros
 itoa: ; ( num -- )
     dup
     alt 0 ; We less than 0?
@@ -21,7 +23,7 @@ itoa: ; ( num -- )
     push 45 ; 45 is '-', print a leading dash
     store 2
 itoa_pos: ; ( num -- )
-    loadw heap_ptr ; Gonna build the string on the heap
+    loadw heap ; Gonna build the string on the heap
     dup
     swap 0
     store
@@ -64,7 +66,7 @@ itoa_print_loop:
 
 ; Print the number on top of the stack, in hex
 hex_itoa: ; ( num -- )
-    loadw heap_ptr ; Build the string on the heap, but don't allot the space
+    loadw heap ; Build the string on the heap, but don't allot the space
     dup
     swap 0
     store ; Store a null terminator as the first char
@@ -102,17 +104,3 @@ hex_itoa: ; ( num -- )
     #end
     pop
     ret
-
-; Select one of a / b to leave on the stack, depending on whether
-; [a b comparator] returns nonzero. This is the guts of min / max /
-; umin / umax
-;; select_num: ; ( a b comparator -- n )
-;;     pushr
-;;     pick 1
-;;     pick 1
-;;     popr
-;;     call
-;;     brnz @+2
-;;     swap
-;;     pop
-;;     ret

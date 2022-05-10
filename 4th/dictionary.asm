@@ -43,6 +43,18 @@ compile_dict_start:
 .db nova_compile_dotquote
 .db $+1
 
+.db "asm\0"
+.db nova_compile_asm
+.db $+1
+
+.db "#asm\0"
+.db nova_compile_arg_asm
+.db $+1
+
+.db ">asm\0"
+.db nova_compile_asm_to
+.db $+1
+
 .db "\\\0"
 .db backslash
 .db $+1
@@ -88,7 +100,7 @@ dict_start:
 .db $+1
 
 .db "#asm\0"
-.db nova_arg_asm
+.db nova_arg_asm_word
 .db $+1
 
 .db "pad\0"
@@ -159,7 +171,19 @@ ret pad
 .db "&heap\0"
 .db $+2
 .db $+2
-ret heap_ptr
+ret heap
+
+.db "here\0"
+.db nova_here
+.db $+1
+
+.db ">asm\0"
+.db nova_asm_to_word
+.db $+1
+
+.db "resolve\0"
+.db nova_resolve
+.db $+1
 
 .db "\\\0"
 .db backslash

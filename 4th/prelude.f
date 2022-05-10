@@ -2,8 +2,8 @@ create : ] create continue ] [
 create execute ] asm jmp [
 : ; postpone exit continue [ [ immediate
 
-: if ,brz ; immediate
-: then resolve ; immediate
+: if >asm brz ; immediate
+: then postpone resolve ; immediate
 : else r> ,jmpr >r resolve ; immediate
 : variable create 0 , does> ;
 : unloop r> r> drop drop ;

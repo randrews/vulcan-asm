@@ -140,7 +140,7 @@ end
 function expect_heap_advance(n)
     return function(_s, _o, cpu)
         local expected = heap(0) + n
-        local actual = cpu:peek24(Symbols.heap_ptr)
+        local actual = cpu:peek24(Symbols.heap)
         assert(actual == expected, string.format('heap should advance %d, actual %d', n, actual - heap(0)))
     end
 end
@@ -250,7 +250,7 @@ test_line('notaword', expect_output('Not a word: notaword\n'))
 --------------------------------------------------
 
 test_line('create blah',
-          expect_word(Symbols.heap_ptr, heap(11)), -- Heap ptr is advanced by the entry length
+          expect_word(Symbols.heap, heap(11)), -- Heap ptr is advanced by the entry length
           expect_memory(heap(0), 'blah\0'), -- New dict entry has the name
           expect_word(heap(5), heap(11)), -- Followed by the new heap ptr
           expect_word(heap(8), Symbols.dict_start), -- Next ptr is the old dict head
@@ -268,12 +268,12 @@ test_line('] [', all(
 
 -- Compiling a number
 test_line('] 122773',
-          expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
+          expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
           expect_memory(heap(0), { 3, 149, 223, 1})) -- A push instruction for 122773
 
 -- Compiling a call to a word
 test_line('] create',
-          expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
+          expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
           expect_memory(heap(0), { Opcodes.opcode_for('call') * 4 + 3 }), -- A call instruction
           expect_word(heap(1), Symbols.nova_create)) -- ...to nova_create
 
@@ -284,13 +284,13 @@ test_line('] stillnotaword', expect_output('Not a word: stillnotaword\n'))
 
 -- Continue word (compiles a jmp)
 test_line('] continue ]',
-          expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
+          expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
           expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
           expect_word(heap(1), Symbols.nova_close_bracket)) -- ...to nova_close_bracket
 
 -- Continue compile word
 test_line('] continue [',
-          expect_word(Symbols.heap_ptr, heap(4)), -- Advance heap_ptr by the length of an instruction
+          expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
           expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
           expect_word(heap(1), Symbols.nova_open_bracket)) -- ...to nova_close_bracket
 
@@ -434,7 +434,7 @@ test_line(': fives 5 5 5 ; fives',
 
 -- Basic use of asm
 test_line('create execute asm jmp',
-          expect_word(Symbols.heap_ptr, heap(15)),
+          expect_word(Symbols.heap, heap(15)),
           expect_word(heap(8), heap(14)),
           expect_memory(heap(14), op('jmp')))
 
@@ -447,8 +447,28 @@ test_line('asm blah',
 -- Asm with args
 test_line('45 #asm push',
           expect_memory(heap(0), inst('push', 45)),
-          expect_word(Symbols.heap_ptr, heap(4)))
+          expect_word(Symbols.heap, heap(4)))
 
+--------------------------------------------------
+
+-- Compile-mode asm
+test_line('] asm jmp',
+          expect_heap_advance(8),
+          expect_memory(heap(0),
+                        inst('push', Opcodes.opcode_for('jmp')),
+                        inst('call', Symbols.compile_instruction)))
+
+-- Invalid compile-mode asm
+test_line('] asm blah', expect_output('Invalid mnemonic: blah\n'))
+
+-- Compile-mode asm with args
+test_line('] 45 #asm xor',
+          expect_heap_advance(12),
+          expect_memory(heap(0),
+                        inst('push', 45),
+                        inst('push', Opcodes.opcode_for('xor'),
+                        inst('call', Symbols.compile_instruction_arg))))
+                        
 --------------------------------------------------
 
 -- Comma compile a number
@@ -655,17 +675,68 @@ test_line('10 20 30 >r >r >r 2 rpick',
 
 --------------------------------------------------
 
-test_line('&heap', expect_stack{Symbols.heap_ptr})
+test_line('&heap', expect_stack{Symbols.heap})
+
+--------------------------------------------------
+
+test_line('>asm brnz',
+          expect_stack{},
+          expect_heap_advance(4),
+          expect_memory(heap(0), inst('brnz', 0)),
+          expect_4th_rstack{heap(1)})
+
+test_line('>asm blah',
+          expect_stack{},
+          expect_heap_advance(0),
+          expect_4th_rstack{},
+          expect_output('Invalid mnemonic: blah\n'))
+
+test_line('>asm brnz resolve',
+          expect_heap_advance(4),
+          expect_4th_rstack{},
+          expect_memory(heap(0),
+                        inst('brnz', 4))) -- brnz 12 ahead
+
+--------------------------------------------------
+
+test_line('] >asm brnz',
+          expect_stack{},
+          expect_heap_advance(8),
+          expect_4th_rstack{},
+          expect_memory(heap(0),
+                        inst('push', Opcodes.opcode_for('brnz')),
+                        inst('call', Symbols.nova_asm_to)))
+
+test_line(': if >asm brz ; immediate ] if',
+          expect_stack{},
+          expect_heap_advance(9 + 9 + 4), -- Entry 'if', body of 'if' (push, call, ret), and the brnz we just compiled
+          expect_4th_rstack{heap(9 + 9 + 1)}, -- Address of said brnz' arg
+          expect_memory(heap(9), -- Skipping if's entry
+                        inst('push', Opcodes.opcode_for('brz')), inst('call', Symbols.nova_asm_to), op('ret'), -- if's body
+                        inst('brz', 0))) -- The unresolved brnz 'if' compiled
+
+--------------------------------------------------
+
+test_lines({
+        ': if >asm brz ; immediate',
+        ': then resolve ; immediate',
+        ': foo if 2 then ;',
+        '1 foo 10 0 foo'
+           },
+    expect_stack{2, 10}
+)
 
 --------------------------------------------------
 
 --[==[
     TODOs
-    X Rstack words
-    X String I/O
-    X Numeric bases and number
+    X The rest of the needed words
+    X rename heap_ptr to heap
+    - make sure eval works on things that aren't tib
+    - can we get rid of even more words?
 
     Later TODOs
+    - Loops
     - Prelude of simple words
     - Rewrite / compress string fns
 --]==]
@@ -674,4 +745,4 @@ test_line('&heap', expect_stack{Symbols.heap_ptr})
 
 print('Bytes available: ' .. 131072 - heap(0))
 print('Text size: ' .. Symbols.data_start - 0x400)
-print('Including dictionaries: ' .. Symbols.heap_ptr - 0x400)
+print('Including dictionaries: ' .. Symbols.heap - 0x400)
