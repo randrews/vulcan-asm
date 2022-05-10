@@ -357,36 +357,38 @@ nova_opcode_for_word: ; ( -- opcode ) -or- ( -- word-ptr -1 ) if it isn't a mnem
     popr
     ret
 
-nova_asm:
+; This is a hideous optimization thing. You have been warned:
+; We need to call opcode for word and check the return value: if
+; it's -1, that's an error, so we need to call invalid_mnemonic and
+; then return. This pattern was all over the asm* words. But, the
+; caller itself needs to do that return, so that if there's an error
+; the rest of our caller doesn't happen. So, we'll try to fetch an
+; opcode and check for a -1, and if we get one, we'll popr/pop and
+; then return.
+nova_safe_opcode:
     call nova_opcode_for_word
     dup
     xor -1
-    #unless
-        pop
-        jmp invalid_mnemonic
+    #unless ; Thaaaat's not an opcode...
+        pop ; toss the worthless error code
+        popr ; get rid of our return address with a popr / pop, so we're
+        pop  ; now actually returning from the caller's frame...
+        jmp invalid_mnemonic ; and tail-call to invalid_mnemonic
     #end
+    ret ; We actually got an opcode, just return it
+
+nova_asm:
+    call nova_safe_opcode
     jmp compile_instruction
 
 nova_arg_asm_word:
-    call nova_opcode_for_word
-    dup
-    xor -1
-    #unless
-        pop
-        jmp invalid_mnemonic
-    #end
+    call nova_safe_opcode
     jmp compile_instruction_arg
 
 ; Read a mnemonic and compile that instruction with a 0 arg. The address of the arg
 ; gets >r'd, for later resolve-calling
 nova_asm_to_word:
-    call nova_opcode_for_word
-    dup
-    xor -1
-    #unless ; Thaaaat's not an opcode...
-        pop
-        jmp invalid_mnemonic
-    #end
+    call nova_safe_opcode
 nova_asm_to: ; When we >asm in compile mode in comes here
     loadw heap
     add 1
@@ -404,13 +406,7 @@ nova_asm_to: ; When we >asm in compile mode in comes here
 ; with that mnemonic is compile a call to something, rather than do anything right away.
 ; nova_compile_asm and nova_compile_asm_arg work the same way, more or less
 nova_compile_asm_to:
-    call nova_opcode_for_word
-    dup
-    xor -1
-    #unless ; Thaaaat's not an opcode...
-        pop
-        jmp invalid_mnemonic
-    #end
+    call nova_safe_opcode
     push $PUSH
     call compile_instruction_arg ; compile a push of the opcode
     push nova_asm_to
@@ -418,13 +414,7 @@ nova_compile_asm_to:
     jmp compile_instruction_arg ; compile a call to the asm_to guts that actually compiles the op
 
 nova_compile_asm:
-    call nova_opcode_for_word
-    dup
-    xor -1
-    #unless
-        pop
-        jmp invalid_mnemonic
-    #end
+    call nova_safe_opcode
     push $PUSH
     call compile_instruction_arg ; compile 'push <opcode>'
     push compile_instruction
@@ -432,13 +422,7 @@ nova_compile_asm:
     jmp compile_instruction_arg ; compile 'call compile_instruction'
 
 nova_compile_arg_asm:
-    call nova_opcode_for_word
-    dup
-    xor -1
-    #unless
-        pop
-        jmp invalid_mnemonic
-    #end
+    call nova_safe_opcode
     push $PUSH
     call compile_instruction_arg ; compile 'push <opcode>'
     push compile_instruction_arg

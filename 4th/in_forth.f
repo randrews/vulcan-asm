@@ -38,7 +38,7 @@ create execute $jmp asm
 \ Control structure words
 : if >asm brz ; immediate
 : then resolve ; immediate
-: else r> ,jmpr >r resolve ; immediate
+: else r> >asm jmpr >r resolve ; immediate
 : variable create 0 , does> ;
 
 \ Counted loops, clean up the R stack if we want to early return

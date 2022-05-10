@@ -726,6 +726,16 @@ test_lines({
     expect_stack{2, 10}
 )
 
+test_lines({
+        ': if >asm brz ; immediate',
+        ': then resolve ; immediate',
+        ': else r> >asm jmpr >r resolve ; immediate',
+        ': foo if 2 else 3 then ;',
+        '1 foo 10 0 foo'
+           },
+    expect_stack{2, 10, 3}
+)
+
 --------------------------------------------------
 
 --[==[
