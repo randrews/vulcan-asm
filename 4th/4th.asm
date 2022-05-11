@@ -822,10 +822,6 @@ dictionary: .db dict_start
 ; pointer to head of compile-time dictionary
 compile_dictionary: .db compile_dict_start
 
-; Terminal input buffer
-tib: .db 0
-.org tib + 0x100
-
 ; Scratch pad buffer
 pad: .db 0
 .org pad + 0x100

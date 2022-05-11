@@ -6,6 +6,7 @@ Loader = require('vemu.loader')
 Opcodes = require('util.opcodes')
 
 Symbols = nil
+TIB = 65536 -- Just a convenient place to stick a terminal input buffer for tests. Could be any number.
 
 lfs.chdir('4th')
 
@@ -147,9 +148,9 @@ end
 
 function expect_cursor(n)
     return function(_s, _o, cpu)
-        local expected = Symbols.tib + n
+        local expected = TIB + n
         local actual = cpu:peek24(Symbols.cursor)
-        assert(actual == expected, string.format('cursor should advance %d, actual %d', n, actual - Symbols.tib))
+        assert(actual == expected, string.format('cursor should advance %d, actual %d', n, actual - TIB))
     end
 end
 
@@ -182,17 +183,17 @@ function all(...)
 end
 
 function test_line(line, ...)
-    test_fn('eval', all(given_stack{Symbols.tib}, given_memory(Symbols.tib, line)), all(...))
+    test_fn('eval', all(given_stack{TIB}, given_memory(TIB, line)), all(...))
 end
 
 function test_lines(lines, ...)
     local cpu, output = init_cpu()
 
     for _, line in ipairs(lines) do
-        cpu:push_data(Symbols.tib)
+        cpu:push_data(TIB)
         local contents = { line:byte(1, #line) }
         table.insert(contents, 0)
-        for i, b in ipairs(contents) do cpu:poke(Symbols.tib + i - 1, b) end
+        for i, b in ipairs(contents) do cpu:poke(TIB + i - 1, b) end
         call(cpu, 'eval')
     end
 
@@ -341,7 +342,7 @@ test_line('] exit', expect_memory(heap(0), { op('ret') }))
 
 -- This was a fun intellectual exercise and makes a nice torture test for NovaForth, but it violates the
 -- "optimize for understandability" principle and so colon and semicolon are now both written in asm. The
--- tests remain here because they're good, vero exhaustive, tests.
+-- tests remain here because they're good, very exhaustive, tests.
 
 -- Prelude semicolon definition
 test_line('create :: ] create continue ] [ :: ;; postpone exit continue [ [ immediate',
@@ -740,13 +741,10 @@ test_lines({
 
 --[==[
     TODOs
-    X The rest of the needed words
-    X rename heap_ptr to heap
-    - make sure eval works on things that aren't tib
-    - can we get rid of even more words?
+    X make sure eval works on things that aren't tib
+    - loops
 
     Later TODOs
-    - Loops
     - Prelude of simple words
     - Rewrite / compress string fns
 --]==]
