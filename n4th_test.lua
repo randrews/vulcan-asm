@@ -205,6 +205,7 @@ end
 
 PRELUDE = 34 -- How many bytes the prelude adds to the heap
 function test_prelude_line(line, ...)
+    --local prelude1 = "create continue ] ' $ jmp #asm $ ret asm ["
     local prelude = 'create :: ] create continue ] [ :: ;; postpone exit continue [ [ immediate'
     test_lines({ prelude, line }, ...)
 end
@@ -283,20 +284,36 @@ test_line('] stillnotaword', expect_output('Not a word: stillnotaword\n'))
 
 --------------------------------------------------
 
--- Continue word (compiles a jmp)
-test_line('] continue ]',
-          expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
-          expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
-          expect_word(heap(1), Symbols.nova_close_bracket)) -- ...to nova_close_bracket
+-- -- Continue word (compiles a jmp)
+-- test_line('] continue ]',
+--           expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
+--           expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
+--           expect_word(heap(1), Symbols.nova_close_bracket)) -- ...to nova_close_bracket
 
--- Continue compile word
-test_line('] continue [',
-          expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
-          expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
-          expect_word(heap(1), Symbols.nova_open_bracket)) -- ...to nova_close_bracket
+-- -- Continue compile word
+-- test_line('] continue [',
+--           expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
+--           expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
+--           expect_word(heap(1), Symbols.nova_open_bracket)) -- ...to nova_close_bracket
 
--- Continue gibberish
-test_line('] continue supernotword', expect_output('Not a word: supernotword\n'))
+-- -- Continue gibberish
+-- test_line('] continue supernotword', expect_output('Not a word: supernotword\n'))
+
+-- Implement continue with #asm!
+test_lines({ ": cont ' $ jmp #asm ; immediate",
+             '] cont ]' },
+    expect_memory(heap(11), -- Just skip cont's header
+                  inst('call', Symbols.nova_tick), -- Call tick to see what we're continuing to
+                  inst('push', Opcodes.opcode_for('jmp')), -- Push a jmp
+                  inst('call', Symbols.compile_instruction_arg), -- Compile a jmp to that word
+                  op('ret'), -- Return from cont
+                  inst('jmp', Symbols.nova_close_bracket))) -- Cont gives us a jmp to `]`
+
+-- Prelude continue with a runtime word
+test_lines({ ": cont ' $ jmp #asm ; immediate",
+             '] cont print' },
+    expect_memory(heap(11 + 13), -- Just skip cont's header and impl
+                  inst('jmp', Symbols.print))) -- Cont gives us a jmp to `print`
 
 --------------------------------------------------
 
@@ -434,42 +451,60 @@ test_line(': fives 5 5 5 ; fives',
 --------------------------------------------------
 
 -- Basic use of asm
-test_line('create execute asm jmp',
-          expect_word(Symbols.heap, heap(15)),
+test_line('create execute $ jmp asm',
+          expect_heap_advance(15),
           expect_word(heap(8), heap(14)),
           expect_memory(heap(14), op('jmp')))
 
--- Invalid asm
-test_line('asm blah',
-          expect_output('Invalid mnemonic: blah\n'),
-          expect_r_stack{},
-          expect_stack{})
-
 -- Asm with args
-test_line('45 #asm push',
+test_line('45 $ push #asm',
           expect_memory(heap(0), inst('push', 45)),
           expect_word(Symbols.heap, heap(4)))
 
 --------------------------------------------------
 
 -- Compile-mode asm
-test_line('] asm jmp',
+test_line('] $ jmp asm',
           expect_heap_advance(8),
           expect_memory(heap(0),
                         inst('push', Opcodes.opcode_for('jmp')),
                         inst('call', Symbols.compile_instruction)))
 
--- Invalid compile-mode asm
-test_line('] asm blah', expect_output('Invalid mnemonic: blah\n'))
-
 -- Compile-mode asm with args
-test_line('] 45 #asm xor',
+test_line('] 45 $ xor #asm',
           expect_heap_advance(12),
           expect_memory(heap(0),
                         inst('push', 45),
                         inst('push', Opcodes.opcode_for('xor'),
                         inst('call', Symbols.compile_instruction_arg))))
-                        
+
+test_line(': foo 34 $ xor #asm ; immediate ] foo',
+          expect_memory(heap(0),
+                        -- foo's header
+                        'f', 'o', 'o', 0, word(heap(10)), word(Symbols.compile_dict_start),
+                        inst('push', 34), -- Push an arg
+                        inst('push', Opcodes.opcode_for('xor')), -- Push an opcode
+                        inst('call', Symbols.compile_instruction_arg), -- Compile that with an arg
+                        op('ret'), -- Return from foo
+                        -- Foo is now an immediate word, and when we call it in compile mode...
+                        inst('xor', 34))) -- It compiles a xor 34
+
+test_line('$ xor 3', expect_stack{9, 3})
+test_line('$ blah 3', expect_stack{3}, expect_output('Invalid mnemonic: blah\n'))
+
+test_line('] $ xor 3',
+          expect_stack{},
+          expect_memory(heap(0),
+                        inst('push', 9),
+                        inst('push', 3)),
+          expect_heap_advance(8))
+
+test_line('] $ blah 3',
+          expect_stack{},
+          expect_output('Invalid mnemonic: blah\n'),
+          expect_heap_advance(4),
+          expect_memory(heap(0), inst('push', 3)))
+
 --------------------------------------------------
 
 -- Comma compile a number
@@ -480,11 +515,11 @@ test_line('1234 ,',
 --------------------------------------------------
 
 -- Tick a word
-test_line("' asm", expect_stack{ Symbols.nova_asm })
+test_line("' print", expect_stack{ Symbols.print })
 
 -- Bracket-tick a word
-test_line("] ['] asm",
-          expect_memory(heap(0), inst('push', Symbols.nova_asm)),
+test_line("] ['] print",
+          expect_memory(heap(0), inst('push', Symbols.print)),
           expect_heap_advance(4))
 
 -- Tick gibberish
@@ -648,51 +683,55 @@ test_line('s" foo123" s" foo" compare', expect_stack{0})
 
 --------------------------------------------------
 
+-- Print the stack
 test_line('10 20 30 .s',
           expect_stack{ 10, 20, 30 },
           expect_output('<< 10 20 30 >>'))
 
+-- Print the stack in hex
 test_line('10 20 30 hex .s',
           expect_stack{ 10, 20, 30 },
           expect_output('<< a 14 1e >>'))
 
+-- Print nothing
 test_line('.s',
           expect_stack{},
           expect_output('<< >>'))
 
 --------------------------------------------------
 
+-- pushr, peekr
 test_line('3 >r r@',
           expect_stack{3},
           expect_4th_rstack{3})
 
+-- popr
 test_line('3 >r 5 r>',
           expect_stack{5, 3},
           expect_4th_rstack{})
 
+-- rpick
 test_line('10 20 30 >r >r >r 2 rpick',
           expect_stack{30},
           expect_4th_rstack{30, 20, 10})
 
 --------------------------------------------------
 
+-- Heap ptr stuff
 test_line('&heap', expect_stack{Symbols.heap})
+test_line('here', expect_stack{heap(0)})
 
 --------------------------------------------------
 
-test_line('>asm brnz',
+-- To-asm
+test_line('$ brnz >asm',
           expect_stack{},
           expect_heap_advance(4),
           expect_memory(heap(0), inst('brnz', 0)),
           expect_4th_rstack{heap(1)})
 
-test_line('>asm blah',
-          expect_stack{},
-          expect_heap_advance(0),
-          expect_4th_rstack{},
-          expect_output('Invalid mnemonic: blah\n'))
-
-test_line('>asm brnz resolve',
+-- Resolve
+test_line('$ brnz >asm resolve',
           expect_heap_advance(4),
           expect_4th_rstack{},
           expect_memory(heap(0),
@@ -700,15 +739,8 @@ test_line('>asm brnz resolve',
 
 --------------------------------------------------
 
-test_line('] >asm brnz',
-          expect_stack{},
-          expect_heap_advance(8),
-          expect_4th_rstack{},
-          expect_memory(heap(0),
-                        inst('push', Opcodes.opcode_for('brnz')),
-                        inst('call', Symbols.nova_asm_to)))
-
-test_line(': if >asm brz ; immediate ] if',
+-- An 'if' implementation
+test_line(': if $ brz >asm ; immediate ] if',
           expect_stack{},
           expect_heap_advance(9 + 9 + 4), -- Entry 'if', body of 'if' (push, call, ret), and the brnz we just compiled
           expect_4th_rstack{heap(9 + 9 + 1)}, -- Address of said brnz' arg
@@ -716,35 +748,57 @@ test_line(': if >asm brz ; immediate ] if',
                         inst('push', Opcodes.opcode_for('brz')), inst('call', Symbols.nova_asm_to), op('ret'), -- if's body
                         inst('brz', 0))) -- The unresolved brnz 'if' compiled
 
+-- If / then
+test_lines({ ': if $ brz >asm ; immediate',
+             ': then resolve ; immediate',
+             ': foo if 2 then ;',
+             '1 foo 10 0 foo' },
+    expect_stack{2, 10})
+
+-- If / else / then
+test_lines({ ': if $ brz >asm ; immediate',
+             ': then resolve ; immediate',
+             ': else r> $ jmpr >asm >r resolve ; immediate',
+             ': foo if 2 else 3 then ;',
+             '1 foo 10 0 foo' },
+    expect_stack{2, 10, 3})
+
 --------------------------------------------------
 
-test_lines({
-        ': if >asm brz ; immediate',
-        ': then resolve ; immediate',
-        ': foo if 2 then ;',
-        '1 foo 10 0 foo'
-           },
-    expect_stack{2, 10}
-)
+-- Testing some simple, single-opcode words that'll go in the prelude
+test_lines({ 'create - $ sub asm ] ;',
+             'create dup $ dup asm ] ;',
+             '5 dup 3 -' },
+    expect_stack{5, 2})
 
-test_lines({
-        ': if >asm brz ; immediate',
-        ': then resolve ; immediate',
-        ': else r> >asm jmpr >r resolve ; immediate',
-        ': foo if 2 else 3 then ;',
-        '1 foo 10 0 foo'
-           },
-    expect_stack{2, 10, 3}
-)
+-- Begin / until loops
+test_lines({ 'create - $ sub asm ] ;', -- Gotta subtract
+             'create dup $ dup asm ] ;', -- Also gotta dup
+             'create not $ not asm ] ;', -- until needs us to invert the condition
+             ': begin here >r ; immediate', -- Begin just marks a point in the program we'll brnz back to
+             -- Here's the fun part.
+             -- Pull the address stored by 'begin' off the rstack and subtract `here` from it
+             -- Then compile a brz to that address
+             ': until r> here - $ brz #asm ; immediate',
+             -- This ought to loop from 5..0, leaving each one on the stack
+             ': foo 5 begin dup 1 - dup not until ; foo' },
+    expect_stack{5, 4, 3, 2, 1, 0})
+
+-- test_lines({ ': do asm swap postpone >r postpone >r here >r ; immediate',
+--              ': loop ; immediate',
+--              ': foo 3 0 do 33 loop ;' },
+--     dump_memory(heap(0), 150))
 
 --------------------------------------------------
 
 --[==[
     TODOs
     X make sure eval works on things that aren't tib
-    - loops
+    X begin / until loops
+    X refactor asm words
 
     Later TODOs
+    - Remove 'continue', we can implement it ourselves easily
     - Prelude of simple words
     - Rewrite / compress string fns
 --]==]

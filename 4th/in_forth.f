@@ -1,5 +1,5 @@
 \ Needed words:
-\ DONE: [ ] asm , postpone exit literal (foundational compiler interface)
+\ DONE: [ ] asm #asm >asm , postpone exit literal (foundational compiler interface)
 \ DONE: create does> immediate ' ['] (foundational dictionary interface)
 \ DONE: word number (foundational parser interface)
 \ DONE: >r r> r@ rpick (because they aren't using the normal stack)
@@ -9,14 +9,19 @@
 \ DONE: . print compare ?dup (because we need asm ones anyway and it's free)
 
 \ New words:
-\ DONE: &heap pushes the address of the heap pointer, so `here` is ``&heap @`
 \ quit exists in both dictionaries, clears the stack (setsdp) and jmps to the main loop.
+\ DONE: &heap pushes the address of the heap pointer, so `here` is ``&heap @`
+\ DONE: $ turns a mnemonic into an opcode. In normal mode it returns an opcode; in immediate in compiles a push of the opcode
 \ DONE: asm is a word which compiles an opcode without an arg
-\ DONE: asm in immediate mode compiles the instructions to compile an opcode
+\ DONE: #asm compiles an opcode with an arg, ( arg op -- )
+\ DONE: >asm is a word taking an opcode which compiles that instruction, but with a 0 argument. The address of the argument is >r'd
 \ DONE: continue compiles a jmp to a given word (a tail call)
-\ DONE: >asm is a word which reads a mnemonic and compiles that instruction, but with a 0 argument. The address of the argument is >r'd
-\ DONE: >asm in compile mode reads a mnemonic and compiles instructions to compile that word, >r-ing the arg address
 \ DONE: resolve is an immediate word which pops the top address from the ctrl stack and writes `here` to it as a relative address
+
+\ asm words:
+\   asm compiles an opcode with no arg
+\   #asm compiles an opcode with an arg
+\   >asm compiles an opcode and >r's the address of its arg
 
 \ note 1: why do you need exit?
 \ Because the defn for semicolon needs to postpone something to compile a ret, and you can't use ,asm

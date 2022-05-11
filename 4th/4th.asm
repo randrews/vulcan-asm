@@ -377,57 +377,25 @@ nova_safe_opcode:
     #end
     ret ; We actually got an opcode, just return it
 
-nova_asm:
+; Don't try to optimize this away; see nova_safe_opcode. We need the
+; extra frame, or a line like `$ blah 3` won't run the rest of the line
+; after the error.
+nova_opcode:
     call nova_safe_opcode
-    jmp compile_instruction
+    ret
 
-nova_arg_asm_word:
+nova_compile_opcode:
     call nova_safe_opcode
-    jmp compile_instruction_arg
+    jmp nova_literal
 
 ; Read a mnemonic and compile that instruction with a 0 arg. The address of the arg
 ; gets >r'd, for later resolve-calling
-nova_asm_to_word:
-    call nova_safe_opcode
-nova_asm_to: ; When we >asm in compile mode in comes here
+nova_asm_to: ; ( opcode -- )
     loadw heap
     add 1
     call nova_pushr ; heap + 1 is our arg address, >r it
     swap 0
     jmp compile_instruction_arg ; Go ahead and compile the jmp-or-whatever
-
-; This word is special. This is >asm in compile mode.
-; This reads a mnemonic just like >asm, from the compiled source. But once it has it (and has
-; ensured it's valid) instead of actually compiling the instruction, it compiles a push of
-; the opcode and a call of the business-end of asm_to, so that this becomes compiled code
-; that will compile that instruction.
-; So, this is sort of halfway in between a runtime and a compile word: it's compile because
-; it's reading its mnemonic off the input, immediately, but it's runtime because what it does
-; with that mnemonic is compile a call to something, rather than do anything right away.
-; nova_compile_asm and nova_compile_asm_arg work the same way, more or less
-nova_compile_asm_to:
-    call nova_safe_opcode
-    push $PUSH
-    call compile_instruction_arg ; compile a push of the opcode
-    push nova_asm_to
-    push $CALL
-    jmp compile_instruction_arg ; compile a call to the asm_to guts that actually compiles the op
-
-nova_compile_asm:
-    call nova_safe_opcode
-    push $PUSH
-    call compile_instruction_arg ; compile 'push <opcode>'
-    push compile_instruction
-    push $CALL
-    jmp compile_instruction_arg ; compile 'call compile_instruction'
-
-nova_compile_arg_asm:
-    call nova_safe_opcode
-    push $PUSH
-    call compile_instruction_arg ; compile 'push <opcode>'
-    push compile_instruction_arg
-    push $CALL
-    jmp compile_instruction_arg ; compile 'call compile_instruction_arg'
 
 nova_here:
     loadw heap
