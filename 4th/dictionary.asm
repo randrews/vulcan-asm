@@ -181,6 +181,10 @@ ret heap
 .db nova_resolve
 .db $+1
 
+.db "quit\0"
+.db quit
+.db $+1
+
 .db "\\\0"
 .db backslash
 .db $+1

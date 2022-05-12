@@ -9,7 +9,7 @@
 \ DONE: . print compare ?dup (because we need asm ones anyway and it's free)
 
 \ New words:
-\ quit exists in both dictionaries, clears the stack (setsdp) and jmps to the main loop.
+\ DONE: quit clears the return stack (setsdp), resets hooks, and jmps to the main loop.
 \ DONE: &heap pushes the address of the heap pointer, so `here` is ``&heap @`
 \ DONE: $ turns a mnemonic into an opcode. In normal mode it returns an opcode; in immediate in compiles a push of the opcode
 \ DONE: asm is a word which compiles an opcode without an arg

@@ -119,27 +119,18 @@ nova_close_bracket: push compile_handleword
     storew handleword_hook
     ret
 
-; Compile a jmp to a word
-nova_continue: ; ( -- )
-    call nova_word
-    loadw heap
-    call tick ; ( ptr-to-word )
-    call dupnz
-    #if ; It's actually a word!
+;;; ; Compile a jmp to a word
+
+nova_continue:
+    call nova_tick
+;    call dupnz
+;    #if ; It's actually a word!
         push $JMP
         jmpr @compile_instruction_arg
-    #else ; It's not a normal word, but could be a compile word
-        loadw heap
-        call compile_tick
-        call dupnz
-        #if ; Compile word, compile it anyway
-            push $JMP
-            jmpr @compile_instruction_arg
-        #else ; This is just not a word at all
-            loadw heap
-            jmpr @missing_word
-        #end
-    #end
+;    #else ; It's not a word
+;        loadw heap
+;        jmpr @missing_word
+;    #end
 
 ; compile-time word, causes the next word to be compiled instead of it
 ; being run. The corollary of that is that an immediate word, where we
@@ -760,7 +751,16 @@ missing_word:
     push missing_word_str
     call print
     call print
-    jmp cr
+    call cr ; Runs through to quit!
+quit: ; Break out of whatever we were doing and return to the main loop:
+    sdp ; Pull in the stack and data ptrs
+    sub 6 ; Subtract the two words we just added...
+    swap 0x400 ; Tuck a default stack ptr
+    setsdp ; Reset the stack ptr
+    push r_stack
+    storew r_stack_ptr ; Clear the Nova rstack
+    call nova_open_bracket ; Get us out of compile mode if we're in it
+    jmp 0x400 ; Go back to the prompt. This will eventually be a prompt.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

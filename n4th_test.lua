@@ -205,9 +205,10 @@ end
 
 PRELUDE = 34 -- How many bytes the prelude adds to the heap
 function test_prelude_line(line, ...)
-    --local prelude1 = "create continue ] ' $ jmp #asm $ ret asm ["
-    local prelude = 'create :: ] create continue ] [ :: ;; postpone exit continue [ [ immediate'
-    test_lines({ prelude, line }, ...)
+    -- local prelude1 = ": cont ' $ jmp #asm ; immediate"
+    local prelude1 = 'create :: ] create continue ] ['
+    local prelude2 = ':: ;; postpone exit continue [ [ immediate'
+    test_lines({ prelude1, prelude2, line }, ...)
 end
 
 function heap(offset)
@@ -285,19 +286,19 @@ test_line('] stillnotaword', expect_output('Not a word: stillnotaword\n'))
 --------------------------------------------------
 
 -- -- Continue word (compiles a jmp)
--- test_line('] continue ]',
---           expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
---           expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
---           expect_word(heap(1), Symbols.nova_close_bracket)) -- ...to nova_close_bracket
+test_line('] continue ]',
+          expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
+          expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
+          expect_word(heap(1), Symbols.nova_close_bracket)) -- ...to nova_close_bracket
 
--- -- Continue compile word
--- test_line('] continue [',
---           expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
---           expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
---           expect_word(heap(1), Symbols.nova_open_bracket)) -- ...to nova_close_bracket
+-- Continue compile word
+test_line('] continue [',
+          expect_word(Symbols.heap, heap(4)), -- Advance heap by the length of an instruction
+          expect_memory(heap(0), { Opcodes.opcode_for('jmp') * 4 + 3 }), -- A call instruction
+          expect_word(heap(1), Symbols.nova_open_bracket)) -- ...to nova_close_bracket
 
--- -- Continue gibberish
--- test_line('] continue supernotword', expect_output('Not a word: supernotword\n'))
+-- Continue gibberish
+test_line('] continue supernotword', expect_output('Not a word: supernotword\n'))
 
 -- Implement continue with #asm!
 test_lines({ ": cont ' $ jmp #asm ; immediate",
@@ -318,21 +319,23 @@ test_lines({ ": cont ' $ jmp #asm ; immediate",
 --------------------------------------------------
 
 -- Prelude colon definition
-test_line('create :: ] create continue ] [',
-          expect_memory(heap(0), '::\0'), -- New dict entry has the name
-          expect_word(heap(3), heap(9)), -- Followed by the ptr to the fn
-          expect_memory(heap(9), inst('call', Symbols.nova_create)), -- Which is a call to create...
-          expect_memory(heap(13), inst('jmp', Symbols.nova_close_bracket)), -- Followed by jmping to close_bracket
-          expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- And now we're back in immediate mode
-          expect_r_stack{}) -- And haven't leaked a stack frame
+test_lines({ ": cont ' $ jmp #asm ; immediate",
+             'create :: ] create cont ] [' },
+    expect_memory(heap(24), '::\0'), -- New dict entry has the name (24 bytes for cont)
+    expect_word(heap(24 + 3), heap(24 + 9)), -- Followed by the ptr to the fn
+    expect_memory(heap(24 + 9), inst('call', Symbols.nova_create)), -- Which is a call to create...
+    expect_memory(heap(24 + 13), inst('jmp', Symbols.nova_close_bracket)), -- Followed by jmping to close_bracket
+    expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- And now we're back in immediate mode
+    expect_r_stack{}) -- And haven't leaked a stack frame
 
 -- Using prelude colon
-test_line('create :: ] create continue ] [ :: foo 35',
-          expect_memory(heap(17), 'foo\0'), -- A new entry for foo
-          expect_word(heap(21), heap(27)), -- Defn ptr is the new heap
-          expect_memory(heap(27), inst('push', 35)), -- fn begins with pushing a 35
-          expect_word(Symbols.handleword_hook, Symbols.compile_handleword), -- We're still in compile mode
-          expect_r_stack{}) -- And haven't leaked a stack frame
+test_lines({ "create cont ] ' $ jmp #asm ; immediate",
+             'create :: ] create cont ] [ :: foo 35' },
+    expect_memory(heap(24 + 17), 'foo\0'), -- A new entry for foo
+   expect_word(heap(24 + 21), heap(24 + 27)), -- Defn ptr is the new heap
+   expect_memory(heap(24 + 27), inst('push', 35)), -- fn begins with pushing a 35
+   expect_word(Symbols.handleword_hook, Symbols.compile_handleword), -- We're still in compile mode
+    expect_r_stack{}) -- And haven't leaked a stack frame
 
 --------------------------------------------------
 
@@ -490,7 +493,7 @@ test_line(': foo 34 $ xor #asm ; immediate ] foo',
                         inst('xor', 34))) -- It compiles a xor 34
 
 test_line('$ xor 3', expect_stack{9, 3})
-test_line('$ blah 3', expect_stack{3}, expect_output('Invalid mnemonic: blah\n'))
+test_line('$ blah 3', expect_stack{}, expect_output('Invalid mnemonic: blah\n'))
 
 test_line('] $ xor 3',
           expect_stack{},
@@ -502,8 +505,7 @@ test_line('] $ xor 3',
 test_line('] $ blah 3',
           expect_stack{},
           expect_output('Invalid mnemonic: blah\n'),
-          expect_heap_advance(4),
-          expect_memory(heap(0), inst('push', 3)))
+          expect_heap_advance(0)) -- It hits quit right after the error
 
 --------------------------------------------------
 
@@ -784,23 +786,49 @@ test_lines({ 'create - $ sub asm ] ;', -- Gotta subtract
              ': foo 5 begin dup 1 - dup not until ; foo' },
     expect_stack{5, 4, 3, 2, 1, 0})
 
--- test_lines({ ': do asm swap postpone >r postpone >r here >r ; immediate',
---              ': loop ; immediate',
---              ': foo 3 0 do 33 loop ;' },
---     dump_memory(heap(0), 150))
+-- do / loop counted loops
+test_lines({ 'create 1+ 1 $ add #asm ] ;',
+             'create - $ sub asm ] ;',
+             'create dup $ dup asm ] ;',
+             'create swap $ swap asm ] ;',
+             'create pop $ pop asm ] ;',
+             'create < $ lt asm ] ;',
+             'create debug $ debug asm ] ;',
+             ': do $ swap asm postpone >r postpone >r here >r ; immediate',
+             ': _loop_test r> 1+ dup r@ < swap >r ;', -- pull off and inc the cntr, dup, peek at the limit, compare them, put the new cntr back
+             ': unloop r> r> pop pop ;',
+             ': loop postpone _loop_test r> here - $ brnz #asm postpone unloop ; immediate',
+             ': foo 3 0 do 33 loop ; foo' },
+    expect_stack{33, 33, 33})
+
+--------------------------------------------------
+
+-- Testing quit as called by an error
+test_line('2 3 : foo nooope ; 7',
+          expect_heap_advance(10), -- It does the header but that's it
+          expect_output('Not a word: nooope\n'), -- Spits out an error message
+          expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- Back in immediate mode
+          expect_stack{2, 3}) -- Doesn't clobber the stack though
+
+-- Testing quit as called manually
+test_lines({ ': low 5 quit 6 ;',
+             ': med 3 low 4 ;',
+             ': high 1 med 2 ;',
+             'high' },
+    expect_output(''), -- This isn't an error, we just quit
+    expect_stack{1, 3, 5}) -- We quit partway through 'low', so skip all the frames above that
 
 --------------------------------------------------
 
 --[==[
     TODOs
-    X make sure eval works on things that aren't tib
-    X begin / until loops
-    X refactor asm words
+    X Other loops and things
+    X quit, and errors calling it
 
     Later TODOs
     - Remove 'continue', we can implement it ourselves easily
     - Prelude of simple words
-    - Rewrite / compress string fns
+    - Rewrite / macro-ize string fns
 --]==]
 
 --------------------------------------------------
