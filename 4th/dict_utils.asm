@@ -1,3 +1,13 @@
+; We often need to pop 1-2 times and then ret a flag, in a brnz / brz.
+; Rather than repeat that everywhere, we'll abstract it and branch
+; to one of these three:
+end0_pop2: pop
+end0_pop1: pop
+ret 0
+end1_pop2: pop
+pop
+ret 1
+
 ; Check whether two words (terminated by any non-word-character) are equal
 wordeq: ; ( str1 str2 -- bool )
     ; check if both chars are nonword

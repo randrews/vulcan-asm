@@ -579,7 +579,7 @@ nova_print_stack: ; ( -- )
         loadw itoa_hook
         call
         push 32
-        store 2
+        call nova_emit
         add 3
     #end
     popr
@@ -626,6 +626,10 @@ nova_popr: ; ( -- val )
     storew r_stack_ptr
     loadw
     ret
+
+nova_emit:
+    loadw emit_hook
+    jmp
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -760,7 +764,8 @@ quit: ; Break out of whatever we were doing and return to the main loop:
     push r_stack
     storew r_stack_ptr ; Clear the Nova rstack
     call nova_open_bracket ; Get us out of compile mode if we're in it
-    jmp 0x400 ; Go back to the prompt. This will eventually be a prompt.
+    loadw quit_vector
+    jmp ; Go back to the prompt. This will eventually be a prompt.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -789,6 +794,12 @@ dictionary: .db dict_start
 
 ; pointer to head of compile-time dictionary
 compile_dictionary: .db compile_dict_start
+
+; where to jump when they call `quit`
+quit_vector: .db 0x400
+
+; the place to call to emit a character
+emit_hook: .db emit
 
 ; Scratch pad buffer
 pad: .db 0

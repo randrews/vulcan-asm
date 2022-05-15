@@ -35,13 +35,12 @@ typedef enum Opcode {
     LOADW = 31,
     STORE = 32,
     STOREW = 33,
-    INTON = 34,
-    INTOFF = 35,
-    SETIV = 36,
-    SDP = 37,
-    SETSDP = 38,
-    PUSHR = 39,
-    POPR = 40,
-    PEEKR = 41,
-    DEBUG = 42
+    SETINT = 34,
+    SETIV = 35,
+    SDP = 36,
+    SETSDP = 37,
+    PUSHR = 38,
+    POPR = 39,
+    PEEKR = 40,
+    DEBUG = 41
 } Opcode;

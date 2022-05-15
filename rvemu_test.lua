@@ -1,5 +1,4 @@
-package.cpath = package.cpath .. ';./cvemu/?.so'
-CPU = require('cvemu')
+CPU = require('libvlua')
 Loader = require('vemu.loader')
 
 -- Fake an iterator from a string
@@ -39,11 +38,11 @@ assert(cpu:peek(10001) == 0x34)
 assert(cpu:peek(10002) == 0x12)
 assert(cpu:peek24(10000) == 0x123456)
 
--- Masking addresses to only the main memory range
-local cpu = CPU.new()
-cpu:poke(0xffffff, 47)
-assert(cpu:peek(0xffffff) == 47)
-assert(cpu:peek(0x01ffff) == 47)
+-- -- Masking addresses to only the main memory range
+-- local cpu = CPU.new()
+-- cpu:poke(0xffffff, 47)
+-- assert(cpu:peek(0xffffff) == 47)
+-- assert(cpu:peek(0x01ffff) == 47)
 
 -- Running a simple binary
 local cpu = CPU.new()
@@ -356,6 +355,7 @@ Loader.asm(cpu, iterator([[
     hlt
 ]]))
 cpu:run()
+
 assert(cpu:pop_data() == (-3 & 0xffffff))
 assert(cpu:pop_data() == (-3 & 0xffffff))
 assert(cpu:pop_data() == 3)
@@ -391,72 +391,73 @@ assert(cpu:pop_data() == 0)
 assert(cpu:pop_data() == 0)
 
 -- Device reset hooks
-local arr = {}
-local cpu = CPU.new()
-cpu:poke(100, 0)
-cpu:install_device(200, 200, { reset = function() cpu:poke(100, 100) end })
-cpu:reset()
-assert(cpu:peek(100) == 100)
+-- local arr = {}
+-- local cpu = CPU.new()
+-- cpu:poke(100, 0)
+-- cpu:install_device(200, 200, { reset = function() cpu:poke(100, 100) end })
+-- cpu:reset()
+-- assert(cpu:peek(100) == 100)
 
 -- Basic memory mapped output
-local arr = {}
-local cpu = CPU.new()
-Loader.asm(cpu, iterator([[
-    .org 0x400
-    push 12
-    store 200
-    push 15
-    store 200
-    hlt
-]]))
-cpu:install_device(200, 200, { poke = function(_, val) table.insert(arr, val) end })
-cpu:reset()
-cpu:run()
-assert(#arr == 2)
-assert(arr[1] == 12)
-assert(arr[2] == 15)
+-- local arr = {}
+-- local cpu = CPU.new()
+-- Loader.asm(cpu, iterator([[
+--     .org 0x400
+--     push 12
+--     store 200
+--     push 15
+--     store 200
+--     hlt
+-- ]]))
+-- cpu:install_device(200, 200, { poke = function(_, val) table.insert(arr, val) end })
+-- cpu:reset()
+-- cpu:run()
+-- assert(#arr == 2)
+-- assert(arr[1] == 12)
+-- assert(arr[2] == 15)
 
 -- Range memory mapped output
-local arr = {1, 2, 3, 4, 5, 6}
-local cpu = CPU.new()
-Loader.asm(cpu, iterator([[
-    .org 0x400
-    push 0
-    store 201
-    push 0
-    storew 203
-    hlt
-]]))
-cpu:install_device(200, 205, { poke = function(addr, val) arr[addr+1] = val end })
-cpu:run()
-assert(arr[1] == 1)
-assert(arr[2] == 0)
-assert(arr[3] == 3)
-assert(arr[4] == 0)
-assert(arr[5] == 0)
-assert(arr[6] == 0)
+-- local arr = {1, 2, 3, 4, 5, 6}
+-- local cpu = CPU.new()
+-- Loader.asm(cpu, iterator([[
+--     .org 0x400
+--     push 0
+--     store 201
+--     push 0
+--     storew 203
+--     hlt
+-- ]]))
+-- cpu:install_device(200, 205, { poke = function(addr, val) arr[addr+1] = val end })
+-- cpu:run()
+-- assert(arr[1] == 1)
+-- assert(arr[2] == 0)
+-- assert(arr[3] == 3)
+-- assert(arr[4] == 0)
+-- assert(arr[5] == 0)
+-- assert(arr[6] == 0)
 
 -- Range memory mapped input
-local arr = {1, 2, 3, 4, 5}
-local cpu = CPU.new()
-Loader.asm(cpu, iterator([[
-    .org 0x400
-    loadw 201
-    hlt
-]]))
-cpu:install_device(200, 204, { peek = function(addr) return arr[addr+1] end })
-cpu:run()
-assert(cpu:pop_data() == (4 << 16) | (3 << 8) | 2)
+-- local arr = {1, 2, 3, 4, 5}
+-- local cpu = CPU.new()
+-- Loader.asm(cpu, iterator([[
+--     .org 0x400
+--     loadw 201
+--     hlt
+-- ]]))
+-- cpu:install_device(200, 204, { peek = function(addr) return arr[addr+1] end })
+-- cpu:run()
+-- assert(cpu:pop_data() == (4 << 16) | (3 << 8) | 2)
 
 -- Flags
 local cpu = CPU.new()
+cpu:reset()
 Loader.asm(cpu, iterator([[
     .org 0x400
     setint 1
     hlt
 ]]))
 local h, i = cpu:flags()
-assert(not h and not i)
+assert(h and not i)
 cpu:run()
 h, i = cpu:flags()
 assert(h and i)
@@ -465,13 +466,13 @@ assert(h and i)
 local cpu = CPU.new()
 Loader.asm(cpu, iterator([[
     .org 0x400
-    push 2000
-    setsdp 3000
+    push 3000
+    setsdp 2000
     hlt
 ]]))
 cpu:run()
-assert(cpu:sp() == 2000)
-assert(cpu:dp() == 3000)
+assert(cpu:sp() == 3000)
+assert(cpu:dp() == 2000)
 
 -- Rotate stack
 local cpu = CPU.new()
@@ -539,17 +540,3 @@ assert(cpu:pop_data() == 10)
 assert(cpu:pop_data() == 20)
 assert(cpu:pop_data() == 20)
 assert(cpu:pop_data() == 5)
-
--- -- Benchmark
--- local cpu = CPU.new()
--- Loader.forge(cpu, iterator([[
---   : count ( max -- )
---   0 local sum !
---   0 for n
---   sum n + sum!
---   loop ;
---   10000 count
--- ]]))
--- local start = os.clock()
--- cpu:run()
--- print(os.clock() - start)

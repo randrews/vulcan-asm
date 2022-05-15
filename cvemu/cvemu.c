@@ -646,11 +646,9 @@ void cpu_execute(Cpu *cpu, Opcode instruction, lua_State *L) {
         cpu_poke(cpu, b+1, a >> 8, L);
         cpu_poke(cpu, b+2, a >> 16, L);
         break;
-    case INTON:
-        cpu->int_enabled = 1;
-        break;
-    case INTOFF:
-        cpu->int_enabled = 0;
+    case SETINT:
+        a = cpu_pop_data(cpu);
+        cpu->int_enabled = (a != 0);
         break;
     case SETIV:
         cpu->int_vector = cpu_pop_data(cpu);

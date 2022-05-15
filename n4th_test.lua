@@ -1,12 +1,13 @@
 package.cpath = package.cpath .. ';./cvemu/?.so'
 lfs = require('lfs')
+--CPU = require('libvlua')
 CPU = require('cvemu')
 -- CPU = require('vemu.cpu')
 Loader = require('vemu.loader')
 Opcodes = require('util.opcodes')
 
 Symbols = nil
-TIB = 65536 -- Just a convenient place to stick a terminal input buffer for tests. Could be any number.
+TIB = 80000 -- Just a convenient place to stick a terminal input buffer for tests. Could be any number.
 
 lfs.chdir('4th')
 
@@ -19,11 +20,7 @@ function init_cpu()
     local iterator = io.lines('4th.asm')
     Symbols = Loader.asm(cpu, iterator)
 
-    local device = { contents = '' }
-    cpu:install_device(2, 2,
-                       { poke = function(_addr, val) device.contents = device.contents .. string.char(val) end })
-
-    return cpu, device
+    return cpu
 end
 
 function call(cpu, symbol)
@@ -33,20 +30,44 @@ function call(cpu, symbol)
 end
 
 function test_fn(name, setup, check)
-    local cpu, output = init_cpu()
+    local cpu = init_cpu()
     setup(cpu)
     call(cpu, name)
     local st = { cpu:stack() }
     local rst = { cpu:r_stack() }
-    check(st, output.contents, cpu, rst)
+    check(st, get_output(cpu), cpu, rst)
+end
+
+function get_output(cpu)
+    local start = 0x10000
+    local len = cpu:peek24(Symbols.emit_cursor)
+    local str = ''
+    for a = start, len+start-1 do
+        str = str .. string.char(cpu:peek(a))
+    end
+    return str
 end
 
 function array_eq(a1, a2)
-    assert(#a1 == #a2, string.format('Arrays are different sizes: %d and %d', #a1, #a2))
+    local eq = true
     for i, n in ipairs(a1) do
-        assert(n == a2[i], string.format('Difference at %d: %d != %d', i, n, a2[i]))
+        if n ~= a2[i] then eq = false end
     end
-    return true
+    if #a1 ~= #a2 then eq = false end
+
+    if eq then return true end
+
+    local lt = ''
+    for i, n in ipairs(a1) do
+        lt = lt .. tostring(n)
+    end
+
+    local rt = ''
+    for i, n in ipairs(a2) do
+        rt = rt .. tostring(n)
+    end
+
+    error(string.format('Arrays not equal!\nlt: { %s }\nrt: { %s }', lt, rt))
 end
 
 function given_stack(contents)
@@ -187,7 +208,7 @@ function test_line(line, ...)
 end
 
 function test_lines(lines, ...)
-    local cpu, output = init_cpu()
+    local cpu = init_cpu()
 
     for _, line in ipairs(lines) do
         cpu:push_data(TIB)
@@ -197,10 +218,10 @@ function test_lines(lines, ...)
         call(cpu, 'eval')
     end
 
-    local st = { cpu:stack() }
-    local rst = { cpu:r_stack() }
+    local st = {cpu:stack()}
+    local rst = {cpu:r_stack()}
     local check = all(...)
-    check(st, output.contents, cpu, rst)
+    check(st, get_output(cpu), cpu, rst)
 end
 
 PRELUDE = 34 -- How many bytes the prelude adds to the heap
@@ -234,6 +255,8 @@ test_fn('dupnz',
 test_fn('dupnz', 
         given_stack{ 0 },
         expect_stack{ 0 })
+
+--------------------------------------------------
 
 test_line('10 ?dup', expect_stack{10, 10})
 test_line('0 ?dup', expect_stack{0})
@@ -793,7 +816,6 @@ test_lines({ 'create 1+ 1 $ add #asm ] ;',
              'create swap $ swap asm ] ;',
              'create pop $ pop asm ] ;',
              'create < $ lt asm ] ;',
-             'create debug $ debug asm ] ;',
              ': do $ swap asm postpone >r postpone >r here >r ; immediate',
              ': _loop_test r> 1+ dup r@ < swap >r ;', -- pull off and inc the cntr, dup, peek at the limit, compare them, put the new cntr back
              ': unloop r> r> pop pop ;',

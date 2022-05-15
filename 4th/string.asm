@@ -85,24 +85,24 @@ parse_hex_digit: ; ( byte -- [val 1] if a digit, or [0] if it isn't )
     dup
     call is_digit
     #if ; It's a 0-9
-    sub 48 ; '0' ascii
-    ret 1
+        sub 48 ; '0' ascii
+        ret 1
     #else
-    dup
-    gt 96 ; ( ch is-lowercase )
-    #if
-    sub 32
-    #end
-    dup
-    dup
-    gt 64 ; at least 'A'
-    swap
-    lt 71 ; at most 'F'
-    and ; ( ch is-AF )
-    #if
-    sub 55
-    ret 1
-    #end
+        dup
+        gt 96 ; ( ch is-lowercase )
+        #if
+            sub 32
+        #end
+        dup
+        dup
+        gt 64 ; at least 'A'
+        swap
+        lt 71 ; at most 'F'
+        and ; ( ch is-AF )
+        #if
+            sub 55
+            ret 1
+        #end
     #end
     pop
     ret 0
@@ -111,11 +111,11 @@ parse_hex_digit: ; ( byte -- [val 1] if a digit, or [0] if it isn't )
 ; first nonword-char after it
 skip_word: ; ( ptr -- first-nonword )
     #while
-    dup
-    load
-    call word_char
+        dup
+        load
+        call word_char
     #do
-    add 1
+        add 1
     #end
     ret
 
@@ -125,11 +125,16 @@ skip_nonword: ; ( ptr -- first-word )
     dup
     load ; ( ptr ch )
     call dupnz
-    brz @end_ret
-    call word_char
-    brnz @end_ret
-    add 1
-    jmpr @skip_nonword
+    #if
+        call word_char
+        #unless
+            add 1
+            jmpr @skip_nonword
+        #end
+        ret
+    #end
+    ret
+
 
 ; Return a flag of whether two strings are equal
 compare: ; ( str1 str2 -- equal? )

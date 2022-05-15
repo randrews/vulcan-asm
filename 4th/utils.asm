@@ -1,21 +1,16 @@
 #include "magic.asm"
 
-; We often need to pop 1-2 times and then ret, in a brnz / brz.
-; Rather than repeat that everywhere, we'll abstract it and branch
-; to one of these three:
-end_pop3r: pop
-end_pop2r: popr
-end_pop2: pop
-end_pop1: pop
-end_ret: ret
+; Emit a single character to stdout
+emit: ; ( ch -- )
+    loadw emit_cursor
+    dup
+    add 1
+    storew emit_cursor
+    add 0x10000
+    store
+    ret
+emit_cursor: .db 0 ; The length of the string in the output buffer
 
-; ...And this is like that, but returns 0 or 1:
-end0_pop2: pop
-end0_pop1: pop
-end0_ret: ret 0
-end1_pop2: pop
-end1_pop1: pop
-end1_ret: ret 1
 
 ; Print a null-term string
 print: ; ( addr -- )
@@ -24,7 +19,7 @@ print: ; ( addr -- )
         load
         call dupnz
     #do
-        store 0x02
+        call nova_emit
         add 1
     #end
     pop
@@ -33,7 +28,7 @@ print: ; ( addr -- )
 ; Print a carriage return
 cr: ; ( -- )
     push 10
-    store 0x02
+    call nova_emit
     ret
 
 dupnz: ; if TOS is nonzero, dup it

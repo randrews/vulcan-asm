@@ -21,7 +21,7 @@ itoa: ; ( num -- )
     xor 0xffffff ; Less than zero, so negate it
     add 1
     push 45 ; 45 is '-', print a leading dash
-    store 2
+    call nova_emit
 itoa_pos: ; ( num -- )
     loadw heap ; Gonna build the string on the heap
     dup
@@ -56,7 +56,7 @@ itoa_loop:
 itoa_print_loop:
     dup
     load
-    store 2
+    call nova_emit
     sub 1
     dup
     load
@@ -99,7 +99,7 @@ hex_itoa: ; ( num -- )
         load
         call dupnz
     #do
-        store 2
+        call nova_emit
         sub 1
     #end
     pop
