@@ -103,14 +103,14 @@ dict_start:
 .db nova_asm_to
 .db $+1
 
+.db "word\0"
+.db nova_word_to_pad
+.db $+1
+
 .db "pad\0"
 .db $+2
 .db $+2
 ret pad
-
-.db "word\0"
-.db nova_word_to_pad
-.db $+1
 
 .db "number\0"
 .db nova_number
@@ -138,6 +138,10 @@ ret pad
 
 .db ".\"\0"
 .db nova_dotquote
+.db $+1
+
+.db "emit\0"
+.db nova_emit
 .db $+1
 
 .db "print\0"

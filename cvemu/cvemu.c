@@ -438,18 +438,22 @@ int cvemu_print_r_stack(lua_State *L) {
 
 int cvemu_fetch_stack(lua_State *L) {
     Cpu *cpu = checkCpu(L, 1);
-    
+
     if (cpu->dp < cpu->bottom_dp) {
         luaL_error(L, "Stack has underflowed");
-    } else if (cpu->dp == cpu->bottom_dp) {
-        return 0; // Stack's empty, return nothing
     } else {
-        int count = 0;
-        for (int i = cpu->bottom_dp; i < cpu->dp; i+=3) {
-            lua_pushinteger(L, cpu_peek24(cpu, i, 0));
-            count++;
+        lua_newtable(L);
+
+        // If this isn't true, return an empty table
+        if (cpu->dp > cpu->bottom_dp) {
+            int count = 1;
+            for (int i = cpu->bottom_dp; i < cpu->dp; i+=3) {
+                lua_pushinteger(L, count++);
+                lua_pushinteger(L, cpu_peek24(cpu, i, 0));
+                lua_settable(L, -3);
+            }
         }
-        return count;
+        return 1;
     }
 }
 
@@ -458,15 +462,18 @@ int cvemu_fetch_r_stack(lua_State *L) {
     
     if (cpu->sp > cpu->top_sp) {
         luaL_error(L, "RStack has underflowed");
-    } else if (cpu->sp == cpu->top_sp) {
-        return 0; // Stack's empty, return nothing
     } else {
-        int count = 0;
-        for (int i = cpu->top_sp - 3; i >= cpu->sp; i-=3) {
-            lua_pushinteger(L, cpu_peek24(cpu, i, 0));
-            count++;
+        lua_newtable(L);
+
+        if (cpu->sp < cpu->top_sp) {
+            int count = 1;
+            for (int i = cpu->top_sp - 3; i >= cpu->sp; i-=3) {
+                lua_pushinteger(L, count++);
+                lua_pushinteger(L, cpu_peek24(cpu, i, 0));
+                lua_settable(L, -3);
+            }
         }
-        return count;
+        return 1;
     }
 }
 

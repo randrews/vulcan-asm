@@ -1,7 +1,7 @@
 package.cpath = package.cpath .. ';./cvemu/?.so'
 lfs = require('lfs')
---CPU = require('libvlua')
-CPU = require('cvemu')
+CPU = require('libvlua')
+-- CPU = require('cvemu')
 -- CPU = require('vemu.cpu')
 Loader = require('vemu.loader')
 Opcodes = require('util.opcodes')
@@ -33,8 +33,8 @@ function test_fn(name, setup, check)
     local cpu = init_cpu()
     setup(cpu)
     call(cpu, name)
-    local st = { cpu:stack() }
-    local rst = { cpu:r_stack() }
+    local st = cpu:stack()
+    local rst = cpu:r_stack()
     check(st, get_output(cpu), cpu, rst)
 end
 
@@ -59,15 +59,16 @@ function array_eq(a1, a2)
 
     local lt = ''
     for i, n in ipairs(a1) do
-        lt = lt .. tostring(n)
+        lt = lt .. string.format('0x%x ', n)
     end
 
     local rt = ''
     for i, n in ipairs(a2) do
-        rt = rt .. tostring(n)
+        rt = rt .. string.format('0x%x', n)
     end
 
-    error(string.format('Arrays not equal!\nlt: { %s }\nrt: { %s }', lt, rt))
+    print(string.format('Arrays not equal!\nlt: { %s }\nrt: { %s }', lt, rt))
+    return false
 end
 
 function given_stack(contents)
@@ -218,8 +219,8 @@ function test_lines(lines, ...)
         call(cpu, 'eval')
     end
 
-    local st = {cpu:stack()}
-    local rst = {cpu:r_stack()}
+    local st = cpu:stack()
+    local rst = cpu:r_stack()
     local check = all(...)
     check(st, get_output(cpu), cpu, rst)
 end
@@ -574,6 +575,7 @@ test_line('  pad  ', expect_stack{ Symbols.pad })
 
 -- Read a word to the pad
 test_line('word mango',
+          expect_output(''),
           expect_stack{ Symbols.pad },
           expect_memory(Symbols.pad, 'm', 'a', 'n', 'g', 'o', 0))
 
@@ -830,22 +832,22 @@ test_line('2 3 : foo nooope ; 7',
           expect_heap_advance(10), -- It does the header but that's it
           expect_output('Not a word: nooope\n'), -- Spits out an error message
           expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- Back in immediate mode
-          expect_stack{2, 3}) -- Doesn't clobber the stack though
+          expect_stack{}) -- Clobbers the stack
 
 -- Testing quit as called manually
-test_lines({ ': low 5 quit 6 ;',
-             ': med 3 low 4 ;',
-             ': high 1 med 2 ;',
+test_lines({ ': low 3 quit 65 emit ;',
+             ': med 2 low 66 emit ;',
+             ': high 1 med 67 emit ;',
              'high' },
     expect_output(''), -- This isn't an error, we just quit
-    expect_stack{1, 3, 5}) -- We quit partway through 'low', so skip all the frames above that
+    expect_stack{}) -- We quit partway through 'low', so skip all the frames above that
 
 --------------------------------------------------
 
 --[==[
     TODOs
-    X Other loops and things
-    X quit, and errors calling it
+    - `quit` should clear the rstack but not the data stack, new opcode probably
+    - refactor test assert fns to be shorter / in a different file
 
     Later TODOs
     - Remove 'continue', we can implement it ourselves easily

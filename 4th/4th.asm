@@ -123,14 +123,8 @@ nova_close_bracket: push compile_handleword
 
 nova_continue:
     call nova_tick
-;    call dupnz
-;    #if ; It's actually a word!
-        push $JMP
-        jmpr @compile_instruction_arg
-;    #else ; It's not a word
-;        loadw heap
-;        jmpr @missing_word
-;    #end
+    push $JMP
+    jmpr @compile_instruction_arg
 
 ; compile-time word, causes the next word to be compiled instead of it
 ; being run. The corollary of that is that an immediate word, where we
@@ -218,6 +212,10 @@ nova_word_to_pad:
     loadw cursor
     push pad
     call nova_word_to
+    loadw cursor
+    call skip_word
+    call skip_nonword
+    storew cursor
     ret pad
 
 ; This is a runtime word used for defining the behavior of created
@@ -757,10 +755,8 @@ missing_word:
     call print
     call cr ; Runs through to quit!
 quit: ; Break out of whatever we were doing and return to the main loop:
-    sdp ; Pull in the stack and data ptrs
-    sub 6 ; Subtract the two words we just added...
-    swap 0x400 ; Tuck a default stack ptr
-    setsdp ; Reset the stack ptr
+    push 0x400
+    setsdp 0x100 ; Reset the dp / sp to default values
     push r_stack
     storew r_stack_ptr ; Clear the Nova rstack
     call nova_open_bracket ; Get us out of compile mode if we're in it
