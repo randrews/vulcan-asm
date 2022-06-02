@@ -17,7 +17,7 @@ function init_cpu()
 
     local cpu = CPU.new(random_seed)
 
-    local iterator = io.lines('4th.asm')
+    local iterator = io.lines('test_init.asm')
     Symbols = Loader.asm(cpu, iterator)
 
     return cpu
