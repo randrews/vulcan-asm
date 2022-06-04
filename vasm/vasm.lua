@@ -514,7 +514,8 @@ end
 
 -- ## Preprocessor
 -- Takes an iterator over lines including preprocessor directives, and returns another iterator,
--- which iterates over just normal lines
+-- which iterates over just normal lines. Also takes an optional include hook that is called to
+-- open a new file for #include, and a close_hook that is called when a file is finished.
 
 -- Assembler macros! Using gensym. turn into asm lines, in the preprocessor.
 -- #if / #unless / #else / #end
@@ -532,7 +533,7 @@ end
 --
 -- Important rule is that everything you can do in macros is preprocessor-level, it will become new lines of
 -- code and not affect later assembler stages
-function preprocess(iterator)
+function preprocess(iterator, include_hook, close_hook)
     -- Today we'll just recognize one directive: the humble include
     local space = lpeg.S(" \t")^0
     local string_pattern = lpeg.P('"') * lpeg.C((lpeg.P(1)-lpeg.S('"\\'))^1) * '"'
@@ -540,6 +541,13 @@ function preprocess(iterator)
                                               lpeg.C('if') + lpeg.C('unless') + lpeg.C('else') +
                                               lpeg.C('while') + lpeg.C('until') + lpeg.C('do') +
                                               lpeg.C('end'))
+
+    -- A default include hook that just opens files in the current directory. A real one of
+    -- these would use lfs or something to handle changing directories and relative paths,
+    -- but to keep this only dependent on the Lua standard library, we'll offer this basic
+    -- one:
+    include_hook = include_hook or io.lines
+    close_hook = close_hook or function() end
 
     -- We'll keep a stack of files that we're reading from, so files can include other files
     local file_stack = { iterator }
@@ -564,9 +572,10 @@ function preprocess(iterator)
             if #generated_lines > 0 then
                 line = table.remove(generated_lines, 1)
             else
-                line = (file_stack[#file_stack])() -- Fetch a line
-                if not line then -- If we're done with this file, then:
+                success, line = pcall(file_stack[#file_stack]) -- Fetch a line
+                if not success or not line then -- If we're done with this file, then:
                     table.remove(file_stack) -- Remove this file from the stack
+                    close_hook() -- Call the close hook so our includer can pop a directory or whatever
                     if #file_stack == 0 then return nil end -- If it was the last file then we're done overall
                     line = (file_stack[#file_stack])() -- Otherwise grab another line from the file that included us
                 end
@@ -583,7 +592,7 @@ function preprocess(iterator)
             if line then
                 directive, filename = preprocess_pattern:match(line)
                 if directive == 'include' then
-                    table.insert(file_stack, (io.lines(filename))) -- Add it to the file stack
+                    table.insert(file_stack, include_hook(filename)) -- Add it to the file stack
                 elseif directive == 'if' then -- Insert a brz to the corresponding end
                     local label = gensym()
                     table.insert(control_stack, { 'target', label = label })
