@@ -592,7 +592,7 @@ function preprocess(iterator, include_hook, close_hook)
             if line then
                 directive, filename = preprocess_pattern:match(line)
                 if directive == 'include' then
-                    table.insert(file_stack, include_hook(filename)) -- Add it to the file stack
+                    table.insert(file_stack, (include_hook(filename))) -- Add it to the file stack
                 elseif directive == 'if' then -- Insert a brz to the corresponding end
                     local label = gensym()
                     table.insert(control_stack, { 'target', label = label })
