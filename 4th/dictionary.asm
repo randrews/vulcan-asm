@@ -47,6 +47,10 @@ compile_dict_start:
 .db nova_compile_opcode
 .db $+1
 
+.db "}\0"
+.db nova_close_brace
+.db $+1
+
 .db "\\\0"
 .db backslash
 .db $+1
@@ -183,6 +187,10 @@ ret heap
 
 .db "resolve\0"
 .db nova_resolve
+.db $+1
+
+.db "{\0"
+.db nova_immediate_open_brace
 .db $+1
 
 .db "quit\0"

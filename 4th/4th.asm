@@ -626,6 +626,25 @@ nova_emit:
     loadw emit_hook
     jmp
 
+nova_immediate_open_brace:
+    ; store heap addr
+    loadw heap
+    storew lambda_start_ptr
+    ; enter compile mode
+    jmp nova_close_bracket
+
+nova_compile_open_brace:
+    ; TODO
+
+nova_close_brace:
+    ; TODO something something compile mode
+    push $RET
+    call compile_instruction
+    loadw lambda_start_ptr
+    dup
+    storew heap
+    jmp nova_open_bracket
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; Handle a word, in immediate mode. The word must be at ptr, and null-terminated
@@ -781,6 +800,7 @@ is_number_hook: .db is_number ; The current function used to parse numbers, swit
 itoa_hook: .db itoa ; The current function used to print numbers, switches with hex / dec
 line_len: .db 0
 cursor: .db 0 ; During calls to handleword, this global points to the beginning of the word
+lambda_start_ptr: .db 0 ; After definition of a lambda, reset heap ptr to here
 
 ; pointer to head of runtime dictionary
 dictionary: .db dict_start

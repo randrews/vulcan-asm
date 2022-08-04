@@ -844,6 +844,19 @@ test_lines({ ': low 3 quit 65 emit ;',
 
 --------------------------------------------------
 
+-- Testing quit as called by an error
+test_line('{ 3 5 }',
+          expect_heap_advance(0), -- It does not move the heap
+          expect_output(''),
+          expect_word(Symbols.handleword_hook, Symbols.immediate_handleword), -- Back in immediate mode
+          expect_stack{Symbols.heap_start}, -- Leaves the address of the lambda on the stack
+          expect_memory(heap(0),
+                        inst('push', 3),
+                        inst('push', 5),
+                        op('ret')))
+
+--------------------------------------------------
+
 --[==[
     TODOs
     - `quit` should clear the rstack but not the data stack, new opcode probably
