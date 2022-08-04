@@ -47,6 +47,10 @@ compile_dict_start:
 .db nova_compile_opcode
 .db $+1
 
+.db "{\0"
+.db nova_compile_open_brace
+.db $+1
+
 .db "}\0"
 .db nova_close_brace
 .db $+1

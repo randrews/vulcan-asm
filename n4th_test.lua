@@ -64,7 +64,7 @@ function array_eq(a1, a2)
 
     local rt = ''
     for i, n in ipairs(a2) do
-        rt = rt .. string.format('0x%x', n)
+        rt = rt .. string.format('0x%x ', n)
     end
 
     print(string.format('Arrays not equal!\nlt: { %s }\nrt: { %s }', lt, rt))
@@ -844,7 +844,7 @@ test_lines({ ': low 3 quit 65 emit ;',
 
 --------------------------------------------------
 
--- Testing quit as called by an error
+-- Testing immediate-mode lambdas
 test_line('{ 3 5 }',
           expect_heap_advance(0), -- It does not move the heap
           expect_output(''),
@@ -854,6 +854,49 @@ test_line('{ 3 5 }',
                         inst('push', 3),
                         inst('push', 5),
                         op('ret')))
+
+-- Compile-mode lambda, non-nested
+test_line(': foo 1 { 2 } ; foo',
+          expect_output(''),
+          expect_heap_advance(10 + 4 + 4 + 4 + 1 + 4 + 1), -- header, push, jmpr, push, ret, push, ret
+          expect_memory(heap(10),
+              inst('push', 1),
+              inst('jmpr', 4 + 4 + 1), -- jmpr, push, ret
+              inst('push', 2),
+              op('ret'),
+              inst('push', heap(10 + 4 + 4)), -- header, push(1), jmpr
+              op('ret')),
+          expect_stack{ 1, heap(10 + 4 + 4) })
+
+test_line(': foo 1 { 2 { 3 } } ; foo',
+          expect_output(''),
+          expect_heap_advance(10 + 4 + 4 + 4 + 4 + 4 + 1 + 4 + 1 + 4 + 1), -- header, push, jmpr, push, ret, push, ret
+          expect_memory(heap(10),
+              inst('push', 1),
+              inst('jmpr', 4 + 4 + 4 + 4 + 1 + 4 + 1), -- jmpr, push(2), jmpr, push(3), ret, push(inner-lambda), ret
+              inst('push', 2),
+              inst('jmpr', 4 + 4 + 1), -- inner lambda: jmpr, push, ret
+              inst('push', 3),
+              op('ret'),
+              inst('push', heap(10 + 4 + 4 + 4 + 4)), -- push the inner-lambda addr
+              op('ret'),
+              inst('push', heap(10 + 4 + 4)),
+              op('ret')
+          ),
+          expect_stack{ 1, heap(10 + 4 + 4) },
+          expect_word(Symbols.lambda_nesting_level, 0))
+
+--------------------------------------------------
+
+-- A Graham accumulator
+test_lines({ 'create + $ add asm ] ;',
+             'create dup $ dup asm ] ;',
+             'create @ $ loadw asm ] ;',
+             'create ! $ storew asm ] ;',
+             ': accum create 0 , does> dup >r @ + dup r> ! ;',
+             'accum foo 1 foo 2 foo 3 foo' },
+             expect_output(''),
+             expect_stack{ 1, 3, 6 })
 
 --------------------------------------------------
 

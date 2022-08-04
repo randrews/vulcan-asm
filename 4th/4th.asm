@@ -626,6 +626,9 @@ nova_emit:
     loadw emit_hook
     jmp
 
+; For a temporary function, we compile it to the heap
+; and then move the heap back to the start (so it gets
+; overwritten if we need the memory)
 nova_immediate_open_brace:
     ; store heap addr
     loadw heap
@@ -633,17 +636,47 @@ nova_immediate_open_brace:
     ; enter compile mode
     jmp nova_close_bracket
 
+; But, if we do this in compile mode, then we want to
+; make a local function: something compiled that can be
+; called, whose address is left on the stack
 nova_compile_open_brace:
-    ; TODO
+    push $JMPR ; Jmp over the lambda
+    call push_jump
+    loadw heap
+    call nova_pushr ; Store start address of lambda
+    ; increment nesting count
+    loadw lambda_nesting_level
+    add 1
+    storew lambda_nesting_level
+    ret
 
 nova_close_brace:
-    ; TODO something something compile mode
-    push $RET
-    call compile_instruction
-    loadw lambda_start_ptr
-    dup
-    storew heap
-    jmp nova_open_bracket
+    loadw lambda_nesting_level
+    call dupnz
+    #if ; we entered this from compile mode
+        ; decrement nesting level
+        sub 1
+        storew lambda_nesting_level
+        ; compile a ret
+        push $RET
+        call compile_instruction
+        ; Get the lambda addr and temp store it
+        call nova_popr
+        pushr
+        call nova_resolve ; Resolve the earlier jmp so we jmp over the lambda
+        ; Compile a push of the lambda address
+        popr
+        push $PUSH
+        call compile_instruction_arg
+        ret
+    #else
+        push $RET
+        call compile_instruction
+        loadw lambda_start_ptr
+        dup
+        storew heap
+        jmp nova_open_bracket
+    #end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -801,6 +834,7 @@ itoa_hook: .db itoa ; The current function used to print numbers, switches with 
 line_len: .db 0
 cursor: .db 0 ; During calls to handleword, this global points to the beginning of the word
 lambda_start_ptr: .db 0 ; After definition of a lambda, reset heap ptr to here
+lambda_nesting_level: .db 0 ; Nesting level of lambdas; 0 means not in a compile-mode lambda
 
 ; pointer to head of runtime dictionary
 dictionary: .db dict_start
