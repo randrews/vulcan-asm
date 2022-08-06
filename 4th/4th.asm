@@ -274,7 +274,7 @@ mnemonics:
 .db "mul\0"
 .db "div\0"
 .db "mod\0"
-.db "rand\0"
+.db "copy\0"
 .db "and\0"
 .db "or\0"
 .db "xor\0"

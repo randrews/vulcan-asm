@@ -540,3 +540,5 @@ assert(cpu:pop_data() == 10)
 assert(cpu:pop_data() == 20)
 assert(cpu:pop_data() == 20)
 assert(cpu:pop_data() == 5)
+
+-- TODO: Copy test

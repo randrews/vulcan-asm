@@ -1,7 +1,7 @@
 string_pattern = '"' str:([^\\"] / escape)* '"' { return ['string', ...str] }
 escape = '\\' esc:[trns0"\\] { return '\\' + esc }
 directive = '.org' / '.equ' / '.db'
-opcode = "arshift" / "store16" / "store24" / "load24" / "lshift" / "rshift" / "load16" / "setsdp" / "intoff" / "incsp" / "store" / "inton" / "decsp" / "setiv" / "pick" / "call" / "load" / "swap" / "jmpr" / "2dup" / "push" / "rand" / "mod" / "and" / "pop" / "div" / "sub" / "mul" / "nop" / "add" / "xor" / "dup" / "brz" / "jmp" / "hlt" / "agt" / "alt" / "ret" / "not" / "dp" / "lt" / "gt" / "sp" / "or"
+opcode = "arshift" / "store16" / "store24" / "load24" / "lshift" / "rshift" / "load16" / "setsdp" / "intoff" / "incsp" / "store" / "inton" / "decsp" / "setiv" / "pick" / "call" / "load" / "swap" / "jmpr" / "2dup" / "push" / "copy" / "mod" / "and" / "pop" / "div" / "sub" / "mul" / "nop" / "add" / "xor" / "dup" / "brz" / "jmp" / "hlt" / "agt" / "alt" / "ret" / "not" / "dp" / "lt" / "gt" / "sp" / "or"
 relative_label = '@' label:label { return '@' + label }
 label = first:[a-zA-Z_$] rest:[a-zA-Z_$0-9]* { return first + rest.join('') }
 
