@@ -1,36 +1,13 @@
-create : ] create continue ] [
-create execute ] asm jmp [
-: ; postpone exit continue [ [ immediate
-
-: if >asm brz ; immediate
-: then postpone resolve ; immediate
-: else r> ,jmpr >r resolve ; immediate
+: if $ brz >asm ; immediate
+: then resolve ; immediate
+: else r> $ jmpr >asm >r resolve ; immediate
 : variable create 0 , does> ;
 : unloop r> r> drop drop ;
 : leave r> drop r@ >r ;
 
-: and asm and ;
 : arshift asm arshift ;
-: drop asm pop ;
-: dup asm dup ;
 : lshift asm lshift ;
-: mod asm mod ;
-: or asm or ;
-: pick asm pick ;
-: rot asm rot ;
 : rshift asm rshift ;
-: swap asm swap ;
-: xor asm xor ;
-: + asm add ;
-: - asm sub ;
-: * asm mul ;
-: / asm div ;
-: @ asm loadw ;
-: ! asm storew ;
-: c@ asm load ;
-: c! asm store ;
-: > asm agt ;
-: < asm alt ;
 : u> asm gt ;
 : u< asm lt ;
 : rdrop r> drop ;
@@ -42,7 +19,6 @@ create execute ] asm jmp [
 : space 32 emit ;
 : cr 10 emit ;
 : +! dup @ rot + swap ! ;
-: here &heap @ ;
 : dup2 1 pick 1 pick ;
 : allot &heap +! here ;
 : negate -1 xor 1+ ;
@@ -53,6 +29,5 @@ create execute ] asm jmp [
 : true 1 ;
 : ror dup 1 rshift swap 23 lshift or ;
 : rol dup 23 rshift swap 1 lshift or ;
-: = xor asm not ;
 : abs dup 0 < if negate then ;
 : spaces 0 do space loop ;

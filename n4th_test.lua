@@ -792,17 +792,8 @@ test_lines({ ': if $ brz >asm ; immediate',
 
 --------------------------------------------------
 
--- Testing some simple, single-opcode words that'll go in the prelude
-test_lines({ 'create - $ sub asm ] ;',
-             'create dup $ dup asm ] ;',
-             '5 dup 3 -' },
-    expect_stack{5, 2})
-
 -- Begin / until loops
-test_lines({ 'create - $ sub asm ] ;', -- Gotta subtract
-             'create dup $ dup asm ] ;', -- Also gotta dup
-             'create not $ not asm ] ;', -- until needs us to invert the condition
-             ': begin here >r ; immediate', -- Begin just marks a point in the program we'll brnz back to
+test_lines({ ': begin here >r ; immediate', -- Begin just marks a point in the program we'll brnz back to
              -- Here's the fun part.
              -- Pull the address stored by 'begin' off the rstack and subtract `here` from it
              -- Then compile a brz to that address
@@ -813,12 +804,7 @@ test_lines({ 'create - $ sub asm ] ;', -- Gotta subtract
 
 -- do / loop counted loops
 test_lines({ 'create 1+ 1 $ add #asm ] ;',
-             'create - $ sub asm ] ;',
-             'create dup $ dup asm ] ;',
-             'create swap $ swap asm ] ;',
-             'create pop $ pop asm ] ;',
-             'create < $ lt asm ] ;',
-             ': do $ swap asm postpone >r postpone >r here >r ; immediate',
+             ': do postpone swap postpone >r postpone >r here >r ; immediate',
              ': _loop_test r> 1+ dup r@ < swap >r ;', -- pull off and inc the cntr, dup, peek at the limit, compare them, put the new cntr back
              ': unloop r> r> pop pop ;',
              ': loop postpone _loop_test r> here - $ brnz #asm postpone unloop ; immediate',
@@ -868,6 +854,7 @@ test_line(': foo 1 { 2 } ; foo',
               op('ret')),
           expect_stack{ 1, heap(10 + 4 + 4) })
 
+-- Compile-mode lambda, nested
 test_line(': foo 1 { 2 { 3 } } ; foo',
           expect_output(''),
           expect_heap_advance(10 + 4 + 4 + 4 + 4 + 4 + 1 + 4 + 1 + 4 + 1), -- header, push, jmpr, push, ret, push, ret
@@ -889,14 +876,16 @@ test_line(': foo 1 { 2 { 3 } } ; foo',
 --------------------------------------------------
 
 -- A Graham accumulator
-test_lines({ 'create + $ add asm ] ;',
-             'create dup $ dup asm ] ;',
-             'create @ $ loadw asm ] ;',
-             'create ! $ storew asm ] ;',
-             ': accum create 0 , does> dup >r @ + dup r> ! ;',
+test_lines({ ': accum create 0 , does> dup >r @ + dup r> ! ;',
              'accum foo 1 foo 2 foo 3 foo' },
              expect_output(''),
              expect_stack{ 1, 3, 6 })
+
+--------------------------------------------------
+
+-- Test that single-opcode words exist, at least:
+test_line(': test + - / * % ^ & | not < > = @ ! c@ c! pop dup swap pick rot ;',
+          expect_output('')) -- If it didn't recognize any of these then it would error
 
 --------------------------------------------------
 
@@ -916,3 +905,4 @@ test_lines({ 'create + $ add asm ] ;',
 print('Bytes available: ' .. 131072 - heap(0))
 print('Text size: ' .. Symbols.data_start - 0x400)
 print('Including dictionaries: ' .. Symbols.heap - 0x400)
+print('Remaining in 4k: ' .. 4096 - (Symbols.heap - 0x400))
