@@ -6,7 +6,6 @@
 #include "string.asm"
 #include "compiler_utils.asm"
 #include "numbers.asm"
-#include "compile_words.asm"
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
