@@ -27,13 +27,13 @@ eval: ; ( ptr -- ??? )
         load
     #do
         loadw cursor ; Copy the word we care about to the heap
-        loadw heap
+        push eval_word_buffer
         call nova_word_to
         loadw cursor ; Advance cursor by the word we just copied and the following crap
         call skip_word
         call skip_nonword
         storew cursor
-        loadw heap ; Load the address we just put the word at and execute it
+        push eval_word_buffer ; Load the address we just put the word at and execute it
         loadw handleword_hook
         call
     #end
@@ -850,6 +850,14 @@ emit_hook: .db emit
 ; Scratch pad buffer
 pad: .db 0
 .org pad + 0x100
+
+; A buffer to hold the single word currently being evaluated:
+; We need a separate buffer for this because of anonymous fns;
+; we no longer want to carelessly overwrite the bottom of the heap when it might contain
+; a temporary brace-function. One semi-bad side effect of this is that we can no longer
+; handle a word longer than 32 chars, but what can you do?
+eval_word_buffer: .db 0
+.org eval_word_buffer + 32
 
 ; A stack for compiling control structures
 r_stack_ptr: .db r_stack

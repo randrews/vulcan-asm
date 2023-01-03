@@ -841,6 +841,9 @@ test_line('{ 3 5 }',
                         inst('push', 5),
                         op('ret')))
 
+test_line('{ 3 5 } execute',
+          expect_stack{ 3, 5 }) -- Runs the anonymous fn
+
 -- Compile-mode lambda, non-nested
 test_line(': foo 1 { 2 } ; foo',
           expect_output(''),
@@ -872,6 +875,10 @@ test_line(': foo 1 { 2 { 3 } } ; foo',
           ),
           expect_stack{ 1, heap(10 + 4 + 4) },
           expect_word(Symbols.lambda_nesting_level, 0))
+
+-- Executing nested compile-mode lambdas
+test_line(': foo 1 { 2 { 3 } } ; foo execute execute',
+          expect_stack{ 1, 2, 3 })
 
 --------------------------------------------------
 
