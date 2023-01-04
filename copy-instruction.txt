@@ -1,0 +1,62 @@
+Three arguments: dest, src, mode
+Mode is a word of three bytes, separated into three one-byte sub-args
+
+The sub-args are:
+- High byte: mode arg
+- Mid / low bytes are a 16-bit limit arg
+- (Some end modes only use the low byte)
+
+Mode arg is three fields: 
+- how the src is interpreted / incremented
+- how the dest is interpreted / incremented
+- how the end of the loop is triggered
+
+src modes: (000000xx)
+- src is address, increment (00)
+- src is address, decrement (01)
+- src is address, constant (10)
+- src is literal (11)
+
+dest modes: (0000xx00)
+- dest is address, increment (00)
+- dest is address, decrement (01)
+- dest is address, constant (10)
+- dest is ignored, do not copy (11)
+
+end modes: (00xx0000)
+- count: treat the limit arg as a 16-bit number, copy at most that many values. (x0)
+- sentinel: treat the limit arg as an 8-bit sentinel, copy everything up to (but not including) the sentinel (x1)
+- null: copy everything up to (but not including) the first 0 byte (can be combined with the other two, 1x)
+
+So, 00 is count without null term, 10 is count and null term, 01 is sentinel without null term, 11 is sentinel with null term
+
+Return values:
+- Mode is consumed
+- Both src and dest args are left on the stack...
+- But in the state they were in when the end test failed
+
+Examples:
+- Copy 16 bytes from 0x1000 to 0x1000:
+    push 0x2000
+    push 0x1000
+    copy 16 ; leaves 0x2010, 0x1010 on the stack; last byte copied was 0x100f
+- Copy from 0x1000 to 0x2000 until a null terminator:
+    push 0x2000
+    push 0x1000
+    copy 0x100000 ; can't use null term, because we have to use either sentinel or count with it
+    ; Or until a space char (32):
+    copy 0x100020
+- Find the first 0 after 0x1000 (strlen):
+    push 0x1000 ; Don't need a dest since it'll be ignored anyway
+    copy 0x1c0000 ; leaves the address of the 0 on the stack
+- Clear an array of 64 bytes after 0x1000 (memset)
+    push 0x1000
+    push 32 ; what we'll clear it to
+    copy 0x030040 ; end mode: count w/o null, dest mode: increment, src mode: literal, mode arg: 64
+- Copy each byte of a null-termed string to 0x41 (puts):
+    push 0x41
+    push 0x1000
+    copy 0x180000 ; end mode: sentinel w/o null, dest mode: constant, src mode: increment, mode arg: 0
+- Find the next space-or-null in a null-terminated string
+    push 0x1000 ; Src address of string
+    copy 0x3c0020 ; end mode: sentinel w/ null, dest mode: ignore, 

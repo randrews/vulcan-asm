@@ -15,6 +15,8 @@ function print_usage()
         '\t\tRead input from stdin',
         '\t-o [output file]',
         '\t\tSend output to file',
+        '\t-s',
+        '\t\tOutput symbol table',
         '\t-i',
         '\t\tPrint info about assembled file',
         '\t-f [format]',
@@ -61,6 +63,7 @@ function parse_args(args)
     local output = nil -- Where output will go
     local format = 'binary' -- What format output is
     local info = false -- Whether to print info
+    local symbols = false -- Whether to output symbol table
 
     for _, arg in ipairs(args) do
         if mode == 'start' then
@@ -75,6 +78,8 @@ function parse_args(args)
                 os.exit(0)
             elseif arg == '-i' then
                 info = true
+            elseif arg == '-s' then
+                symbols = true
             elseif arg == '-v' then
                 print(string.format('Vulcan Assembler %s', VERSION))
                 os.exit(0)
@@ -119,7 +124,7 @@ function parse_args(args)
         warn('No destination given, writing to %q', output)
     end
 
-    return { entrypoint = entrypoint, stdin = stdin, output = output, format = format, info = info }
+    return { entrypoint = entrypoint, stdin = stdin, output = output, format = format, info = info, symbols = symbols }
 end
 
 --------------------------------------------------------------------------------
@@ -180,11 +185,31 @@ local success, err = pcall(function()
 
         local lines = opts.stdin and io.lines() or include(opts.entrypoint)
         local preprocessor = vasm.preprocess(lines, include, close)
-        local code, start = vasm.assemble(preprocessor, true)
+        local code, start, address_lines, symbols = vasm.assemble(preprocessor, true)
 
         if opts.info then
             -- Add 1 to the number of bytes because #code won't notice the 0th element
             print(string.format('Assembled %d bytes, origin at 0x%x', #code + 1, start))
+        end
+
+        if opts.symbols then
+            local out = io.open(opts.output .. '.sym', 'w')
+
+            local symbol_names = {}
+            for s, _ in pairs(symbols) do
+                if not s:match('^__gensym_') then
+                    table.insert(symbol_names, s)
+                end
+            end
+            table.sort(symbol_names)
+
+            out:write('{')
+            for i, s in ipairs(symbol_names) do
+                if i > 1 then out:write(',') end
+                out:write(string.format('"%s":%d', s, symbols[s]))
+            end
+            out:write('}')
+            out:close()
         end
 
         if opts.format == 'binary' then
